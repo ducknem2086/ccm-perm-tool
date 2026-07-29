@@ -4,8 +4,136 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CCM TOOL</title>
+    <link rel="stylesheet" href="/css/tokens.css" />
+    <link rel="stylesheet" href="/css/app.css" />
   </head>
   <body>
-    <h1>CCM TOOL</h1>
+    <header class="topbar">
+      <span class="wordmark">CCM TOOL</span>
+      <div class="topbar-right">
+        <span id="token-indicator" class="token-indicator is-off">○ chưa có token</span>
+        <button id="btn-reload-token" type="button" class="btn btn-secondary">⟳ Reload Token</button>
+      </div>
+    </header>
+
+    <div class="tabs" role="tablist" aria-label="Khu vực làm việc">
+      <button id="tab-input" class="tab is-active" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">INPUT</button>
+      <button id="tab-output" class="tab" role="tab" aria-controls="panel-output" aria-selected="false" tabindex="-1">
+        OUTPUT <span id="tab-output-badge" class="tab-badge" hidden>0</span>
+      </button>
+    </div>
+
+    <main class="main">
+      <section id="panel-input" class="panel" role="tabpanel" aria-labelledby="tab-input" tabindex="0">
+        <div class="input-grid">
+          <div class="col">
+            <section class="card">
+              <h2 class="card-title">CONNECTION</h2>
+              <label class="field">
+                <span class="label">Domain</span>
+                <input id="inp-domain" class="input" type="text" placeholder="https://abc.vn" spellcheck="false" />
+              </label>
+              <label class="field">
+                <span class="label">Bearer token</span>
+                <input id="inp-token" class="input mono" type="text" placeholder="dán token vào đây" spellcheck="false" />
+              </label>
+            </section>
+
+            <section class="card">
+              <h2 class="card-title">DATE RANGE</h2>
+              <label class="field">
+                <span class="label">dd/mm/yyyy-dd/mm/yyyy</span>
+                <input id="inp-daterange" class="input mono" type="text" placeholder="25/03/2026-01/04/2026" spellcheck="false" />
+              </label>
+              <div class="field-row">
+                <label class="field"><span class="label">Từ</span><input id="inp-date-from" class="input" type="date" /></label>
+                <label class="field"><span class="label">Đến</span><input id="inp-date-to" class="input" type="date" /></label>
+              </div>
+              <label class="field">
+                <span class="label">Định dạng gửi đi</span>
+                <select id="sel-date-format" class="input">
+                  <option value="ddMMyyyy">ddMMyyyy</option>
+                  <option value="dd/MM/yyyy">dd/MM/yyyy</option>
+                  <option value="yyyy-MM-dd">yyyy-MM-dd</option>
+                </select>
+              </label>
+              <p id="date-preview" class="preview mono"></p>
+            </section>
+
+            <section class="card">
+              <h2 class="card-title">QUERY PARAMS <button class="btn-icon" data-add-param="query" type="button" title="Thêm dòng">＋</button></h2>
+              <div id="tbl-query-params" class="param-table"></div>
+            </section>
+
+            <section class="card">
+              <h2 class="card-title">HEADERS <button class="btn-icon" data-add-param="header" type="button" title="Thêm dòng">＋</button></h2>
+              <div id="tbl-headers" class="param-table"></div>
+              <p class="hint">Authorization được tự thêm từ token ở trên, trừ khi bạn tự khai đè ở đây.</p>
+            </section>
+          </div>
+
+          <div class="col">
+            <section class="card" id="list-msisdn"></section>
+            <section class="card" id="list-endpoint"></section>
+
+            <details class="card">
+              <summary class="card-title">ADVANCED</summary>
+              <div class="field-row">
+                <label class="field"><span class="label">Concurrency</span><input id="inp-concurrency" class="input mono" type="number" min="1" max="50" value="5" /></label>
+                <label class="field"><span class="label">Timeout (ms)</span><input id="inp-timeout" class="input mono" type="number" min="1000" step="1000" value="30000" /></label>
+              </div>
+              <label class="field">
+                <span class="label">Đường dẫn tìm error code (cách nhau bởi dấu phẩy)</span>
+                <input id="inp-error-paths" class="input mono" type="text" value="errorCode, error_code, code, error.code" spellcheck="false" />
+              </label>
+              <label class="check"><input id="chk-dedupe" type="checkbox" checked /> Loại trùng khi import</label>
+            </details>
+          </div>
+        </div>
+
+        <div class="actionbar">
+          <button id="btn-run" class="btn btn-primary" type="button">▶ RUN ALL (0)</button>
+          <button id="btn-export-config" class="btn btn-secondary" type="button">⤒ Export config</button>
+          <button id="btn-import-config" class="btn btn-secondary" type="button">⤓ Import config</button>
+        </div>
+      </section>
+
+      <section id="panel-output" class="panel" role="tabpanel" aria-labelledby="tab-output" tabindex="0" hidden>
+        <div class="runbar">
+          <div class="runbar-left">
+            <span id="run-progress" class="mono">0/0</span>
+            <span id="run-stats" class="mono muted"></span>
+          </div>
+          <div class="runbar-right">
+            <button id="btn-cancel" class="btn btn-secondary" type="button" disabled>■ Dừng</button>
+            <fieldset class="token-radio">
+              <legend>Token trong file</legend>
+              <label><input id="radio-token-include" type="radio" name="tokenmode" value="include" /> Kèm đầy đủ</label>
+              <label><input id="radio-token-mask" type="radio" name="tokenmode" value="mask" checked /> Che</label>
+            </fieldset>
+            <button id="btn-export-excel" class="btn btn-secondary" type="button" disabled>⬇ Export Excel</button>
+          </div>
+        </div>
+        <p id="token-warning" class="warning" hidden>File sẽ chứa bearer token còn hạn — cân nhắc trước khi chia sẻ.</p>
+
+        <div class="filterbar">
+          <label class="filter"><span>status</span><select id="flt-status" class="input input-sm" multiple size="1"></select></label>
+          <label class="filter"><span>error</span><select id="flt-error" class="input input-sm" multiple size="1"></select></label>
+          <label class="filter"><span>time ≥</span><input id="flt-time-min" class="input input-sm mono" type="number" min="0" placeholder="ms" /></label>
+          <label class="filter"><span>≤</span><input id="flt-time-max" class="input input-sm mono" type="number" min="0" placeholder="ms" /></label>
+          <label class="filter grow"><span>🔍</span><input id="flt-search" class="input input-sm" type="search" placeholder="tìm trong URL, msisdn, body" /></label>
+          <button id="btn-columns" class="btn btn-secondary btn-sm" type="button">⚙ cột</button>
+        </div>
+
+        <div id="result-viewport" class="result-viewport">
+          <table id="result-table" class="result-table"></table>
+        </div>
+      </section>
+    </main>
+
+    <aside id="drawer" class="drawer" hidden aria-hidden="true" aria-label="Chi tiết request"></aside>
+    <div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+    <script type="module" src="/js/main.js"></script>
   </body>
 </html>

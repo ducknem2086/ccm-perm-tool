@@ -1,0 +1,44 @@
+/* Design tokens lay tu token.md (Binance) — surface dark cho product dashboard */
+:root {
+  --canvas: #0b0e11;
+  --surface: #1e2329;
+  --surface-elevated: #2b3139;
+  --hairline: #2b3139;
+
+  --primary: #fcd535;
+  --primary-active: #f0b90b;
+  --on-primary: #181a20;
+
+  --body: #eaecef;
+  --muted: #707a8a;
+  --muted-strong: #929aa5;
+
+  --up: #0ecb81;
+  --down: #f6465d;
+  --info: #3b82f6;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --sp-xxs: 4px;
+  --sp-xs: 8px;
+  --sp-sm: 12px;
+  --sp-md: 16px;
+  --sp-lg: 24px;
+  --sp-xl: 32px;
+
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-num: "JetBrains Mono", Consolas, "SF Mono", ui-monospace, monospace;
+
+  --fs-body: 14px;
+  --fs-sm: 13px;
+  --fs-caption: 12px;
+  --fs-title: 16px;
+
+  --control-h: 40px;
+  --el-input-height: 16px;   /* chieu cao o nhap trong editable-list, theo yeu cau */
+  --topbar-h: 64px;
+  --row-h: 34px;
+}
