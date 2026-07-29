@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  emptyFilter, matchesFilter, applyFilter, collectStatuses, collectErrorCodes, ALL_COLUMNS,
+  emptyFilter, matchesFilter, applyFilter, collectStatuses, collectErrorCodes, ALL_COLUMNS, STATUS_NA,
 } from '../public/js/shared/filter-logic.js';
 
 function rec(over = {}) {
   const { status = 200, errorCode = null, durationMs = 100, ...rest } = over;
   return {
-    index: 1, endpointName: '/x', msisdn: '0912345678',
+    index: 1, endpointName: 'Tra cuu thue bao', pathTemplate: '/query/abc', msisdn: '0912345678',
     request: { method: 'GET', url: 'https://abc.vn/x/0912345678', headers: {}, queryParams: {}, pathParams: {}, body: null },
     response: { status, statusText: '', headers: {}, body: null, bodyText: '{"ok":true}', sizeBytes: 11 },
     errorCode, errorMessage: null, durationMs,
@@ -20,40 +20,52 @@ test('emptyFilter cho qua moi ban ghi', () => {
   assert.equal(matchesFilter(rec(), emptyFilter()), true);
 });
 
+test('emptyFilter chi co 4 truong', () => {
+  assert.deepEqual(emptyFilter(), { msisdn: '', name: '', status: '', errorCode: '' });
+});
+
 test('loc theo status code', () => {
-  const f = { ...emptyFilter(), statuses: ['200'] };
+  const f = { ...emptyFilter(), status: '200' };
   assert.equal(matchesFilter(rec({ status: 200 }), f), true);
   assert.equal(matchesFilter(rec({ status: 500 }), f), false);
 });
 
 test('status null duoc dai dien bang N/A', () => {
-  const f = { ...emptyFilter(), statuses: ['N/A'] };
+  const f = { ...emptyFilter(), status: STATUS_NA };
   assert.equal(matchesFilter(rec({ status: null }), f), true);
   assert.equal(matchesFilter(rec({ status: 200 }), f), false);
 });
 
 test('loc theo error code', () => {
-  const f = { ...emptyFilter(), errorCodes: ['E0042'] };
+  const f = { ...emptyFilter(), errorCode: 'E0042' };
   assert.equal(matchesFilter(rec({ errorCode: 'E0042' }), f), true);
   assert.equal(matchesFilter(rec({ errorCode: null }), f), false);
 });
 
-test('loc theo khoang thoi gian', () => {
-  assert.equal(matchesFilter(rec({ durationMs: 500 }), { ...emptyFilter(), timeMin: 400 }), true);
-  assert.equal(matchesFilter(rec({ durationMs: 300 }), { ...emptyFilter(), timeMin: 400 }), false);
-  assert.equal(matchesFilter(rec({ durationMs: 300 }), { ...emptyFilter(), timeMax: 400 }), true);
-  assert.equal(matchesFilter(rec({ durationMs: 500 }), { ...emptyFilter(), timeMax: 400 }), false);
-  assert.equal(matchesFilter(rec({ durationMs: 300 }), { ...emptyFilter(), timeMin: 100, timeMax: 400 }), true);
+test('loc theo name khop chuoi con khong phan biet hoa thuong', () => {
+  assert.equal(matchesFilter(rec(), { ...emptyFilter(), name: 'thue bao' }), true);
+  assert.equal(matchesFilter(rec(), { ...emptyFilter(), name: 'THUE BAO' }), true);
+  assert.equal(matchesFilter(rec(), { ...emptyFilter(), name: 'khongcogi' }), false);
 });
 
-test('tim kiem tu do quet url, msisdn va body', () => {
-  assert.equal(matchesFilter(rec(), { ...emptyFilter(), search: '0912345678' }), true);
-  assert.equal(matchesFilter(rec(), { ...emptyFilter(), search: 'ok' }), true);
-  assert.equal(matchesFilter(rec(), { ...emptyFilter(), search: 'khongcogi' }), false);
+test('loc theo name voi ban ghi khong co ten', () => {
+  assert.equal(matchesFilter(rec({ endpointName: '' }), { ...emptyFilter(), name: 'a' }), false);
 });
 
-test('tim kiem khong phan biet hoa thuong', () => {
-  assert.equal(matchesFilter(rec(), { ...emptyFilter(), search: 'ABC.VN' }), true);
+test('loc theo msisdn khop chuoi con', () => {
+  assert.equal(matchesFilter(rec(), { ...emptyFilter(), msisdn: '0912' }), true);
+  assert.equal(matchesFilter(rec(), { ...emptyFilter(), msisdn: '0999' }), false);
+});
+
+test('loc theo msisdn voi ban ghi khong co msisdn', () => {
+  assert.equal(matchesFilter(rec({ msisdn: null }), { ...emptyFilter(), msisdn: '09' }), false);
+  assert.equal(matchesFilter(rec({ msisdn: null }), emptyFilter()), true);
+});
+
+test('to hop msisdn va status cung luc', () => {
+  const f = { ...emptyFilter(), msisdn: '0912', status: '500' };
+  assert.equal(matchesFilter(rec({ status: 500 }), f), true);
+  assert.equal(matchesFilter(rec({ status: 200 }), f), false);
 });
 
 test('applyFilter sap xep theo index', () => {
@@ -72,16 +84,10 @@ test('collectErrorCodes bo qua ban ghi khong co ma loi', () => {
   assert.deepEqual(collectErrorCodes([rec({ errorCode: 'E2' }), rec({ errorCode: null }), rec({ errorCode: 'E1' })]), ['E1', 'E2']);
 });
 
-test('ALL_COLUMNS gom status error time va them Name, Path, MSISDN', () => {
+test('ALL_COLUMNS dat status ngay sau index va tach response thanh 2 cot', () => {
   assert.deepEqual(
     ALL_COLUMNS.map((c) => c.key),
-    ['index', 'name', 'path', 'msisdn', 'request', 'response', 'status'],
+    ['index', 'status', 'name', 'path', 'request', 'responseBody', 'responseHeaders'],
   );
   assert.ok(ALL_COLUMNS.every((c) => c.default === true));
 });
-
-test('tim kiem tu do quet ca pathTemplate', () => {
-  const r = rec({ pathTemplate: '/query/white-list-ir-subscriber/{*}' });
-  assert.equal(matchesFilter(r, { ...emptyFilter(), search: 'white-list' }), true);
-});
-
