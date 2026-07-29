@@ -1,8 +1,10 @@
-import { extractVariables, resolve } from './variables.js';
+import { resolve } from './variables.js';
 import { validateRange, formatDate } from './date-format.js';
 import { isEndpointPath } from '../../public/js/shared/validators.js';
+import { splitTemplate, parseInlineQuery, hasMsisdnPlaceholder } from '../../public/js/shared/endpoint-path.js';
 
-const usesMsisdn = (tpl) => extractVariables(tpl).includes('msisdn');
+// Endpoint cu chua co field nay thi mac dinh la co gan msisdn.
+const wantsMsisdn = (ep) => ep?.attachMsisdn !== false;
 const activeOnly = (list) => (list ?? []).filter((p) => p.enabled !== false);
 
 export function validateConfig(config) {
@@ -22,22 +24,27 @@ export function validateConfig(config) {
 
   const msisdns = config?.msisdns ?? [];
   for (const ep of enabled) {
-    if (!isEndpointPath(ep.pathTemplate)) {
-      errors.push({ field: `endpoint:${ep.id}`, message: `Path "${ep.pathTemplate}" phải bắt đầu bằng / và không chứa khoảng trắng` });
+    // Chi kiem tra phan path, query rieng sau {*} duoc phep chua dau cach.
+    const { path } = splitTemplate(ep.pathTemplate);
+    if (!isEndpointPath(path)) {
+      errors.push({ field: `endpoint:${ep.id}`, message: `Path "${path}" phải bắt đầu bằng / và không chứa khoảng trắng` });
       continue;
     }
-    if (usesMsisdn(ep.pathTemplate) && msisdns.length === 0) {
-      errors.push({ field: `endpoint:${ep.id}`, message: 'Endpoint dùng :msisdn nhưng danh sách MSISDN đang rỗng' });
+    if (wantsMsisdn(ep) && msisdns.length === 0) {
+      errors.push({ field: `endpoint:${ep.id}`, message: 'Endpoint cần msisdn nhưng danh sách MSISDN đang rỗng' });
     }
   }
 
   return errors;
 }
 
-function mergePairs(globalList, endpointList) {
+// Thu tu chen quyet dinh ca thu tu trong URL lan do uu tien: cai vao truoc thang.
+function mergePairs(inlineList, endpointList, globalList) {
   const map = new Map();
-  for (const p of activeOnly(globalList)) map.set(p.key, p.value);
-  for (const p of activeOnly(endpointList)) map.set(p.key, p.value);
+  const put = (k, v) => { if (k && !map.has(k)) map.set(k, v); };
+  for (const p of inlineList ?? []) put(p.key, p.value);
+  for (const p of activeOnly(endpointList)) put(p.key, p.value);
+  for (const p of activeOnly(globalList)) put(p.key, p.value);
   return map;
 }
 
@@ -49,17 +56,19 @@ function buildOne({ config, endpoint, msisdn, scope, index }) {
     return r.value;
   };
 
-  const path = take(endpoint.pathTemplate);
+  const { path: rawPath, inlineQuery } = splitTemplate(endpoint.pathTemplate);
+  let path = take(rawPath);
+  if (msisdn && !hasMsisdnPlaceholder(rawPath)) {
+    path = `${path.replace(/\/+$/, '')}/${msisdn}`;
+  }
 
   const queryParams = {};
-  for (const [k, v] of mergePairs(config.globalQueryParams, endpoint.queryParams)) {
-    if (!k) continue;
+  for (const [k, v] of mergePairs(parseInlineQuery(inlineQuery), endpoint.queryParams, config.globalQueryParams)) {
     queryParams[take(k)] = take(v);
   }
 
   const headers = {};
-  for (const [k, v] of mergePairs(config.globalHeaders, endpoint.headers)) {
-    if (!k) continue;
+  for (const [k, v] of mergePairs([], endpoint.headers, config.globalHeaders)) {
     headers[take(k)] = take(v);
   }
 
@@ -100,7 +109,7 @@ export function buildRequests(config) {
   let index = 0;
 
   for (const endpoint of (config.endpoints ?? []).filter((e) => e.enabled)) {
-    const list = usesMsisdn(endpoint.pathTemplate) ? (config.msisdns ?? []) : [null];
+    const list = wantsMsisdn(endpoint) ? (config.msisdns ?? []) : [null];
     for (const msisdn of list) {
       index += 1;
       requests.push(buildOne({

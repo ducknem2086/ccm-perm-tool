@@ -10,15 +10,15 @@ function baseConfig(over = {}) {
     dateFormat: 'ddMMyyyy',
     msisdns: ['0912345678', '0913000111'],
     endpoints: [
-      { id: 'ep_1', enabled: true, method: 'GET',
-        pathTemplate: '/query/abc-information/:msisdn', queryParams: [], headers: [] }
+      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: true,
+        pathTemplate: '/query/abc-information', queryParams: [], headers: [] }
     ],
     globalQueryParams: [
       { key: 'fromDate', value: '{{fromDate}}', enabled: true },
       { key: 'toDate', value: '{{toDate}}', enabled: true }
     ],
     globalHeaders: [],
-    advanced: { concurrency: 5, timeoutMs: 30000 },
+    advanced: { workerCount: 4, timeoutMs: 30000 },
     ...over,
   };
 }
@@ -45,11 +45,6 @@ test('validateConfig bat daterange sai', () => {
   assert.ok(errs.some((e) => e.field === 'dateRange'));
 });
 
-test('validateConfig bat endpoint dung msisdn nhung danh sach rong', () => {
-  const errs = validateConfig(baseConfig({ msisdns: [] }));
-  assert.ok(errs.some((e) => e.field === 'endpoint:ep_1'));
-});
-
 test('validateConfig bat path khong bat dau bang gach cheo', () => {
   const cfg = baseConfig();
   cfg.endpoints[0].pathTemplate = 'query/abc';
@@ -59,8 +54,8 @@ test('validateConfig bat path khong bat dau bang gach cheo', () => {
 
 test('buildRequests sinh ma tran endpoint x msisdn', () => {
   const cfg = baseConfig();
-  cfg.endpoints.push({ id: 'ep_2', enabled: true, method: 'GET',
-    pathTemplate: '/query/other/:msisdn', queryParams: [], headers: [] });
+  cfg.endpoints.push({ id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: true,
+    pathTemplate: '/query/other', queryParams: [], headers: [] });
   const reqs = buildRequests(cfg);
   assert.equal(reqs.length, 4);
   assert.deepEqual(reqs.map((r) => r.index), [1, 2, 3, 4]);
@@ -68,19 +63,9 @@ test('buildRequests sinh ma tran endpoint x msisdn', () => {
 
 test('buildRequests bo qua endpoint bi tat', () => {
   const cfg = baseConfig();
-  cfg.endpoints.push({ id: 'ep_2', enabled: false, method: 'GET',
-    pathTemplate: '/query/other/:msisdn', queryParams: [], headers: [] });
+  cfg.endpoints.push({ id: 'ep_2', enabled: false, method: 'GET', attachMsisdn: true,
+    pathTemplate: '/query/other', queryParams: [], headers: [] });
   assert.equal(buildRequests(cfg).length, 2);
-});
-
-test('buildRequests sinh 1 request cho endpoint khong dung msisdn', () => {
-  const cfg = baseConfig({ endpoints: [
-    { id: 'ep_x', enabled: true, method: 'GET', pathTemplate: '/health', queryParams: [], headers: [] }
-  ] });
-  const reqs = buildRequests(cfg);
-  assert.equal(reqs.length, 1);
-  assert.equal(reqs[0].msisdn, null);
-  assert.deepEqual(reqs[0].pathParams, {});
 });
 
 test('buildRequests dung URL day du dung thu tu query', () => {
@@ -123,7 +108,7 @@ test('buildRequests bo qua param bi tat', () => {
 
 test('buildRequests ghi lai bien khong resolve duoc', () => {
   const cfg = baseConfig();
-  cfg.endpoints[0].pathTemplate = '/query/{{unknownVar}}/:msisdn';
+  cfg.endpoints[0].pathTemplate = '/query/{{unknownVar}}/abc';
   const reqs = buildRequests(cfg);
   assert.deepEqual(reqs[0].unresolved, ['unknownVar']);
 });
@@ -133,34 +118,102 @@ test('buildRequests ap dung dateFormat khac', () => {
   assert.equal(reqs[0].queryParams.fromDate, '2026-03-25');
 });
 
-test('buildRequests nhan msisdn voi endpoint dung placeholder sao', () => {
-  const cfg = baseConfig({ endpoints: [
-    { id: 'ep_1', enabled: true, method: 'GET', name: 'Tra cuu TB',
-      pathTemplate: '/query/white-list-ir-subscriber/{*}', queryParams: [], headers: [] },
-    { id: 'ep_2', enabled: true, method: 'POST', name: 'Cap nhat goi',
-      pathTemplate: '/command/subscriber/{*}', queryParams: [], headers: [] },
-  ] });
-  const reqs = buildRequests(cfg);
-  assert.equal(reqs.length, 4);
-  assert.equal(
-    reqs[0].url,
-    'https://abc.vn/query/white-list-ir-subscriber/0912345678?fromDate=25032026&toDate=01042026',
-  );
-  assert.equal(reqs[1].msisdn, '0913000111');
-  assert.equal(reqs[2].method, 'POST');
-});
-
 test('buildRequests mang ca endpointName lan pathTemplate', () => {
   const cfg = baseConfig();
   cfg.endpoints[0].name = 'Tra cuu thue bao';
   const reqs = buildRequests(cfg);
   assert.equal(reqs[0].endpointName, 'Tra cuu thue bao');
-  assert.equal(reqs[0].pathTemplate, '/query/abc-information/:msisdn');
+  assert.equal(reqs[0].pathTemplate, '/query/abc-information');
 });
 
 test('buildRequests de endpointName rong khi endpoint khong co ten', () => {
   const reqs = buildRequests(baseConfig());
   assert.equal(reqs[0].endpointName, '');
-  assert.equal(reqs[0].pathTemplate, '/query/abc-information/:msisdn');
+  assert.equal(reqs[0].pathTemplate, '/query/abc-information');
 });
 
+test('buildRequests noi msisdn vao cuoi path khi khong co placeholder', () => {
+  const reqs = buildRequests(baseConfig());
+  assert.equal(reqs.length, 2);
+  assert.equal(
+    reqs[0].url,
+    'https://abc.vn/query/abc-information/0912345678?fromDate=25032026&toDate=01042026',
+  );
+  assert.equal(reqs[1].msisdn, '0913000111');
+});
+
+test('buildRequests coi path co dau sao giong het path tran', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].pathTemplate = '/query/abc-information/{*}';
+  assert.equal(
+    buildRequests(cfg)[0].url,
+    'https://abc.vn/query/abc-information/0912345678?fromDate=25032026&toDate=01042026',
+  );
+});
+
+test('buildRequests ghep query rieng sau dau sao truoc query global', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].pathTemplate = '/query/abc-information/{*}?type=PREPAID&limit=10';
+  assert.equal(
+    buildRequests(cfg)[0].url,
+    'https://abc.vn/query/abc-information/0912345678'
+    + '?type=PREPAID&limit=10&fromDate=25032026&toDate=01042026',
+  );
+});
+
+test('buildRequests cho query rieng de len query global khi trung key', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].pathTemplate = '/query/abc-information/{*}?fromDate=01011999';
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].queryParams.fromDate, '01011999');
+  assert.equal(reqs[0].queryParams.toDate, '01042026');
+});
+
+test('buildRequests resolve bien trong query rieng', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].pathTemplate = '/query/abc-information/{*}?from={{fromDate}}';
+  assert.equal(buildRequests(cfg)[0].queryParams.from, '25032026');
+});
+
+test('buildRequests giu cu phap msisdn cu va khong noi them o cuoi', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].pathTemplate = '/query/abc-information/:msisdn/detail';
+  assert.equal(
+    buildRequests(cfg)[0].url,
+    'https://abc.vn/query/abc-information/0912345678/detail?fromDate=25032026&toDate=01042026',
+  );
+});
+
+test('buildRequests chay 1 request khi attachMsisdn false', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].attachMsisdn = false;
+  cfg.endpoints[0].pathTemplate = '/system/health';
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].msisdn, null);
+  assert.deepEqual(reqs[0].pathParams, {});
+  assert.equal(reqs[0].url, 'https://abc.vn/system/health?fromDate=25032026&toDate=01042026');
+});
+
+test('buildRequests coi endpoint thieu attachMsisdn la true', () => {
+  const cfg = baseConfig();
+  delete cfg.endpoints[0].attachMsisdn;
+  assert.equal(buildRequests(cfg).length, 2);
+});
+
+test('validateConfig bat endpoint can msisdn nhung danh sach rong', () => {
+  const errs = validateConfig(baseConfig({ msisdns: [] }));
+  assert.ok(errs.some((e) => e.field === 'endpoint:ep_1'));
+});
+
+test('validateConfig cho qua endpoint attachMsisdn false du danh sach rong', () => {
+  const cfg = baseConfig({ msisdns: [] });
+  cfg.endpoints[0].attachMsisdn = false;
+  assert.deepEqual(validateConfig(cfg), []);
+});
+
+test('validateConfig chi kiem tra phan path, bo qua query rieng', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].pathTemplate = '/query/abc/{*}?note=co dau cach';
+  assert.deepEqual(validateConfig(cfg), []);
+});
