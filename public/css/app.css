@@ -69,12 +69,13 @@ body { display: flex; flex-direction: column; }
 
 .input-grid {
   flex: 1 1 auto; min-height: 0; overflow: auto;
-  display: grid; grid-template-columns: 1fr 1fr;
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: var(--sp-md); padding: var(--sp-md);
   align-items: start;
 }
 .col { display: flex; flex-direction: column; gap: var(--sp-md); min-width: 0; }
-@media (max-width: 1024px) { .input-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1280px) { .input-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 768px) { .input-grid { grid-template-columns: 1fr; } }
 
 /* ---------- card ---------- */
 .card {
