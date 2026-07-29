@@ -1,0 +1,23 @@
+{
+  "name": "ccm-tool",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tool test request/response API hang loat",
+  "scripts": {
+    "start": "node server.js",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}
