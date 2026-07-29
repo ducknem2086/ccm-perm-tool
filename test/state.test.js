@@ -131,3 +131,22 @@ test('load xu ly an toan khi localStorage chua du lieu khong hop le hoac null', 
     load();
   });
 });
+
+test('defaultConfig co san template map cot khi import endpoint', () => {
+  assert.deepEqual(defaultConfig().importTemplate, [
+    { id: 'tpl_name', type: 'name', selector: 'name', target: 'name' },
+    { id: 'tpl_method', type: 'name', selector: 'method', target: 'method' },
+    { id: 'tpl_endpoint', type: 'name', selector: 'endpoint', target: 'endpoint' },
+  ]);
+});
+
+test('load giu nguyen importTemplate nguoi dung da sua', () => {
+  setupMockLocalStorage();
+  applyConfig({ importTemplate: [{ id: 'x', type: 'index', selector: '3', target: 'endpoint' }] });
+  Object.assign(state, defaultConfig());
+  load();
+  assert.deepEqual(state.importTemplate, [
+    { id: 'x', type: 'index', selector: '3', target: 'endpoint' },
+  ]);
+});
+

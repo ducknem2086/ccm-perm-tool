@@ -8,6 +8,11 @@ export function defaultConfig() {
     dateFormat: 'ddMMyyyy',
     msisdns: [],
     endpoints: [],
+    importTemplate: [
+      { id: 'tpl_name', type: 'name', selector: 'name', target: 'name' },
+      { id: 'tpl_method', type: 'name', selector: 'method', target: 'method' },
+      { id: 'tpl_endpoint', type: 'name', selector: 'endpoint', target: 'endpoint' },
+    ],
     globalQueryParams: [
       { key: 'fromDate', value: '{{fromDate}}', enabled: true },
       { key: 'toDate', value: '{{toDate}}', enabled: true },
