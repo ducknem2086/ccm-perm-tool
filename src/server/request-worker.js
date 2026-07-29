@@ -16,4 +16,3 @@ parentPort.on('message', (msg) => {
     .then((record) => parentPort.postMessage({ type: 'result', index: request.index, record }));
 });
 
-parentPort.postMessage({ type: 'ready' });

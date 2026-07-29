@@ -153,3 +153,101 @@ test('runPool clamp workerCount 0 ve 1', async () => {
   }
 });
 
+test('runPool clamp non-integer workerCount to floor integer', async () => {
+  let spawnedCount = 0;
+  class TestWorker extends Worker {
+    constructor(url, opts) {
+      super(url, opts);
+      spawnedCount++;
+    }
+  }
+
+  const mock = await startMockServer((req, res) => res.end('{}'));
+  try {
+    const reqs = [mkReq(1, `${mock.base}/x`), mkReq(2, `${mock.base}/x`)];
+    await runPool(reqs, {
+      workerCount: 2.7,
+      timeoutMs: 5000,
+      _Worker: TestWorker,
+      onRecord: () => {},
+    });
+    assert.equal(spawnedCount, 2);
+  } finally {
+    await mock.close();
+  }
+});
+
+test('runPool removes abort listener after finished', async () => {
+  const mock = await startMockServer((req, res) => res.end('{}'));
+  try {
+    const reqs = [mkReq(1, `${mock.base}/x`)];
+    const controller = new AbortController();
+    const signal = controller.signal;
+    
+    let removed = false;
+    const originalRemove = signal.removeEventListener.bind(signal);
+    signal.removeEventListener = (type, listener, options) => {
+      if (type === 'abort') {
+        removed = true;
+      }
+      return originalRemove(type, listener, options);
+    };
+
+    await runPool(reqs, {
+      workerCount: 1,
+      timeoutMs: 5000,
+      signal,
+      onRecord: () => {},
+    });
+
+    assert.ok(removed, 'abort listener should be removed');
+  } finally {
+    await mock.close();
+  }
+});
+
+test('runPool does not spawn replacement worker when queue is empty', async () => {
+  let spawnedCount = 0;
+  class TestWorker extends Worker {
+    constructor(url, opts) {
+      super(url, opts);
+      spawnedCount++;
+    }
+    postMessage(msg, transferList) {
+      super.postMessage(msg, transferList);
+      if (msg?.type === 'run' && msg.request.url.includes('/crash')) {
+        // Simulate a crash by terminating this worker after a short delay
+        setTimeout(() => this.terminate(), 10);
+      }
+    }
+  }
+
+  const mock = await startMockServer((req, res) => {
+    if (req.url === '/slow') {
+      setTimeout(() => res.end('{}'), 100);
+    } else {
+      res.end('{}');
+    }
+  });
+
+  try {
+    const reqs = [
+      mkReq(1, `${mock.base}/x`),
+      mkReq(2, `${mock.base}/crash`),
+      mkReq(3, `${mock.base}/slow`),
+    ];
+
+    await runPool(reqs, {
+      workerCount: 2,
+      timeoutMs: 5000,
+      _Worker: TestWorker,
+      onRecord: () => {},
+    });
+
+    assert.equal(spawnedCount, 3);
+  } finally {
+    await mock.close();
+  }
+});
+
+

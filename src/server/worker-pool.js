@@ -6,7 +6,7 @@ export const MAX_WORKERS = 16;
 const WORKER_URL = new URL('./request-worker.js', import.meta.url);
 const CANCEL_GRACE_MS = 300;
 
-const clampWorkers = (n) => (n === 0 || n === '0') ? 1 : Math.max(1, Math.min(Number(n) || 4, MAX_WORKERS));
+const clampWorkers = (n) => (n === 0 || n === '0') ? 1 : Math.max(1, Math.min(Math.floor(Number(n)) || 4, MAX_WORKERS));
 
 function crashRecord(req) {
   const now = new Date().toISOString();
@@ -46,16 +46,20 @@ export function runPool(requests, options = {}) {
     let finished = 0;
     let cancelled = false;
     let settled = false;
+    let abortHandler;
 
     const finish = () => {
       if (settled) return;
       settled = true;
+      if (signal && abortHandler) {
+        signal.removeEventListener('abort', abortHandler);
+      }
       for (const slot of pool) slot.worker.terminate();
       resolve({ cancelled });
     };
 
     const maybeFinish = () => {
-      if (cancelled || finished >= total) finish();
+      if (finished >= total) finish();
     };
 
     const pump = (slot) => {
@@ -85,7 +89,9 @@ export function runPool(requests, options = {}) {
 
       if (cancelled) { maybeFinish(); return; }
       if (finished >= total) { maybeFinish(); return; }
-      pump(spawn());
+      if (queue.length > 0) {
+        pump(spawn());
+      }
     };
 
     function spawn() {
@@ -110,12 +116,13 @@ export function runPool(requests, options = {}) {
 
     if (signal) {
       if (signal.aborted) { cancelled = true; finish(); return; }
-      signal.addEventListener('abort', () => {
+      abortHandler = () => {
         cancelled = true;
         queue.length = 0;
         for (const slot of pool) slot.worker.postMessage({ type: 'cancel' });
         setTimeout(finish, CANCEL_GRACE_MS).unref();
-      }, { once: true });
+      };
+      signal.addEventListener('abort', abortHandler, { once: true });
     }
 
     try {
