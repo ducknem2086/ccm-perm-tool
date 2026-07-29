@@ -6,7 +6,7 @@ export const MAX_WORKERS = 16;
 const WORKER_URL = new URL('./request-worker.js', import.meta.url);
 const CANCEL_GRACE_MS = 300;
 
-const clampWorkers = (n) => Math.max(1, Math.min(Number(n) || 4, MAX_WORKERS));
+const clampWorkers = (n) => (n === 0 || n === '0') ? 1 : Math.max(1, Math.min(Number(n) || 4, MAX_WORKERS));
 
 function crashRecord(req) {
   const now = new Date().toISOString();
@@ -33,6 +33,7 @@ export function runPool(requests, options = {}) {
   const {
     workerCount = 4, timeoutMs = 30000, errorCodePaths,
     signal, onRecord = () => {},
+    _Worker = Worker,
   } = options;
 
   const total = requests.length;
@@ -88,7 +89,7 @@ export function runPool(requests, options = {}) {
     };
 
     function spawn() {
-      const worker = new Worker(WORKER_URL, { workerData: { timeoutMs, errorCodePaths } });
+      const worker = new _Worker(WORKER_URL, { workerData: { timeoutMs, errorCodePaths } });
       const slot = { worker, inflight: new Map() };
       pool.push(slot);
 
@@ -102,7 +103,7 @@ export function runPool(requests, options = {}) {
       });
 
       worker.on('error', () => recycle(slot));
-      worker.on('exit', (code) => { if (code !== 0 && !settled) recycle(slot); });
+      worker.on('exit', (code) => { if (!settled) recycle(slot); });
 
       return slot;
     }

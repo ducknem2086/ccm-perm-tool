@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { Worker } from 'node:worker_threads';
 import { runPool, MAX_INFLIGHT } from '../src/server/worker-pool.js';
 import { startMockServer } from './helpers/mock-server.js';
 
@@ -89,3 +90,66 @@ test('runPool van tra record khi request loi mang', async () => {
   assert.ok(seen[0].errorCode, 'phai co errorCode');
   assert.equal(seen[0].response.status, null);
 });
+
+test('runPool tu dong retry khi worker crash va tra ve WORKER_CRASH khi that bai lan 2', async () => {
+  const activeWorkers = [];
+  class TestWorker extends Worker {
+    constructor(url, opts) {
+      super(url, opts);
+      activeWorkers.push(this);
+    }
+  }
+
+  let requestCount = 0;
+  const mock = await startMockServer((req, res) => {
+    requestCount++;
+    for (const w of activeWorkers) {
+      w.terminate();
+    }
+  });
+
+  try {
+    const reqs = [mkReq(1, `${mock.base}/crash`)];
+    const seen = [];
+    const out = await runPool(reqs, {
+      workerCount: 1,
+      timeoutMs: 5000,
+      _Worker: TestWorker,
+      onRecord: (r) => seen.push(r),
+    });
+
+    assert.equal(out.cancelled, false);
+    assert.equal(requestCount, 2);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].index, 1);
+    assert.equal(seen[0].errorCode, 'WORKER_CRASH');
+    assert.equal(seen[0].errorMessage, 'Worker thread dừng bất thường');
+  } finally {
+    await mock.close();
+  }
+});
+
+test('runPool clamp workerCount 0 ve 1', async () => {
+  let spawnedCount = 0;
+  class TestWorker extends Worker {
+    constructor(url, opts) {
+      super(url, opts);
+      spawnedCount++;
+    }
+  }
+
+  const mock = await startMockServer((req, res) => res.end('{}'));
+  try {
+    const reqs = [mkReq(1, `${mock.base}/x`)];
+    await runPool(reqs, {
+      workerCount: 0,
+      timeoutMs: 5000,
+      _Worker: TestWorker,
+      onRecord: () => {},
+    });
+    assert.equal(spawnedCount, 1);
+  } finally {
+    await mock.close();
+  }
+});
+
