@@ -13,7 +13,8 @@ const LONG_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abcdefMWQx';
 
 function record(over = {}) {
   return {
-    index: 1, endpointId: 'ep_1', endpointName: '/query/abc/:msisdn', msisdn: '0912345678',
+    index: 1, endpointId: 'ep_1', endpointName: 'Tra cuu thue bao',
+    pathTemplate: '/query/abc/{*}', msisdn: '0912345678',
     request: {
       method: 'GET', url: 'https://abc.vn/query/abc/0912345678?fromDate=25032026',
       headers: { Authorization: `Bearer ${LONG_TOKEN}`, Accept: 'application/json' },
@@ -56,9 +57,9 @@ test('exportFilename dung dinh dang co dau thoi gian', () => {
   assert.match(name, /^ccm-result-\d{8}-\d{6}\.xlsx$/);
 });
 
-test('EXPORT_COLUMNS du 13 cot theo spec', () => {
+test('EXPORT_COLUMNS du 14 cot theo spec', () => {
   assert.deepEqual(EXPORT_COLUMNS.map((c) => c.header), [
-    'Index', 'Endpoint', 'MSISDN', 'Method', 'URL', 'Headers', 'Query Params',
+    'Index', 'Name', 'Path', 'MSISDN', 'Method', 'URL', 'Headers', 'Query Params',
     'Status Code', 'Error Code', 'Duration (ms)', 'Response Body', 'Error Message', 'Started At',
   ]);
 });
@@ -77,9 +78,11 @@ test('writeResultsToStream tao file xlsx doc lai duoc', async () => {
     assert.equal(ws.rowCount, 3, 'header + 2 dong du lieu');
     assert.equal(ws.getRow(1).getCell(1).value, 'Index');
     assert.equal(ws.getRow(2).getCell(1).value, 1);
-    assert.equal(ws.getRow(3).getCell(9).value, 'E0042');
-    const headersCell = String(ws.getRow(2).getCell(6).value);
+    assert.equal(ws.getRow(3).getCell(10).value, 'E0042');
+    const headersCell = String(ws.getRow(2).getCell(7).value);
     assert.ok(!headersCell.includes(LONG_TOKEN), 'token phai bi che');
+    assert.equal(ws.getRow(2).getCell(2).value, 'Tra cuu thue bao');
+    assert.equal(ws.getRow(2).getCell(3).value, '/query/abc/{*}');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -92,9 +95,10 @@ test('writeResultsToStream giu token khi includeToken true', async () => {
     await writeResultsToStream(createWriteStream(file), [record()], { includeToken: true });
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(file);
-    const cell = String(wb.getWorksheet('Results').getRow(2).getCell(6).value);
+    const cell = String(wb.getWorksheet('Results').getRow(2).getCell(7).value);
     assert.ok(cell.includes(LONG_TOKEN));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
+

@@ -2,7 +2,8 @@ import ExcelJS from 'exceljs';
 
 export const EXPORT_COLUMNS = [
   { header: 'Index', key: 'index', width: 8 },
-  { header: 'Endpoint', key: 'endpoint', width: 40 },
+  { header: 'Name', key: 'name', width: 30 },
+  { header: 'Path', key: 'path', width: 45 },
   { header: 'MSISDN', key: 'msisdn', width: 16 },
   { header: 'Method', key: 'method', width: 10 },
   { header: 'URL', key: 'url', width: 70 },
@@ -49,7 +50,8 @@ export function exportFilename(now = new Date()) {
 function toRow(rec, includeToken) {
   return {
     index: rec.index,
-    endpoint: rec.endpointName,
+    name: rec.endpointName ?? '',
+    path: rec.pathTemplate ?? '',
     msisdn: rec.msisdn ?? '',
     method: rec.request.method,
     url: rec.request.url,
