@@ -6,7 +6,7 @@
   "description": "Tool test request/response API hang loat",
   "scripts": {
     "start": "node server.js",
-    "test": "playwright test",
+    "test": "node --test \"test/**/*.test.js\"",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed"
   },
