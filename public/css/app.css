@@ -277,7 +277,7 @@ select.input { padding: 0 var(--sp-xs); }
 
 /* ---------- drawer ---------- */
 .drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 90vw);
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(1040px, 95vw);
   background: var(--surface); border-left: 1px solid var(--hairline);
   padding: var(--sp-lg); overflow: auto; z-index: 10;
   display: flex; flex-direction: column; gap: var(--sp-sm);
@@ -293,6 +293,46 @@ select.input { padding: 0 var(--sp-xs); }
   font-family: var(--font-num); font-size: var(--fs-caption);
   white-space: pre-wrap; word-break: break-all; max-height: 40vh; overflow: auto;
 }
+
+.kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-sm) var(--sp-md); }
+@media (max-width: 900px) { .kv-grid { grid-template-columns: 1fr; } }
+
+table.kv {
+  width: 100%; border-collapse: collapse; display: block;
+  max-height: 30vh; overflow: auto;
+  background: var(--canvas); border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+}
+table.kv td {
+  padding: 2px var(--sp-sm); font-size: var(--fs-caption);
+  border-bottom: 1px solid var(--hairline); vertical-align: top;
+}
+table.kv tr:last-child td { border-bottom: none; }
+.kv-k { color: var(--muted); white-space: nowrap; width: 1%; }
+.kv-v { word-break: break-all; }
+
+.body-tabs { display: flex; gap: var(--sp-xxs); }
+.body-tab {
+  background: transparent; border: 1px solid var(--hairline); color: var(--muted);
+  border-radius: var(--radius-lg); padding: 2px var(--sp-sm);
+  font-size: var(--fs-caption); cursor: pointer;
+}
+.body-tab.is-active { color: var(--body); border-color: var(--body); }
+.body-tab:disabled { opacity: .4; cursor: not-allowed; }
+.body-pane[hidden] { display: none; }
+.body-view {
+  margin: 0; background: var(--canvas); border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg); padding: var(--sp-sm);
+  font-family: var(--font-num); font-size: var(--fs-caption);
+  white-space: pre-wrap; word-break: break-all; max-height: 45vh; overflow: auto;
+}
+.preview-frame {
+  width: 100%; height: 45vh; background: #fff;
+  border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+}
+.tok-key { color: var(--up); }
+.tok-str { color: var(--body); }
+.tok-num { color: #f0b90b; }
+.tok-lit { color: var(--muted); }
 
 /* ---------- toast ---------- */
 .toast-host { position: fixed; right: var(--sp-md); bottom: var(--sp-md); display: flex; flex-direction: column; gap: var(--sp-xs); z-index: 20; }
