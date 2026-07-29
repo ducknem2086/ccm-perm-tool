@@ -181,7 +181,20 @@ select.input { padding: 0 var(--sp-xs); }
 .el-del:hover { color: var(--down); }
 .el-method { flex: 0 0 68px; height: var(--el-input-height); font-size: var(--fs-caption); padding: 0 2px;
   background: var(--surface); color: var(--body); border: 1px solid var(--hairline); border-radius: var(--radius-sm); }
+.el-name { flex: 0 0 26%; min-width: 0; }
+.el-errors {
+  position: relative;
+  margin-top: var(--sp-xs);
+  padding: var(--sp-xs);
+  border: 1px solid var(--down);
+  border-radius: 4px;
+  font-size: var(--fs-caption);
+  color: var(--down);
+  line-height: 1.6;
+}
+.el-errors .el-del { position: absolute; top: 2px; right: 2px; }
 .el-actions { display: flex; gap: var(--sp-xs); }
+
 .el-empty { color: var(--muted); font-size: var(--fs-caption); padding: var(--sp-xs); }
 
 /* ---------- param table ---------- */

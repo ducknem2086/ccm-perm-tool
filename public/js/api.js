@@ -52,6 +52,21 @@ export async function importFile(file, kind, dedupe) {
   return json;
 }
 
+export async function importGrid(file) {
+  const res = await fetch('/api/import/grid', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-filename': encodeURIComponent(file.name).replace(/%/g, '_'),
+    },
+    body: await file.arrayBuffer(),
+  });
+  const json = await asJson(res);
+  if (!res.ok) throw new Error(json.error ?? 'Import thất bại');
+  return json;
+}
+
+
 export async function exportExcel(runId, indexes, includeToken) {
   const res = await fetch(`/api/export/${runId}`, {
     method: 'POST',
