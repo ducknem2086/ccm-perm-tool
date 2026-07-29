@@ -72,10 +72,11 @@ body { display: flex; flex-direction: column; }
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: var(--sp-md); padding: var(--sp-md);
   align-items: start;
+  max-height: calc(100vh - var(--topbar-h) - 45px - 60px);
 }
 .col { display: flex; flex-direction: column; gap: var(--sp-md); min-width: 0; }
-@media (max-width: 1280px) { .input-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 768px) { .input-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1280px) { .input-grid { grid-template-columns: 1fr 1fr; max-height: none; } }
+@media (max-width: 768px) { .input-grid { grid-template-columns: 1fr; max-height: none; } }
 
 /* ---------- card ---------- */
 .card {
@@ -247,8 +248,12 @@ select.input { padding: 0 var(--sp-xs); }
   background: var(--surface); border-left: 1px solid var(--hairline);
   padding: var(--sp-lg); overflow: auto; z-index: 10;
   display: flex; flex-direction: column; gap: var(--sp-sm);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, .4);
 }
 .drawer[hidden] { display: none; }
+.msisdn-drawer { width: min(520px, 90vw); }
+.msisdn-drawer .card { border: none; padding: 0; background: transparent; }
+.msisdn-drawer .el-body { max-height: calc(100vh - 180px); }
 .drawer pre {
   margin: 0; background: var(--canvas); border: 1px solid var(--hairline);
   border-radius: var(--radius-lg); padding: var(--sp-sm);

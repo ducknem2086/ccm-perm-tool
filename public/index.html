@@ -73,7 +73,18 @@
           </div>
 
           <div class="col">
-            <section class="card" id="list-msisdn"></section>
+            <section class="card" id="card-msisdn">
+              <h2 class="card-title">
+                <span>MSISDN <span class="el-count" id="msisdn-count">(0)</span></span>
+              </h2>
+              <label class="field">
+                <span class="label">Số điện thoại chính</span>
+                <input id="inp-single-msisdn" class="input mono" type="text" placeholder="0912345678" spellcheck="false" />
+              </label>
+              <div class="el-actions">
+                <button id="btn-open-msisdn-drawer" type="button" class="btn btn-secondary btn-sm" style="width: 100%;">⚙ Quản lý danh sách & Import (0)</button>
+              </div>
+            </section>
           </div>
 
           <div class="col">
@@ -135,6 +146,7 @@
     </main>
 
     <aside id="drawer" class="drawer" hidden aria-hidden="true" aria-label="Chi tiết request"></aside>
+    <aside id="msisdn-drawer" class="drawer msisdn-drawer" hidden aria-hidden="true" aria-label="Quản lý danh sách MSISDN"></aside>
     <div id="toast-host" class="toast-host" aria-live="polite"></div>
 
     <script type="module" src="/js/main.js"></script>

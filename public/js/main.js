@@ -4,9 +4,9 @@ import { extractVariables } from './shared/variables.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
 import { initDateRange } from './ui/date-range.js';
+import { initMsisdnDrawer } from './ui/msisdn-drawer.js';
 import { initEndpointList } from './ui/endpoint-list.js';
 import { initParamTables } from './ui/param-table.js';
-import { createEditableList } from './ui/editable-list.js';
 import { initFilters } from './ui/filters.js';
 import { initResultTable } from './ui/result-table.js';
 import { initDetailDrawer } from './ui/detail-drawer.js';
@@ -31,16 +31,7 @@ let stream = null;
 const tabs = initTabs();
 initConnectionPanel();
 initDateRange();
-
-createEditableList({
-  host: document.getElementById('list-msisdn'),
-  title: 'MSISDN',
-  kind: 'msisdn',
-  placeholder: '0912345678',
-  getItems: () => state.msisdns,
-  setItems: (v) => { state.msisdns = v; persist(); },
-  onChange: notify,
-});
+initMsisdnDrawer();
 
 initEndpointList();
 initParamTables();
