@@ -72,7 +72,16 @@ test('collectErrorCodes bo qua ban ghi khong co ma loi', () => {
   assert.deepEqual(collectErrorCodes([rec({ errorCode: 'E2' }), rec({ errorCode: null }), rec({ errorCode: 'E1' })]), ['E1', 'E2']);
 });
 
-test('ALL_COLUMNS co du 6 cot bat mac dinh theo require', () => {
-  const on = ALL_COLUMNS.filter((c) => c.default).map((c) => c.key);
-  assert.deepEqual(on, ['index', 'request', 'response', 'status', 'errorCode', 'durationMs']);
+test('ALL_COLUMNS gom status error time va them Name, Path, MSISDN', () => {
+  assert.deepEqual(
+    ALL_COLUMNS.map((c) => c.key),
+    ['index', 'name', 'path', 'msisdn', 'request', 'response', 'status'],
+  );
+  assert.ok(ALL_COLUMNS.every((c) => c.default === true));
 });
+
+test('tim kiem tu do quet ca pathTemplate', () => {
+  const r = rec({ pathTemplate: '/query/white-list-ir-subscriber/{*}' });
+  assert.equal(matchesFilter(r, { ...emptyFilter(), search: 'white-list' }), true);
+});
+

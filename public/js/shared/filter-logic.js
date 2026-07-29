@@ -1,12 +1,11 @@
 export const ALL_COLUMNS = [
   { key: 'index', header: '#', default: true },
+  { key: 'name', header: 'Name', default: true },
+  { key: 'path', header: 'Path', default: true },
+  { key: 'msisdn', header: 'MSISDN', default: true },
   { key: 'request', header: 'Request', default: true },
   { key: 'response', header: 'Response body / error', default: true },
-  { key: 'status', header: 'Status', default: true },
-  { key: 'errorCode', header: 'Error', default: true },
-  { key: 'durationMs', header: 'Time', default: true },
-  { key: 'endpoint', header: 'Endpoint', default: false },
-  { key: 'msisdn', header: 'MSISDN', default: false },
+  { key: 'status', header: 'Status · Error · Time', default: true },
 ];
 
 export const STATUS_NA = 'N/A';
@@ -29,6 +28,7 @@ export function matchesFilter(rec, filter) {
       rec.request.url,
       rec.msisdn ?? '',
       rec.endpointName ?? '',
+      rec.pathTemplate ?? '',
       rec.response.bodyText ?? '',
       rec.errorMessage ?? '',
       rec.errorCode ?? '',
@@ -37,6 +37,7 @@ export function matchesFilter(rec, filter) {
   }
   return true;
 }
+
 
 export function applyFilter(records, filter) {
   return records.filter((r) => matchesFilter(r, filter)).sort((a, b) => a.index - b.index);

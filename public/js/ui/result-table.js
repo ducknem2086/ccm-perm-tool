@@ -6,21 +6,29 @@ const VIRTUAL_THRESHOLD = 500; // duoi nguong nay render thang cho don gian
 
 const truncate = (s, n = 120) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
+function statusText(rec) {
+  const bits = [
+    rec.response.status === null ? '—' : String(rec.response.status),
+    rec.errorCode ?? '',
+    `${rec.durationMs}ms`,
+  ];
+  return bits.filter(Boolean).join(' · ');
+}
+
 function cellText(rec, key) {
   switch (key) {
     case 'index': return String(rec.index);
+    case 'name': return rec.endpointName || '—';
+    case 'path': return rec.pathTemplate || '—';
+    case 'msisdn': return rec.msisdn ?? '—';
     case 'request': return `${rec.request.method} ${rec.request.url}`;
     case 'response': return truncate(rec.response.bodyText || rec.errorMessage || '');
-    case 'status': return rec.response.status === null ? '—' : String(rec.response.status);
-    case 'errorCode': return rec.errorCode ?? '—';
-    case 'durationMs': return `${rec.durationMs}ms`;
-    case 'endpoint': return rec.endpointName;
-    case 'msisdn': return rec.msisdn ?? '—';
+    case 'status': return statusText(rec);
     default: return '';
   }
 }
 
-const NUMERIC = new Set(['index', 'status', 'durationMs', 'msisdn']);
+const NUMERIC = new Set(['index', 'msisdn']);
 
 export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRowClick }) {
   const viewport = document.getElementById('result-viewport');
@@ -40,10 +48,9 @@ export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRo
       const td = document.createElement('td');
       td.textContent = cellText(rec, col.key);
       if (NUMERIC.has(col.key)) td.classList.add('num', 'mono');
-      if (col.key === 'status' || col.key === 'errorCode') {
+      if (col.key === 'status') {
         const ok = rec.response.status !== null && rec.response.status < 400;
         td.classList.add(ok ? 'status-up' : 'status-down');
-        if (col.key === 'errorCode' && !rec.errorCode) td.classList.remove('status-up', 'status-down');
       }
       td.title = cellText(rec, col.key);
       tr.append(td);

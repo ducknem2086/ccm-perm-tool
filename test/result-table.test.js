@@ -146,6 +146,7 @@ function makeRecord(index, override = {}) {
   return {
     index,
     endpointName: 'Endpoint 1',
+    pathTemplate: '/query/abc-information/{*}',
     msisdn: '0912345678',
     request: {
       method: 'GET',
@@ -176,7 +177,7 @@ test('initResultTable render empty state khi khong co ban ghi', () => {
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['index', 'request', 'response', 'status', 'errorCode', 'durationMs'],
+    getVisibleColumns: () => ['index', 'name', 'path', 'msisdn', 'request', 'response', 'status'],
   });
 
   tableCtrl.render();
@@ -203,7 +204,7 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['index', 'request', 'response', 'status', 'errorCode', 'durationMs'],
+    getVisibleColumns: () => ['index', 'name', 'path', 'msisdn', 'request', 'response', 'status'],
     onRowClick: (rec) => { clickedRecord = rec; },
   });
 
@@ -217,22 +218,19 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
 
   // Check cells of row 0
   const tds0 = rows[0].children;
-  assert.equal(tds0[0].textContent, '1'); // index
-  assert.equal(tds0[1].textContent, 'GET https://api.example.com/test/1'); // request
-  assert.equal(tds0[2].textContent, 'OK'); // response
-  assert.equal(tds0[3].textContent, '200'); // status
-  assert.equal(tds0[3].classList.contains('status-up'), true);
-  assert.equal(tds0[4].textContent, '—'); // errorCode
-  assert.equal(tds0[4].classList.contains('status-up'), false);
-  assert.equal(tds0[4].classList.contains('status-down'), false);
-  assert.equal(tds0[5].textContent, '120ms'); // durationMs
+  assert.equal(tds0[0].textContent, '1');                                  // index
+  assert.equal(tds0[1].textContent, 'Endpoint 1');                         // name
+  assert.equal(tds0[2].textContent, '/query/abc-information/{*}');         // path
+  assert.equal(tds0[3].textContent, '0912345678');                         // msisdn
+  assert.equal(tds0[4].textContent, 'GET https://api.example.com/test/1'); // request
+  assert.equal(tds0[5].textContent, 'OK');                                 // response
+  assert.equal(tds0[6].textContent, '200 · 120ms');                        // status gom
+  assert.equal(tds0[6].classList.contains('status-up'), true);
 
   // Check cells of row 1
   const tds1 = rows[1].children;
-  assert.equal(tds1[3].textContent, '500');
-  assert.equal(tds1[3].classList.contains('status-down'), true);
-  assert.equal(tds1[4].textContent, 'ERR_500');
-  assert.equal(tds1[4].classList.contains('status-down'), true);
+  assert.equal(tds1[6].textContent, '500 · ERR_500 · 120ms');
+  assert.equal(tds1[6].classList.contains('status-down'), true);
 
   // Test row click
   rows[0].click();
@@ -278,3 +276,39 @@ test('initResultTable virtual scroll khi so luong ban ghi > 500', () => {
   assert.equal(rows[0].classList.contains('spacer-row'), true);
   assert.equal(tableCtrl.getVisibleIndexes().length, 600);
 });
+
+test('cot status hien dau gach ngang khi khong co status code', () => {
+  const { table } = setupMockDOM();
+  const records = [makeRecord(1, {
+    response: { status: null, statusText: '', body: null, bodyText: '' },
+    errorCode: 'ETIMEDOUT', errorMessage: 'timeout', durationMs: 30000,
+  })];
+
+  const tableCtrl = initResultTable({
+    getRecords: () => records,
+    getFilter: () => emptyFilter(),
+    getVisibleColumns: () => ['status'],
+  });
+  tableCtrl.render();
+
+  const td = table.querySelector('tbody').children[0].children[0];
+  assert.equal(td.textContent, '— · ETIMEDOUT · 30000ms');
+  assert.equal(td.classList.contains('status-down'), true);
+});
+
+test('cot name va msisdn hien dau gach ngang khi rong', () => {
+  const { table } = setupMockDOM();
+  const records = [makeRecord(1, { endpointName: '', msisdn: null })];
+
+  const tableCtrl = initResultTable({
+    getRecords: () => records,
+    getFilter: () => emptyFilter(),
+    getVisibleColumns: () => ['name', 'msisdn'],
+  });
+  tableCtrl.render();
+
+  const tds = table.querySelector('tbody').children[0].children;
+  assert.equal(tds[0].textContent, '—');
+  assert.equal(tds[1].textContent, '—');
+});
+
