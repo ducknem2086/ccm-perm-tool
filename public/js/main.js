@@ -45,6 +45,7 @@ const resultTable = initResultTable({
   getRecords: () => results,
   getFilter: () => filters.getFilter(),
   getVisibleColumns: () => filters.getVisibleColumns(),
+  filterCell: (key) => filters.filterCell(key),
   onRowClick: (rec) => drawer.open(rec),
 });
 
