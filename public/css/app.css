@@ -250,6 +250,18 @@ select.input { padding: 0 var(--sp-xs); }
   text-align: left; padding: var(--sp-xs) var(--sp-sm);
   border-bottom: 1px solid var(--hairline);
 }
+.result-table thead tr:first-child th { top: 0; }
+.result-table thead tr.filter-row th {
+  position: sticky; top: var(--row-h); z-index: 1;
+  background: var(--surface);
+  padding: var(--sp-xxs) var(--sp-xs);
+  border-bottom: 1px solid var(--hairline);
+  font-weight: 400; text-transform: none; letter-spacing: 0;
+}
+.filter-cell { min-width: 0; }
+.filter-cell .input { width: 100%; min-width: 80px; }
+.filter-cell .filter-pair { display: flex; gap: var(--sp-xxs); }
+.filter-cell .filter-pair .input { flex: 1 1 0; min-width: 0; }
 .result-table td {
   padding: var(--sp-xs) var(--sp-sm);
   border-bottom: 1px solid var(--hairline);

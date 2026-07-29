@@ -159,7 +159,7 @@ function makeRecord(index, override = {}) {
     response: {
       status: 200,
       statusText: 'OK',
-      headers: {},
+      headers: { 'content-type': 'application/json' },
       body: { code: 0 },
       bodyText: '{"code":0}',
     },
@@ -177,7 +177,7 @@ test('initResultTable render empty state khi khong co ban ghi', () => {
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['index', 'name', 'path', 'msisdn', 'request', 'response', 'status'],
+    getVisibleColumns: () => ['index', 'status', 'name', 'path', 'request', 'responseBody', 'responseHeaders'],
   });
 
   tableCtrl.render();
@@ -197,14 +197,14 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
   const { table } = setupMockDOM();
   let clickedRecord = null;
   const records = [
-    makeRecord(1, { response: { status: 200, statusText: 'OK', body: {}, bodyText: 'OK' } }),
-    makeRecord(2, { response: { status: 500, statusText: 'Error', body: null, bodyText: '' }, errorCode: 'ERR_500', errorMessage: 'Server Error' }),
+    makeRecord(1, { response: { status: 200, statusText: 'OK', headers: { 'content-type': 'application/json' }, body: {}, bodyText: 'OK' } }),
+    makeRecord(2, { response: { status: 500, statusText: 'Error', headers: {}, body: null, bodyText: '' }, errorCode: 'ERR_500', errorMessage: 'Server Error' }),
   ];
 
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['index', 'name', 'path', 'msisdn', 'request', 'response', 'status'],
+    getVisibleColumns: () => ['index', 'status', 'name', 'path', 'request', 'responseBody', 'responseHeaders'],
     onRowClick: (rec) => { clickedRecord = rec; },
   });
 
@@ -219,18 +219,18 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
   // Check cells of row 0
   const tds0 = rows[0].children;
   assert.equal(tds0[0].textContent, '1');                                  // index
-  assert.equal(tds0[1].textContent, 'Endpoint 1');                         // name
-  assert.equal(tds0[2].textContent, '/query/abc-information/{*}');         // path
-  assert.equal(tds0[3].textContent, '0912345678');                         // msisdn
+  assert.equal(tds0[1].textContent, '200 · 120ms');                        // status gom
+  assert.equal(tds0[1].classList.contains('status-up'), true);
+  assert.equal(tds0[2].textContent, 'Endpoint 1');                         // name
+  assert.equal(tds0[3].textContent, '/query/abc-information/{*}');         // path
   assert.equal(tds0[4].textContent, 'GET https://api.example.com/test/1'); // request
-  assert.equal(tds0[5].textContent, 'OK');                                 // response
-  assert.equal(tds0[6].textContent, '200 · 120ms');                        // status gom
-  assert.equal(tds0[6].classList.contains('status-up'), true);
+  assert.equal(tds0[5].textContent, 'OK');                                 // response body
+  assert.equal(tds0[6].textContent, 'content-type: application/json');     // response header
 
   // Check cells of row 1
   const tds1 = rows[1].children;
-  assert.equal(tds1[6].textContent, '500 · ERR_500 · 120ms');
-  assert.equal(tds1[6].classList.contains('status-down'), true);
+  assert.equal(tds1[1].textContent, '500 · ERR_500 · 120ms');
+  assert.equal(tds1[1].classList.contains('status-down'), true);
 
   // Test row click
   rows[0].click();
@@ -280,7 +280,7 @@ test('initResultTable virtual scroll khi so luong ban ghi > 500', () => {
 test('cot status hien dau gach ngang khi khong co status code', () => {
   const { table } = setupMockDOM();
   const records = [makeRecord(1, {
-    response: { status: null, statusText: '', body: null, bodyText: '' },
+    response: { status: null, statusText: '', headers: {}, body: null, bodyText: '' },
     errorCode: 'ETIMEDOUT', errorMessage: 'timeout', durationMs: 30000,
   })];
 
@@ -296,14 +296,17 @@ test('cot status hien dau gach ngang khi khong co status code', () => {
   assert.equal(td.classList.contains('status-down'), true);
 });
 
-test('cot name va msisdn hien dau gach ngang khi rong', () => {
+test('cot name va response header hien dau gach ngang khi rong', () => {
   const { table } = setupMockDOM();
-  const records = [makeRecord(1, { endpointName: '', msisdn: null })];
+  const records = [makeRecord(1, {
+    endpointName: '',
+    response: { status: 200, statusText: 'OK', headers: {}, body: null, bodyText: '' },
+  })];
 
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['name', 'msisdn'],
+    getVisibleColumns: () => ['name', 'responseHeaders'],
   });
   tableCtrl.render();
 
@@ -312,3 +315,38 @@ test('cot name va msisdn hien dau gach ngang khi rong', () => {
   assert.equal(tds[1].textContent, '—');
 });
 
+test('thead giu nguyen node khi paint lai de khong mat focus o filter', () => {
+  const { table } = setupMockDOM();
+  const records = [makeRecord(1)];
+
+  const tableCtrl = initResultTable({
+    getRecords: () => records,
+    getFilter: () => emptyFilter(),
+    getVisibleColumns: () => ['index', 'status'],
+  });
+
+  tableCtrl.render();
+  const firstHead = table.querySelector('thead');
+  tableCtrl.render();
+  assert.equal(table.querySelector('thead'), firstHead, 'thead phai la cung mot node');
+});
+
+test('filterCell duoc gan vao hang filter dung cot', () => {
+  const { table } = setupMockDOM();
+  const nameInput = new MockElement('input');
+  nameInput.id = 'flt-col-name';
+
+  const tableCtrl = initResultTable({
+    getRecords: () => [makeRecord(1)],
+    getFilter: () => emptyFilter(),
+    getVisibleColumns: () => ['index', 'status', 'name'],
+    filterCell: (key) => (key === 'name' ? nameInput : null),
+  });
+  tableCtrl.render();
+
+  const thead = table.querySelector('thead');
+  const filterRow = thead.children[1];
+  assert.ok(filterRow.classList.contains('filter-row'));
+  assert.equal(filterRow.children.length, 3);
+  assert.equal(filterRow.children[2].children[0], nameInput);
+});

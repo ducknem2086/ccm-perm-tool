@@ -15,30 +15,66 @@ function statusText(rec) {
   return bits.filter(Boolean).join(' · ');
 }
 
+const headerLine = (headers) => Object.entries(headers ?? {})
+  .map(([k, v]) => `${k}: ${v}`)
+  .join(' · ');
+
 function cellText(rec, key) {
   switch (key) {
     case 'index': return String(rec.index);
     case 'name': return rec.endpointName || '—';
     case 'path': return rec.pathTemplate || '—';
-    case 'msisdn': return rec.msisdn ?? '—';
     case 'request': return `${rec.request.method} ${rec.request.url}`;
-    case 'response': return truncate(rec.response.bodyText || rec.errorMessage || '');
+    case 'responseBody': return truncate(rec.response.bodyText || rec.errorMessage || '') || '—';
+    case 'responseHeaders': return truncate(headerLine(rec.response.headers)) || '—';
     case 'status': return statusText(rec);
     default: return '';
   }
 }
 
-const NUMERIC = new Set(['index', 'msisdn']);
+const NUMERIC = new Set(['index']);
 
-export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRowClick }) {
+export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRowClick, filterCell }) {
   const viewport = document.getElementById('result-viewport');
   const table = document.getElementById('result-table');
+
+  // thead va tbody duoc tao mot lan roi giu nguyen node. Neu paint lai ma thay
+  // ca thead thi o input trong hang filter se mat focus giua luc dang go.
+  const thead = document.createElement('thead');
+  const tbody = document.createElement('tbody');
+  table.replaceChildren(thead, tbody);
+
   let rows = [];
   let scheduled = false;
+  let headKeys = '';
 
   function columns() {
     const keys = getVisibleColumns();
     return ALL_COLUMNS.filter((c) => keys.includes(c.key));
+  }
+
+  function paintHead(cols) {
+    const signature = cols.map((c) => c.key).join(',');
+    if (signature === headKeys) return;
+    headKeys = signature;
+
+    const headRow = document.createElement('tr');
+    const filterRow = document.createElement('tr');
+    filterRow.className = 'filter-row';
+
+    for (const col of cols) {
+      const th = document.createElement('th');
+      th.textContent = col.header;
+      headRow.append(th);
+
+      const ftd = document.createElement('th');
+      ftd.className = 'filter-cell';
+      const node = filterCell?.(col.key);
+      if (node) ftd.append(node);
+      filterRow.append(ftd);
+    }
+
+    thead.replaceChildren(headRow, filterRow);
   }
 
   function buildRow(rec, cols) {
@@ -72,17 +108,9 @@ export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRo
   function paint() {
     scheduled = false;
     const cols = columns();
+    paintHead(cols);
 
-    const thead = document.createElement('thead');
-    const headRow = document.createElement('tr');
-    for (const col of cols) {
-      const th = document.createElement('th');
-      th.textContent = col.header;
-      headRow.append(th);
-    }
-    thead.append(headRow);
-
-    const tbody = document.createElement('tbody');
+    const body = [];
 
     if (rows.length === 0) {
       const tr = document.createElement('tr');
@@ -91,19 +119,19 @@ export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRo
       td.className = 'el-empty';
       td.textContent = 'Chưa có kết quả nào khớp bộ lọc.';
       tr.append(td);
-      tbody.append(tr);
+      body.push(tr);
     } else if (rows.length <= VIRTUAL_THRESHOLD) {
-      for (const rec of rows) tbody.append(buildRow(rec, cols));
+      for (const rec of rows) body.push(buildRow(rec, cols));
     } else {
       const start = Math.max(0, Math.floor(viewport.scrollTop / ROW_H) - BUFFER);
       const visible = Math.ceil(viewport.clientHeight / ROW_H) + BUFFER * 2;
       const end = Math.min(rows.length, start + visible);
-      if (start > 0) tbody.append(spacer(start * ROW_H));
-      for (let i = start; i < end; i += 1) tbody.append(buildRow(rows[i], cols));
-      if (end < rows.length) tbody.append(spacer((rows.length - end) * ROW_H));
+      if (start > 0) body.push(spacer(start * ROW_H));
+      for (let i = start; i < end; i += 1) body.push(buildRow(rows[i], cols));
+      if (end < rows.length) body.push(spacer((rows.length - end) * ROW_H));
     }
 
-    table.replaceChildren(thead, tbody);
+    tbody.replaceChildren(...body);
   }
 
   function schedule() {
