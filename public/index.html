@@ -26,7 +26,7 @@
     <main class="main">
       <section id="panel-input" class="panel" role="tabpanel" aria-labelledby="tab-input" tabindex="0">
         <div class="input-grid">
-          <div class="col">
+          <div class="col col-narrow">
             <section class="card">
               <h2 class="card-title">CONNECTION</h2>
               <label class="field">
@@ -37,6 +37,19 @@
                 <span class="label">Bearer token</span>
                 <input id="inp-token" class="input mono" type="text" placeholder="dán token vào đây" spellcheck="false" />
               </label>
+            </section>
+
+            <section class="card" id="card-msisdn">
+              <h2 class="card-title">
+                <span>MSISDN <span class="el-count" id="msisdn-count">(0)</span></span>
+              </h2>
+              <label class="field">
+                <span class="label">Số điện thoại chính</span>
+                <input id="inp-single-msisdn" class="input mono" type="text" placeholder="0912345678" spellcheck="false" />
+              </label>
+              <div class="el-actions">
+                <button id="btn-open-msisdn-drawer" type="button" class="btn btn-secondary btn-sm" style="width: 100%;">⚙ Quản lý danh sách &amp; Import (0)</button>
+              </div>
             </section>
 
             <section class="card">
@@ -59,21 +72,6 @@
               </label>
               <p id="date-preview" class="preview mono"></p>
             </section>
-          </div>
-
-          <div class="col">
-            <section class="card" id="card-msisdn">
-              <h2 class="card-title">
-                <span>MSISDN <span class="el-count" id="msisdn-count">(0)</span></span>
-              </h2>
-              <label class="field">
-                <span class="label">Số điện thoại chính</span>
-                <input id="inp-single-msisdn" class="input mono" type="text" placeholder="0912345678" spellcheck="false" />
-              </label>
-              <div class="el-actions">
-                <button id="btn-open-msisdn-drawer" type="button" class="btn btn-secondary btn-sm" style="width: 100%;">⚙ Quản lý danh sách & Import (0)</button>
-              </div>
-            </section>
 
             <section class="card">
               <h2 class="card-title">QUERY PARAMS <button class="btn-icon" data-add-param="query" type="button" title="Thêm dòng">＋</button></h2>
@@ -81,28 +79,30 @@
             </section>
           </div>
 
-          <div class="col">
+          <div class="col col-wide">
+            <div class="col-row">
+              <section class="card">
+                <h2 class="card-title">HEADERS <button class="btn-icon" data-add-param="header" type="button" title="Thêm dòng">＋</button></h2>
+                <div id="tbl-headers" class="param-table"></div>
+                <p class="hint">Authorization được tự thêm từ token ở trên, trừ khi bạn tự khai đè ở đây.</p>
+              </section>
+
+              <details class="card">
+                <summary class="card-title">ADVANCED</summary>
+                <div class="field-row">
+                  <label class="field"><span class="label">Số luồng</span><input id="inp-worker-count" class="input mono" type="number" min="1" max="16" value="4" /></label>
+                  <label class="field"><span class="label">Timeout (ms)</span><input id="inp-timeout" class="input mono" type="number" min="1000" step="1000" value="30000" /></label>
+                </div>
+                <p class="hint">Mỗi luồng chạy tối đa 5 request cùng lúc.</p>
+                <label class="field">
+                  <span class="label">Đường dẫn tìm error code (cách nhau bởi dấu phẩy)</span>
+                  <input id="inp-error-paths" class="input mono" type="text" value="errorCode, error_code, code, error.code" spellcheck="false" />
+                </label>
+                <label class="check"><input id="chk-dedupe" type="checkbox" checked /> Loại trùng khi import</label>
+              </details>
+            </div>
+
             <section class="card" id="list-endpoint"></section>
-
-            <section class="card">
-              <h2 class="card-title">HEADERS <button class="btn-icon" data-add-param="header" type="button" title="Thêm dòng">＋</button></h2>
-              <div id="tbl-headers" class="param-table"></div>
-              <p class="hint">Authorization được tự thêm từ token ở trên, trừ khi bạn tự khai đè ở đây.</p>
-            </section>
-
-            <details class="card">
-              <summary class="card-title">ADVANCED</summary>
-              <div class="field-row">
-                <label class="field"><span class="label">Số luồng</span><input id="inp-worker-count" class="input mono" type="number" min="1" max="16" value="4" /></label>
-                <label class="field"><span class="label">Timeout (ms)</span><input id="inp-timeout" class="input mono" type="number" min="1000" step="1000" value="30000" /></label>
-              </div>
-              <p class="hint">Mỗi luồng chạy tối đa 5 request cùng lúc.</p>
-              <label class="field">
-                <span class="label">Đường dẫn tìm error code (cách nhau bởi dấu phẩy)</span>
-                <input id="inp-error-paths" class="input mono" type="text" value="errorCode, error_code, code, error.code" spellcheck="false" />
-              </label>
-              <label class="check"><input id="chk-dedupe" type="checkbox" checked /> Loại trùng khi import</label>
-            </details>
           </div>
         </div>
 
