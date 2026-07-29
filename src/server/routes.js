@@ -1,7 +1,7 @@
 import express from 'express';
 import { validateConfig, buildRequests } from './request-builder.js';
 import { createRun, startRun, getRun, cancelRun, subscribe, summarize } from './runner.js';
-import { parseImport } from './file-import.js';
+import { parseImport, parseGrid } from './file-import.js';
 import { writeResultsToStream, exportFilename } from './excel-export.js';
 import { DEFAULT_ERROR_CODE_PATHS } from './error-code.js';
 
@@ -88,6 +88,21 @@ export function registerRoutes(app) {
         res.status(400).json({ error: err.message });
       }
     });
+
+  app.post('/api/import/grid',
+    express.raw({ type: '*/*', limit: '20mb' }),
+    async (req, res) => {
+      try {
+        const grid = await parseGrid({
+          filename: req.get('X-Filename') || 'unknown.txt',
+          buffer: req.body,
+        });
+        res.json(grid);
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
 
   app.post('/api/export/:runId', express.json({ limit: '5mb' }), async (req, res) => {
     const run = getRun(req.params.runId);

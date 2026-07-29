@@ -171,3 +171,32 @@ test('POST /api/run/:runId/cancel tra 404 voi runId la', async () => {
     assert.equal(res.status, 404);
   } finally { server.close(); }
 });
+
+test('POST /api/import/grid tra ve header va rows', async () => {
+  const { server, base } = await listen(createApp());
+  try {
+    const res = await fetch(`${base}/api/import/grid`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream', 'x-filename': 'apis.csv' },
+      body: 'name,method,endpoint\nTra cuu,GET,/query/abc/{*}',
+    });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.deepEqual(json.headers, ['name', 'method', 'endpoint']);
+    assert.deepEqual(json.rows, [['Tra cuu', 'GET', '/query/abc/{*}']]);
+  } finally { server.close(); }
+});
+
+test('POST /api/import/grid tra 400 voi duoi file la', async () => {
+  const { server, base } = await listen(createApp());
+  try {
+    const res = await fetch(`${base}/api/import/grid`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream', 'x-filename': 'apis.pdf' },
+      body: 'x',
+    });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /không hỗ trợ/);
+  } finally { server.close(); }
+});
+
