@@ -3,11 +3,16 @@ import { ALL_COLUMNS, emptyFilter, collectStatuses, collectErrorCodes } from '..
 const COLUMNS_KEY = 'ccm-tool-columns';
 
 function loadColumns() {
+  const fallback = ALL_COLUMNS.filter((c) => c.default).map((c) => c.key);
   try {
     const saved = JSON.parse(localStorage.getItem(COLUMNS_KEY) ?? 'null');
-    if (Array.isArray(saved) && saved.length > 0) return saved;
+    if (Array.isArray(saved)) {
+      // Nguoi dung cu co the con luu key da bi bo (errorCode, durationMs, endpoint).
+      const valid = saved.filter((k) => ALL_COLUMNS.some((c) => c.key === k));
+      if (valid.length > 0) return valid;
+    }
   } catch { /* bo qua */ }
-  return ALL_COLUMNS.filter((c) => c.default).map((c) => c.key);
+  return fallback;
 }
 
 function fillSelect(select, values, keep) {
