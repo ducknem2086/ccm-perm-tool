@@ -5,6 +5,7 @@ import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
 import { initDateRange } from './ui/date-range.js';
 import { initMsisdnDrawer } from './ui/msisdn-drawer.js';
+import { initTemplateDrawer } from './ui/template-drawer.js';
 import { initEndpointList } from './ui/endpoint-list.js';
 import { initParamTables } from './ui/param-table.js';
 import { initFilters } from './ui/filters.js';
@@ -33,8 +34,10 @@ initConnectionPanel();
 initDateRange();
 initMsisdnDrawer();
 
-initEndpointList();
+const templateDrawer = initTemplateDrawer();
+initEndpointList({ onOpenTemplate: () => templateDrawer.open() });
 initParamTables();
+
 const drawer = initDetailDrawer();
 
 const filters = initFilters({ onChange: () => renderResults() });

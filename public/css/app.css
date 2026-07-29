@@ -203,6 +203,9 @@ select.input { padding: 0 var(--sp-xs); }
 .pt-row .input { height: 28px; font-size: var(--fs-sm); }
 .pt-key { flex: 0 0 34%; }
 .pt-val { flex: 1 1 auto; min-width: 0; }
+.tpl-arrow { flex: 0 0 auto; color: var(--muted); font-size: var(--fs-caption); }
+.tpl-target { flex: 0 0 84px; }
+
 
 /* ---------- output ---------- */
 .runbar {
