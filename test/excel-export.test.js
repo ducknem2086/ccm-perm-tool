@@ -103,6 +103,49 @@ test('writeResultsToStream giu token khi includeToken true', async () => {
   }
 });
 
+test('cot Response Body ghi JSON pretty tu object da parse', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccm-'));
+  const file = join(dir, 'out.xlsx');
+  try {
+    const rec = record({
+      response: {
+        status: 200, statusText: 'OK', headers: { 'content-type': 'application/json' },
+        body: { errorCode: '0', data: { msisdn: '0912345678' } },
+        bodyText: '{"errorCode":"0","data":{"msisdn":"0912345678"}}', sizeBytes: 48,
+      },
+    });
+    await writeResultsToStream(createWriteStream(file), [rec], { includeToken: false });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(file);
+    const cell = wb.getWorksheet('Results').getRow(2).getCell(12);
+    assert.equal(String(cell.value), JSON.stringify(rec.response.body, null, 2));
+    assert.equal(cell.alignment?.wrapText, true, 'cot JSON phai wrap text');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('cot Response Body giu chuoi tho khi response khong phai JSON', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccm-'));
+  const file = join(dir, 'out.xlsx');
+  try {
+    const html = '<!DOCTYPE html>\n<html><body>login</body></html>';
+    await writeResultsToStream(createWriteStream(file), [record({
+      response: {
+        status: 200, statusText: 'OK', headers: { 'content-type': 'text/html' },
+        body: null, bodyText: html, sizeBytes: html.length,
+      },
+    })], { includeToken: false });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(file);
+    assert.equal(String(wb.getWorksheet('Results').getRow(2).getCell(12).value), html);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('EXPORT_COLUMNS giu cot MSISDN va them cot Response Headers', () => {
   const keys = EXPORT_COLUMNS.map((c) => c.key);
   assert.ok(keys.includes('msisdn'), 'van phai co cot msisdn');

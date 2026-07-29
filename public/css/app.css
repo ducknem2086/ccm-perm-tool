@@ -272,6 +272,7 @@ select.input { padding: 0 var(--sp-xs); }
   height: var(--row-h);
 }
 .result-table td.num { text-align: right; }
+.result-table td.cell-actions { width: 1%; padding: 0 var(--sp-sm); text-align: center; overflow: visible; }
 .result-table tbody tr { cursor: pointer; }
 .result-table tbody tr:hover { background: var(--surface-elevated); }
 .status-up { color: var(--up); font-weight: 600; }

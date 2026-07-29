@@ -1,6 +1,7 @@
 import { state, load, persist, notify, subscribe, results, resetResults, getRunId, setRunId, applyConfig } from './state.js';
 import { startRun, openStream, cancelRun, exportExcel } from './api.js';
 import { countRequests } from './shared/request-count.js';
+import { toCurl, curlFilename } from './shared/curl.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
 import { initDateRange } from './ui/date-range.js';
@@ -21,6 +22,17 @@ window.ccmToast = (message, kind = '') => {
   toastHost.append(el);
   setTimeout(() => el.remove(), 6000);
 };
+
+function downloadBlob(filename, content, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 /* ---------- khoi tao ---------- */
 load();
@@ -47,6 +59,10 @@ const resultTable = initResultTable({
   getVisibleColumns: () => filters.getVisibleColumns(),
   filterCell: (key) => filters.filterCell(key),
   onRowClick: (rec) => drawer.open(rec),
+  onCurlClick: (rec) => {
+    downloadBlob(curlFilename(rec), toCurl(rec), 'text/plain;charset=utf-8');
+    window.ccmToast('Đã tải file cURL — Postman: Import → Raw text', 'ok');
+  },
 });
 
 /* ---------- advanced ---------- */
@@ -178,15 +194,7 @@ btnExport.addEventListener('click', async () => {
 
 /* ---------- export / import config ---------- */
 document.getElementById('btn-export-config').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'ccm-config.json';
-  document.body.append(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob('ccm-config.json', JSON.stringify(state, null, 2), 'application/json');
 });
 
 document.getElementById('btn-import-config').addEventListener('click', () => {

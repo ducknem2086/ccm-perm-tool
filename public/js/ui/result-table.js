@@ -1,4 +1,5 @@
-import { ALL_COLUMNS, applyFilter } from '../shared/filter-logic.js';
+import { ALL_COLUMNS, ACTIONS_COLUMN, applyFilter } from '../shared/filter-logic.js';
+import { bodyPreview } from '../shared/response-body.js';
 
 const ROW_H = 34;              // khop --row-h trong tokens.css
 const BUFFER = 10;
@@ -25,7 +26,7 @@ function cellText(rec, key) {
     case 'name': return rec.endpointName || '—';
     case 'path': return rec.pathTemplate || '—';
     case 'request': return `${rec.request.method} ${rec.request.url}`;
-    case 'responseBody': return truncate(rec.response.bodyText || rec.errorMessage || '') || '—';
+    case 'responseBody': return truncate(bodyPreview(rec)) || '—';
     case 'responseHeaders': return truncate(headerLine(rec.response.headers)) || '—';
     case 'status': return statusText(rec);
     default: return '';
@@ -34,7 +35,9 @@ function cellText(rec, key) {
 
 const NUMERIC = new Set(['index']);
 
-export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRowClick, filterCell }) {
+export function initResultTable({
+  getRecords, getFilter, getVisibleColumns, onRowClick, onCurlClick, filterCell,
+}) {
   const viewport = document.getElementById('result-viewport');
   const table = document.getElementById('result-table');
 
@@ -50,7 +53,7 @@ export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRo
 
   function columns() {
     const keys = getVisibleColumns();
-    return ALL_COLUMNS.filter((c) => keys.includes(c.key));
+    return [...ALL_COLUMNS.filter((c) => keys.includes(c.key)), ACTIONS_COLUMN];
   }
 
   function paintHead(cols) {
@@ -77,11 +80,31 @@ export function initResultTable({ getRecords, getFilter, getVisibleColumns, onRo
     thead.replaceChildren(headRow, filterRow);
   }
 
+  function curlButton(rec) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.textContent = 'cURL';
+    btn.title = 'Tải file .txt chứa lệnh cURL để import vào Postman';
+    // Chan noi bot, khong thi bam nut se mo luon drawer chi tiet cua hang.
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onCurlClick?.(rec);
+    });
+    return btn;
+  }
+
   function buildRow(rec, cols) {
     const tr = document.createElement('tr');
     tr.dataset.index = String(rec.index);
     for (const col of cols) {
       const td = document.createElement('td');
+      if (col.key === 'actions') {
+        td.className = 'cell-actions';
+        td.append(curlButton(rec));
+        tr.append(td);
+        continue;
+      }
       td.textContent = cellText(rec, col.key);
       if (NUMERIC.has(col.key)) td.classList.add('num', 'mono');
       if (col.key === 'status') {

@@ -1,3 +1,5 @@
+import { contentType, hasJsonBody, bodyPretty } from '../shared/response-body.js';
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -37,22 +39,12 @@ function kvTable(obj) {
   return `<table class="kv"><tbody>${body}</tbody></table>`;
 }
 
-function contentType(rec) {
-  const headers = rec.response.headers ?? {};
-  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'content-type');
-  return String(key ? headers[key] : '');
-}
-
-const canPretty = (rec) => rec.response.body !== null;
+const canPretty = (rec) => hasJsonBody(rec);
 const canPreview = (rec) => /text\/html|xml/i.test(contentType(rec));
 
 function prettyHtml(rec) {
   if (!canPretty(rec)) return '';
-  try {
-    return highlightJson(JSON.stringify(rec.response.body, null, 2));
-  } catch {
-    return escapeHtml(rec.response.bodyText ?? '');
-  }
+  return highlightJson(bodyPretty(rec));
 }
 
 const rawText = (rec) => rec.response.bodyText || rec.errorMessage || '(rỗng)';

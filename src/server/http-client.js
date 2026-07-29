@@ -1,5 +1,7 @@
 import { extractErrorCode, DEFAULT_ERROR_CODE_PATHS } from './error-code.js';
 
+const stripBom = (s) => String(s ?? '').replace(/^\uFEFF/, '').trim();
+
 function finalize({
   req, startedAt, t0,
   status = null, statusText = '', resHeaders = {},
@@ -63,8 +65,10 @@ export async function sendRequest(req, options = {}) {
       redirect: 'follow',
     });
     const bodyText = await res.text();
+    // BOM hoac khoang trang dau chuoi lam JSON.parse nem loi, khi do body bi
+    // coi la khong phai JSON va UI phai hien chuoi tho — cat truoc khi parse.
     let body = null;
-    try { body = JSON.parse(bodyText); } catch { body = null; }
+    try { body = JSON.parse(stripBom(bodyText)); } catch { body = null; }
 
     return finalize({
       req, startedAt, t0,

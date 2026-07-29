@@ -1,4 +1,9 @@
 import ExcelJS from 'exceljs';
+import { bodyPretty } from '../../public/js/shared/response-body.js';
+
+// Cot nhieu dong (JSON pretty, headers moi cai mot dong) can wrapText, khong thi
+// Excel don het ve mot dong dai.
+const MULTILINE = { alignment: { wrapText: true, vertical: 'top' } };
 
 export const EXPORT_COLUMNS = [
   { header: 'Index', key: 'index', width: 8 },
@@ -7,13 +12,13 @@ export const EXPORT_COLUMNS = [
   { header: 'MSISDN', key: 'msisdn', width: 16 },
   { header: 'Method', key: 'method', width: 10 },
   { header: 'URL', key: 'url', width: 70 },
-  { header: 'Headers', key: 'headers', width: 45 },
-  { header: 'Query Params', key: 'queryParams', width: 35 },
+  { header: 'Headers', key: 'headers', width: 45, style: MULTILINE },
+  { header: 'Query Params', key: 'queryParams', width: 35, style: MULTILINE },
   { header: 'Status Code', key: 'status', width: 12 },
   { header: 'Error Code', key: 'errorCode', width: 16 },
   { header: 'Duration (ms)', key: 'durationMs', width: 14 },
-  { header: 'Response Body', key: 'bodyText', width: 80 },
-  { header: 'Response Headers', key: 'responseHeaders', width: 45 },
+  { header: 'Response Body', key: 'bodyText', width: 80, style: MULTILINE },
+  { header: 'Response Headers', key: 'responseHeaders', width: 45, style: MULTILINE },
   { header: 'Error Message', key: 'errorMessage', width: 40 },
   { header: 'Started At', key: 'startedAt', width: 26 },
 ];
@@ -61,7 +66,7 @@ function toRow(rec, includeToken) {
     status: rec.response.status ?? '',
     errorCode: rec.errorCode ?? '',
     durationMs: rec.durationMs,
-    bodyText: rec.response.bodyText ?? '',
+    bodyText: bodyPretty(rec),
     responseHeaders: serializeHeaders(rec.response.headers, true),
     errorMessage: rec.errorMessage ?? '',
     startedAt: rec.startedAt,

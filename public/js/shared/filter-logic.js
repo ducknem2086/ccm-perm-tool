@@ -8,6 +8,10 @@ export const ALL_COLUMNS = [
   { key: 'responseHeaders', header: 'Response headers', default: true },
 ];
 
+// Cot nut bam, khong nam trong ALL_COLUMNS de nguoi dung khong tat nham qua
+// hop chon cot — va de cau hinh cot da luu tu truoc van thay duoc nut.
+export const ACTIONS_COLUMN = { key: 'actions', header: 'cURL' };
+
 export const STATUS_NA = 'N/A';
 
 export function emptyFilter() {

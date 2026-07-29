@@ -90,7 +90,7 @@ class MockElement {
   }
 
   click() {
-    this.dispatchEvent({ type: 'click' });
+    this.dispatchEvent({ type: 'click', stopPropagation() {} });
   }
 
   querySelector(selector) {
@@ -197,7 +197,7 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
   const { table } = setupMockDOM();
   let clickedRecord = null;
   const records = [
-    makeRecord(1, { response: { status: 200, statusText: 'OK', headers: { 'content-type': 'application/json' }, body: {}, bodyText: 'OK' } }),
+    makeRecord(1, { response: { status: 200, statusText: 'OK', headers: { 'content-type': 'application/json' }, body: { code: 0, data: null }, bodyText: '{"code":0,"data":null}' } }),
     makeRecord(2, { response: { status: 500, statusText: 'Error', headers: {}, body: null, bodyText: '' }, errorCode: 'ERR_500', errorMessage: 'Server Error' }),
   ];
 
@@ -224,7 +224,7 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
   assert.equal(tds0[2].textContent, 'Endpoint 1');                         // name
   assert.equal(tds0[3].textContent, '/query/abc-information/{*}');         // path
   assert.equal(tds0[4].textContent, 'GET https://api.example.com/test/1'); // request
-  assert.equal(tds0[5].textContent, 'OK');                                 // response body
+  assert.equal(tds0[5].textContent, '{"code":0,"data":null}');             // response body: object da parse
   assert.equal(tds0[6].textContent, 'content-type: application/json');     // response header
 
   // Check cells of row 1
@@ -315,6 +315,81 @@ test('cot name va response header hien dau gach ngang khi rong', () => {
   assert.equal(tds[1].textContent, '—');
 });
 
+test('cot response body hien object da parse thay vi chuoi tho', () => {
+  const { table } = setupMockDOM();
+  const records = [makeRecord(1, {
+    response: {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/json;charset=UTF-8' },
+      // bodyText co xuong dong va thut dau, cell van phai ra JSON compact.
+      body: { errorCode: '0', data: { msisdn: '0912345678' } },
+      bodyText: '{\n  "errorCode": "0",\n  "data": { "msisdn": "0912345678" }\n}',
+    },
+  })];
+
+  const tableCtrl = initResultTable({
+    getRecords: () => records,
+    getFilter: () => emptyFilter(),
+    getVisibleColumns: () => ['responseBody'],
+  });
+  tableCtrl.render();
+
+  const td = table.querySelector('tbody').children[0].children[0];
+  assert.equal(td.textContent, '{"errorCode":"0","data":{"msisdn":"0912345678"}}');
+});
+
+test('response khong phai JSON thi gan nhan mime truoc chuoi tho', () => {
+  const { table } = setupMockDOM();
+  const records = [makeRecord(1, {
+    response: {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      body: null,
+      bodyText: '<!DOCTYPE html>\n<html><body>login</body></html>',
+    },
+  })];
+
+  const tableCtrl = initResultTable({
+    getRecords: () => records,
+    getFilter: () => emptyFilter(),
+    getVisibleColumns: () => ['responseBody'],
+  });
+  tableCtrl.render();
+
+  const td = table.querySelector('tbody').children[0].children[0];
+  assert.equal(td.textContent, '[text/html] <!DOCTYPE html> <html><body>login</body></html>');
+});
+
+test('moi hang co nut cURL, bam khong mo drawer', () => {
+  const { table } = setupMockDOM();
+  let clickedRow = null;
+  let curlRec = null;
+  const records = [makeRecord(1), makeRecord(2)];
+
+  const tableCtrl = initResultTable({
+    getRecords: () => records,
+    getFilter: () => emptyFilter(),
+    getVisibleColumns: () => ['index'],
+    onRowClick: (rec) => { clickedRow = rec; },
+    onCurlClick: (rec) => { curlRec = rec; },
+  });
+  tableCtrl.render();
+
+  const rows = table.querySelector('tbody').children;
+  const actionTd = rows[1].children[1];
+  assert.ok(actionTd.classList.contains('cell-actions'));
+
+  const btn = actionTd.children[0];
+  assert.equal(btn.tagName, 'BUTTON');
+  assert.equal(btn.textContent, 'cURL');
+
+  btn.click();
+  assert.equal(curlRec, records[1]);
+  assert.equal(clickedRow, null, 'stopPropagation phai chan onRowClick');
+});
+
 test('thead giu nguyen node khi paint lai de khong mat focus o filter', () => {
   const { table } = setupMockDOM();
   const records = [makeRecord(1)];
@@ -347,6 +422,6 @@ test('filterCell duoc gan vao hang filter dung cot', () => {
   const thead = table.querySelector('thead');
   const filterRow = thead.children[1];
   assert.ok(filterRow.classList.contains('filter-row'));
-  assert.equal(filterRow.children.length, 3);
+  assert.equal(filterRow.children.length, 4, '3 cot chon + cot cURL luon co');
   assert.equal(filterRow.children[2].children[0], nameInput);
 });
