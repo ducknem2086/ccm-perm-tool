@@ -54,3 +54,23 @@ test('resolve ep kieu so ve chuoi', () => {
   assert.equal(r.value, '0');
   assert.deepEqual(r.missing, []);
 });
+
+test('extractVariables nhan dien placeholder sao', () => {
+  assert.deepEqual(extractVariables('/query/white-list-ir-subscriber/{*}'), ['msisdn']);
+});
+
+test('extractVariables khong nhan doi msisdn khi co ca {*} va :msisdn', () => {
+  assert.deepEqual(extractVariables('/x/{*}/:msisdn'), ['msisdn']);
+});
+
+test('resolve thay the placeholder sao bang msisdn', () => {
+  const r = resolve('/query/white-list-ir-subscriber/{*}', { msisdn: '0912345678' });
+  assert.equal(r.value, '/query/white-list-ir-subscriber/0912345678');
+  assert.deepEqual(r.missing, []);
+});
+
+test('resolve bao thieu msisdn khi placeholder sao khong co gia tri', () => {
+  const r = resolve('/x/{*}', {});
+  assert.deepEqual(r.missing, ['msisdn']);
+});
+
