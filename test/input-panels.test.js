@@ -105,6 +105,8 @@ class MockElement {
       if (node instanceof MockElement) {
         node.parentElement = this;
         this.children.push(node);
+      } else if (typeof node === 'string') {
+        this.textContent += node;
       }
     }
   }
@@ -230,6 +232,7 @@ function setupMockDOM() {
     cookie: '',
     getElementById: (id) => elements[id] || null,
     createElement: (tagName) => new MockElement(tagName),
+    createTextNode: (text) => String(text),
     querySelectorAll: (selector) => {
       if (selector === '[data-add-param]') {
         const btnQuery = new MockElement('button');

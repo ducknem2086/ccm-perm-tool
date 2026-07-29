@@ -196,6 +196,11 @@ select.input { padding: 0 var(--sp-xs); }
 .el-actions { display: flex; gap: var(--sp-xs); }
 
 .el-empty { color: var(--muted); font-size: var(--fs-caption); padding: var(--sp-xs); }
+.el-msisdn-toggle {
+  display: inline-flex; align-items: center; gap: var(--sp-xs);
+  font-size: var(--fs-caption); color: var(--muted); white-space: nowrap;
+}
+.el-msisdn-toggle label { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
 
 /* ---------- param table ---------- */
 .param-table { display: flex; flex-direction: column; gap: var(--sp-xxs); }

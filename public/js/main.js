@@ -1,6 +1,6 @@
 import { state, load, persist, notify, subscribe, results, resetResults, getRunId, setRunId, applyConfig } from './state.js';
 import { startRun, openStream, cancelRun, exportExcel } from './api.js';
-import { extractVariables } from './shared/variables.js';
+import { countRequests } from './shared/request-count.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
 import { initDateRange } from './ui/date-range.js';
@@ -70,14 +70,8 @@ dedupe.addEventListener('change', () => { state.advanced.dedupeOnImport = dedupe
 /* ---------- dem so request ---------- */
 const btnRun = document.getElementById('btn-run');
 
-function countRequests() {
-  return state.endpoints
-    .filter((e) => e.enabled)
-    .reduce((sum, ep) => sum + (extractVariables(ep.pathTemplate).includes('msisdn') ? state.msisdns.length : 1), 0);
-}
-
 function refreshRunButton() {
-  const n = countRequests();
+  const n = countRequests(state);
   btnRun.textContent = `▶ RUN ALL (${n})`;
   btnRun.disabled = n === 0 || running;
 }

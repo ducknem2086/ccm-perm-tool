@@ -11,7 +11,8 @@ const nextId = () => `ep_${Date.now().toString(36)}_${(seq += 1)}`;
 function makeEndpoint(path) {
   return {
     id: nextId(), enabled: true, name: '', method: 'GET',
-    pathTemplate: String(path ?? ''), queryParams: [], headers: [],
+    pathTemplate: String(path ?? ''), attachMsisdn: true,
+    queryParams: [], headers: [],
   };
 }
 
@@ -20,9 +21,9 @@ function fromRecord(rec) {
 }
 
 export function initEndpointList({ onOpenTemplate } = {}) {
-  // Du lieu cu trong localStorage co the la mang chuoi hoac thieu truong name.
+  // Du lieu cu trong localStorage co the la mang chuoi, thieu name hoac thieu attachMsisdn.
   state.endpoints = (state.endpoints ?? []).map((e) => (
-    typeof e === 'string' ? makeEndpoint(e) : { name: '', ...e }
+    typeof e === 'string' ? makeEndpoint(e) : { name: '', attachMsisdn: true, ...e }
   ));
 
   const host = document.getElementById('list-endpoint');
@@ -152,7 +153,27 @@ export function initEndpointList({ onOpenTemplate } = {}) {
         notify();
       });
 
-      row.append(check, method, name);
+      const msisdnBox = document.createElement('span');
+      msisdnBox.className = 'el-msisdn-toggle';
+      msisdnBox.title = 'Gắn msisdn vào cuối path của endpoint này';
+
+      const groupName = `attach_${ep.id}`;
+      for (const opt of [{ v: true, label: 'Có' }, { v: false, label: 'Không' }]) {
+        const wrap = document.createElement('label');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = groupName;
+        radio.checked = (ep.attachMsisdn !== false) === opt.v;
+        radio.addEventListener('change', () => {
+          state.endpoints[index] = { ...state.endpoints[index], attachMsisdn: opt.v };
+          persist();
+          notify();
+        });
+        wrap.append(radio, document.createTextNode(opt.label));
+        msisdnBox.append(wrap);
+      }
+
+      row.append(check, method, name, msisdnBox);
     },
   });
 
