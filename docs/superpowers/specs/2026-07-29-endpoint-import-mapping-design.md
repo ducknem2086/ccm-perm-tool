@@ -1,8 +1,10 @@
-# Import endpoint nhiều cột — map name / method / path
+# Import endpoint nhiều cột và cập nhật bảng kết quả
 
 Ngày: 2026-07-29
 
 ## Vấn đề
+
+### Import chỉ đọc được một cột
 
 Ô import ở panel ENDPOINTS chỉ đọc được cột đầu tiên của file. `parseCsv` cắt lấy
 `line.split(/[,;\t]/)[0]`, `parseXlsx` chỉ đọc `row.getCell(1)`. Mọi endpoint nạp vào
@@ -12,6 +14,13 @@ import phải sửa tay từng dòng cho những API dùng POST/PUT/DELETE.
 File nguồn thực tế có ba cột: tên API, phương thức, đường dẫn. Tool cần đọc đủ ba cột
 và sinh ra các cặp method–path đúng.
 
+### Bảng kết quả dàn ngang quá nhiều cột hẹp
+
+`status`, `errorCode`, `durationMs` là ba cột riêng, mỗi cột chứa vài ký tự — chiếm chỗ
+mà không nói thêm được gì so với khi ghép lại. Ngược lại, `Name`, `Path` và `MSISDN` là
+thứ cần nhìn thấy để biết dòng nào hỏng thì `endpoint` và `msisdn` lại đang
+`default: false` nên không hiện, còn tên API thì chưa có chỗ nào chứa.
+
 ## Mục tiêu
 
 1. Import file nhiều cột, lấy được `name`, `method`, `endpoint` theo cấu hình người dùng.
@@ -19,12 +28,15 @@ và sinh ra các cặp method–path đúng.
 3. Endpoint nạp vào ghép được với cấu hình sẵn có (domain, token, date range, MSISDN,
    query params, headers) thành request thật khi bấm RUN.
 4. Không đổi layout ba cột hiện tại, không ảnh hưởng luồng import MSISDN.
+5. Bảng kết quả gom `status`, `error code`, `time` vào một cột, và hiện thêm ba cột
+   `Name`, `Path`, `MSISDN`.
 
 ## Ngoài phạm vi
 
 - Sửa layout panel INPUT.
 - Đổi cơ chế import MSISDN.
 - Thêm định dạng file mới (giữ `.xlsx`, `.xls`, `.csv`, `.txt`).
+- Gom cột trong file Excel export — file đó để lọc và pivot, gom lại là phản tác dụng.
 
 ## Luồng dữ liệu
 
@@ -152,15 +164,21 @@ POST /api/import/grid
 
 ### `src/server/request-builder.js`
 
-Một dòng:
+Bảng kết quả cần `Name` và `Path` là hai cột riêng, nên request mang hai trường riêng —
+không gộp làm một:
 
 ```js
-endpointName: endpoint.name || endpoint.pathTemplate,
+endpointName: endpoint.name ?? '',        // tên lấy từ file Excel
+pathTemplate: endpoint.pathTemplate,      // chuỗi gốc, còn nguyên {*}
 ```
 
-`endpointName` đã chảy sẵn qua `http-client.js` → record kết quả → `result-table.js`,
-`excel-export.js`, `filter-logic.js`. Bốn file đó không phải sửa; tên API tự xuất hiện
-trong bảng kết quả, bộ lọc tìm kiếm và file Excel export.
+### `src/server/http-client.js`
+
+`finalize` chuyển tiếp trường mới xuống record:
+
+```js
+pathTemplate: req.pathTemplate,
+```
 
 ## Client
 
@@ -276,6 +294,92 @@ Layout ba cột không đổi.
 
 Gọi `initTemplateDrawer()` cạnh `initMsisdnDrawer()`.
 
+## Bảng kết quả (tab OUTPUT)
+
+### Cột
+
+`public/js/shared/filter-logic.js`, `ALL_COLUMNS` thay bằng:
+
+```js
+export const ALL_COLUMNS = [
+  { key: 'index',    header: '#',                     default: true },
+  { key: 'name',     header: 'Name',                  default: true },
+  { key: 'path',     header: 'Path',                  default: true },
+  { key: 'msisdn',   header: 'MSISDN',                default: true },
+  { key: 'request',  header: 'Request',               default: true },
+  { key: 'response', header: 'Response body / error', default: true },
+  { key: 'status',   header: 'Status · Error · Time', default: true },
+];
+```
+
+Ba cột rời `status`, `errorCode`, `durationMs` gộp thành một, giữ key `status`. Cột
+`endpoint` cũ tách đôi thành `name` và `path`.
+
+Giữ key `status` là có chủ đích: cấu hình cột lưu ở `localStorage` khóa `ccm-tool-columns`
+của người dùng cũ vẫn còn key này nên bảng không trống trơn sau khi cập nhật.
+
+### Nội dung ô
+
+`public/js/ui/result-table.js`, `cellText`:
+
+| Cột | Nội dung |
+|---|---|
+| `name` | `rec.endpointName` — rỗng thì `—` |
+| `path` | `rec.pathTemplate` — chuỗi gốc còn `{*}`, không thay số, không kèm domain hay query |
+| `msisdn` | `rec.msisdn` — rỗng thì `—` |
+| `status` | ghép bằng ` · ` từ ba mảnh, bỏ mảnh rỗng |
+
+Ba mảnh của cột `status`:
+
+1. status code, `null` → `—`
+2. error code, không có → bỏ mảnh
+3. `${rec.durationMs}ms`
+
+```
+200 · 245ms
+500 · E001 · 89ms
+— · ETIMEDOUT · 30000ms
+```
+
+Ô tô màu theo `status-up` khi `response.status !== null && < 400`, còn lại `status-down`.
+Bỏ nhánh tô màu riêng cho `errorCode` ở `buildRow` vì cột đó không còn.
+
+`NUMERIC` bỏ `status` và `durationMs` (giờ là chuỗi ghép, căn phải sẽ xấu), giữ `index`
+và `msisdn`.
+
+### Cấu hình cột
+
+`public/js/ui/filters.js`, `loadColumns` lọc bỏ key không còn tồn tại:
+
+```js
+const valid = saved.filter((k) => ALL_COLUMNS.some((c) => c.key === k));
+if (valid.length > 0) return valid;
+```
+
+Rỗng thì rơi về danh sách mặc định. Người dùng cũ đang bật `errorCode`, `durationMs`,
+`endpoint` sẽ mất ba key đó nhưng vẫn còn `status` nên bảng vẫn hiện.
+
+### Bộ lọc
+
+Filterbar không đổi: lọc theo status code, error code, khoảng thời gian vẫn đọc thẳng
+`rec.response.status`, `rec.errorCode`, `rec.durationMs` — độc lập với việc gom cột hiển
+thị.
+
+`matchesFilter` thêm `rec.pathTemplate` vào chuỗi tìm kiếm, để gõ `white-list` trong ô 🔍
+tìm được cả khi cột `Request` bị tắt.
+
+### Excel export
+
+`src/server/excel-export.js` giữ nguyên các cột rời — file Excel dùng để lọc và pivot,
+gom lại là phản tác dụng. Chỉ đổi hai chỗ trong `EXPORT_COLUMNS`:
+
+```js
+{ header: 'Name', key: 'name', width: 30 },   // thêm, đứng sau Index
+{ header: 'Path', key: 'path', width: 45 },   // thay cột 'Endpoint' cũ
+```
+
+`toRow` thêm `name: rec.endpointName`, `path: rec.pathTemplate`.
+
 ## Báo lỗi
 
 Import xong hiện toast tổng hợp:
@@ -307,16 +411,23 @@ Chạy bằng `npm test` (`node --test`).
 | `test/file-import.test.js` | `parseCsvGrid` / `parseXlsxGrid` giữ đủ cột; `parseGrid` tách header khỏi rows; toàn bộ test cũ vẫn xanh |
 | `test/endpoint-mapping.test.js` (mới) | khớp cột theo tên có trim và không phân biệt hoa thường; khớp theo index 1-based; index ngoài khoảng → lỗi; cột không tồn tại → lỗi kèm danh sách header; method rỗng → `GET`; method lạ → dòng lỗi và bỏ dòng; path thiếu `/` → tự thêm; path rỗng → dòng lỗi; dòng rỗng bỏ im lặng; dedupe giữ cả `GET /a` lẫn `POST /a`; `dedupe: false` giữ nguyên trùng |
 | `test/variables.test.js` | `extractVariables('/x/{*}')` → `['msisdn']`; `resolve` thay `{*}`; thiếu msisdn → vào `missing` |
-| `test/request-builder.test.js` | 2 MSISDN × 2 endpoint `{*}` → 4 request, URL đúng thứ tự path rồi query; endpoint không placeholder → 1 request; `endpointName` lấy `name`, rỗng thì lấy `pathTemplate` |
+| `test/request-builder.test.js` | 2 MSISDN × 2 endpoint `{*}` → 4 request, URL đúng thứ tự path rồi query; endpoint không placeholder → 1 request; request mang cả `endpointName` lẫn `pathTemplate` |
 | `test/routes.test.js` | `POST /api/import/grid` trả headers và rows; đuôi file lạ → 400 |
+| `test/http-client.test.js` | record mang `pathTemplate` |
+| `test/filter-logic.test.js` | `ALL_COLUMNS` đủ 7 key và đều `default: true`; tìm kiếm khớp `pathTemplate` |
+| `test/result-table.test.js` | cột `status` ghép `200 · 245ms`; có error code → `500 · E001 · 89ms`; status `null` → `— · ETIMEDOUT · 30000ms`; cột `name` rỗng → `—`; cột `path` giữ nguyên `{*}` |
+| `test/excel-export.test.js` | `EXPORT_COLUMNS` có `Name` và `Path`; `toRow` đổ đúng hai trường |
 
 ## File đụng vào
+
+### Import endpoint
 
 | Sửa | Thêm mới |
 |---|---|
 | `src/server/file-import.js` | `public/js/shared/endpoint-mapping.js` |
 | `src/server/routes.js` | `public/js/ui/template-drawer.js` |
 | `src/server/request-builder.js` | `test/endpoint-mapping.test.js` |
+| `src/server/http-client.js` | |
 | `public/js/shared/variables.js` | |
 | `public/js/state.js` | |
 | `public/js/api.js` | |
@@ -329,3 +440,16 @@ Chạy bằng `npm test` (`node --test`).
 | `test/variables.test.js` | |
 | `test/request-builder.test.js` | |
 | `test/routes.test.js` | |
+
+### Bảng kết quả
+
+| Sửa |
+|---|
+| `public/js/shared/filter-logic.js` |
+| `public/js/ui/result-table.js` |
+| `public/js/ui/filters.js` |
+| `src/server/excel-export.js` |
+| `test/filter-logic.test.js` |
+| `test/result-table.test.js` |
+| `test/excel-export.test.js` |
+| `test/http-client.test.js` |
