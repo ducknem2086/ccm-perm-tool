@@ -8,12 +8,18 @@ export function createEditableList(opts) {
     host, title, kind, placeholder = '',
     getItems, setItems, onChange,
     renderExtra = null,
+    onImport = null,
+    extraActions = [],
     getValue = (item) => String(item ?? ''),
     setValue = (item, v) => v,
     makeItem = (v) => v,
   } = opts;
 
   const validate = VALIDATORS[kind];
+
+  const extraButtons = extraActions
+    .map((a, i) => `<button type="button" class="btn btn-secondary btn-sm" data-extra-action="${i}" title="${a.title ?? ''}">${a.label}</button>`)
+    .join('');
 
   host.innerHTML = `
     <h2 class="card-title">
@@ -24,6 +30,7 @@ export function createEditableList(opts) {
       <button type="button" class="btn btn-secondary btn-sm" data-add>+ Thêm</button>
       <button type="button" class="btn btn-secondary btn-sm" data-import>⤓ Import</button>
       <button type="button" class="btn btn-secondary btn-sm" data-clear>Xóa hết</button>
+      ${extraButtons}
       <input type="file" accept="${ACCEPT}" hidden data-file />
     </div>
   `;
@@ -146,9 +153,21 @@ export function createEditableList(opts) {
     fileInput.click();
   });
 
+  host.querySelectorAll('[data-extra-action]').forEach((btn) => {
+    const action = extraActions[Number(btn.getAttribute('data-extra-action'))];
+    btn.addEventListener('click', () => action?.onClick?.());
+  });
+
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
+
+    if (onImport) {
+      await onImport(file);
+      render();
+      return;
+    }
+
     try {
       const { values, skipped } = await importFile(file, kind, true);
       const current = getItems();
@@ -173,3 +192,4 @@ export function createEditableList(opts) {
   render();
   return { render };
 }
+

@@ -39,6 +39,11 @@ class MockElement {
     };
   }
 
+  getAttribute(attr) {
+    return this.attributes[attr] ?? null;
+  }
+
+
   get className() {
     return Array.from(this._classList).join(' ');
   }
@@ -90,6 +95,14 @@ class MockElement {
       inputFile.attributes['data-file'] = '';
 
       actions.append(btnAdd, btnImport, btnClear, inputFile);
+      const matches = [...html.matchAll(/data-extra-action="(\d+)".*?>(.*?)<\/button>/g)];
+      for (const m of matches) {
+        const btnExtra = new MockElement('button');
+        btnExtra.className = 'btn btn-secondary btn-sm';
+        btnExtra.attributes['data-extra-action'] = m[1];
+        btnExtra.textContent = m[2];
+        actions.append(btnExtra);
+      }
       this.append(h2, body, actions);
     }
   }
@@ -139,9 +152,7 @@ class MockElement {
 
   dispatchEvent(event) {
     const handlers = this.listeners[event.type] || [];
-    for (const fn of handlers) {
-      fn(event);
-    }
+    return handlers.map((fn) => fn(event));
   }
 
   click() {
@@ -401,3 +412,48 @@ test('renderExtra hook chèn phan tu vao truoc input', () => {
   const chk = row.querySelector('.el-extra-chk');
   assert.ok(chk);
 });
+
+test('extraActions chen them nut vao thanh hanh dong', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = [];
+  let clicked = 0;
+
+  createEditableList({
+    host,
+    title: 'Endpoints',
+    kind: 'endpoint',
+    getItems: () => items,
+    setItems: (v) => { items = v; },
+    extraActions: [{ label: '⊢ Template', title: 'Map cột', onClick: () => { clicked += 1; } }],
+  });
+
+  const btn = host.querySelector('[data-extra-action]');
+  assert.ok(btn);
+  assert.equal(btn.textContent, '⊢ Template');
+  btn.click();
+  assert.equal(clicked, 1);
+});
+
+test('onImport thay the luong import mac dinh', async () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = [];
+  let got = null;
+
+  createEditableList({
+    host,
+    title: 'Endpoints',
+    kind: 'endpoint',
+    getItems: () => items,
+    setItems: (v) => { items = v; },
+    onImport: async (file) => { got = file; },
+  });
+
+  const fileInput = host.querySelector('[data-file]');
+  fileInput.files = [{ name: 'apis.xlsx' }];
+  await Promise.all(fileInput.dispatchEvent({ type: 'change' }));
+
+  assert.equal(got.name, 'apis.xlsx');
+});
+
