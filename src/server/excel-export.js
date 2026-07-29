@@ -13,6 +13,7 @@ export const EXPORT_COLUMNS = [
   { header: 'Error Code', key: 'errorCode', width: 16 },
   { header: 'Duration (ms)', key: 'durationMs', width: 14 },
   { header: 'Response Body', key: 'bodyText', width: 80 },
+  { header: 'Response Headers', key: 'responseHeaders', width: 45 },
   { header: 'Error Message', key: 'errorMessage', width: 40 },
   { header: 'Started At', key: 'startedAt', width: 26 },
 ];
@@ -61,6 +62,7 @@ function toRow(rec, includeToken) {
     errorCode: rec.errorCode ?? '',
     durationMs: rec.durationMs,
     bodyText: rec.response.bodyText ?? '',
+    responseHeaders: serializeHeaders(rec.response.headers, true),
     errorMessage: rec.errorMessage ?? '',
     startedAt: rec.startedAt,
   };

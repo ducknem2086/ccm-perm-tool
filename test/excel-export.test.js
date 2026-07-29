@@ -57,12 +57,13 @@ test('exportFilename dung dinh dang co dau thoi gian', () => {
   assert.match(name, /^ccm-result-\d{8}-\d{6}\.xlsx$/);
 });
 
-test('EXPORT_COLUMNS du 14 cot theo spec', () => {
+test('EXPORT_COLUMNS du 15 cot theo spec', () => {
   assert.deepEqual(EXPORT_COLUMNS.map((c) => c.header), [
     'Index', 'Name', 'Path', 'MSISDN', 'Method', 'URL', 'Headers', 'Query Params',
-    'Status Code', 'Error Code', 'Duration (ms)', 'Response Body', 'Error Message', 'Started At',
+    'Status Code', 'Error Code', 'Duration (ms)', 'Response Body', 'Response Headers', 'Error Message', 'Started At',
   ]);
 });
+
 
 test('writeResultsToStream tao file xlsx doc lai duoc', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-'));
@@ -100,5 +101,12 @@ test('writeResultsToStream giu token khi includeToken true', async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('EXPORT_COLUMNS giu cot MSISDN va them cot Response Headers', () => {
+  const keys = EXPORT_COLUMNS.map((c) => c.key);
+  assert.ok(keys.includes('msisdn'), 'van phai co cot msisdn');
+  assert.ok(keys.includes('responseHeaders'), 'phai co cot responseHeaders');
+  assert.equal(keys.indexOf('responseHeaders'), keys.indexOf('bodyText') + 1);
 });
 
