@@ -17,7 +17,7 @@ test('startRun chay het request va giu du ket qua', async () => {
   });
   try {
     const reqs = [1, 2, 3, 4, 5].map((i) => mkReq(i, `${mock.base}/x`));
-    const run = createRun(reqs, { concurrency: 2, timeoutMs: 5000 });
+    const run = createRun(reqs, { workerCount: 2, timeoutMs: 5000 });
     await startRun(run);
     assert.equal(run.status, 'done');
     assert.equal(run.results.length, 5);
@@ -28,7 +28,7 @@ test('startRun chay het request va giu du ket qua', async () => {
 test('subscribe nhan du event result, progress va done', async () => {
   const mock = await startMockServer((_, res) => res.end('{}'));
   try {
-    const run = createRun([mkReq(1, `${mock.base}/x`), mkReq(2, `${mock.base}/x`)], { concurrency: 1 });
+    const run = createRun([mkReq(1, `${mock.base}/x`), mkReq(2, `${mock.base}/x`)], { workerCount: 1 });
     const seen = { result: 0, progress: 0, done: 0 };
     subscribe(run.runId, (event) => { seen[event] += 1; });
     await startRun(run);
@@ -39,7 +39,7 @@ test('subscribe nhan du event result, progress va done', async () => {
 });
 
 test('getRun tra ve run theo runId', async () => {
-  const run = createRun([], { concurrency: 1 });
+  const run = createRun([], { workerCount: 1 });
   assert.equal(getRun(run.runId), run);
   assert.equal(getRun('khong-ton-tai'), undefined);
 });
@@ -48,7 +48,7 @@ test('cancelRun dung run dang chay', async () => {
   const mock = await startMockServer(() => { /* treo */ });
   try {
     const reqs = [1, 2, 3, 4].map((i) => mkReq(i, `${mock.base}/x`));
-    const run = createRun(reqs, { concurrency: 2, timeoutMs: 10000 });
+    const run = createRun(reqs, { workerCount: 2, timeoutMs: 10000 });
     const p = startRun(run);
     setTimeout(() => cancelRun(run.runId), 50);
     await p;
@@ -69,7 +69,7 @@ test('summarize dem dung so ok va failed', async () => {
     res.end('{}');
   });
   try {
-    const run = createRun([mkReq(1, `${mock.base}/x`), mkReq(2, `${mock.base}/x`)], { concurrency: 1 });
+    const run = createRun([mkReq(1, `${mock.base}/x`), mkReq(2, `${mock.base}/x`)], { workerCount: 1 });
     await startRun(run);
     const s = summarize(run);
     assert.equal(s.total, 2);
@@ -80,7 +80,7 @@ test('summarize dem dung so ok va failed', async () => {
   } finally { await mock.close(); }
 });
 
-test('startRun ton trong gioi han concurrency', async () => {
+test('startRun ton trong gioi han workerCount nhan 5', async () => {
   let inFlight = 0;
   let peak = 0;
   const mock = await startMockServer((_, res) => {
@@ -89,9 +89,10 @@ test('startRun ton trong gioi han concurrency', async () => {
     setTimeout(() => { inFlight -= 1; res.end('{}'); }, 40);
   });
   try {
-    const reqs = [1, 2, 3, 4, 5, 6].map((i) => mkReq(i, `${mock.base}/x`));
-    const run = createRun(reqs, { concurrency: 2, timeoutMs: 5000 });
+    const reqs = Array.from({ length: 30 }, (_, i) => mkReq(i + 1, `${mock.base}/x`));
+    const run = createRun(reqs, { workerCount: 1, timeoutMs: 5000 });
     await startRun(run);
-    assert.ok(peak <= 2, `peak=${peak} vuot qua concurrency=2`);
+    assert.equal(run.results.length, 30);
+    assert.ok(peak <= 5, `peak=${peak} vuot qua 1 worker x 5 request`);
   } finally { await mock.close(); }
 });

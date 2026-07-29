@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sendRequest } from './http-client.js';
+import { runPool, MAX_INFLIGHT } from './worker-pool.js';
 
 const runs = new Map();
 const TTL_MS = 60 * 60 * 1000;
@@ -58,31 +59,54 @@ export async function startRun(run) {
   run.status = 'running';
   run.startedAt = Date.now();
 
-  const queue = [...run.requests];
-  const workerCount = Math.max(1, Math.min(Number(run.options.concurrency) || 5, 50));
-
-  const worker = async () => {
-    while (queue.length > 0) {
-      if (run.controller.signal.aborted) return;
-      const req = queue.shift();
-      const record = await sendRequest(req, {
-        timeoutMs: run.options.timeoutMs,
-        signal: run.controller.signal,
-        errorCodePaths: run.options.errorCodePaths,
-      });
-      if (run.controller.signal.aborted && record.errorCode === 'ABORTED') return;
-      run.results.push(record);
-      emit(run, 'result', record);
-      emit(run, 'progress', { done: run.results.length, total: run.total });
-    }
+  const push = (record) => {
+    if (run.controller.signal.aborted && record.errorCode === 'ABORTED') return;
+    run.results.push(record);
+    emit(run, 'result', record);
+    emit(run, 'progress', { done: run.results.length, total: run.total });
   };
 
-  await Promise.all(Array.from({ length: workerCount }, worker));
+  const workerCount = run.options.workerCount ?? 4;
+
+  try {
+    await runPool(run.requests, {
+      workerCount,
+      timeoutMs: run.options.timeoutMs,
+      errorCodePaths: run.options.errorCodePaths,
+      signal: run.controller.signal,
+      onRecord: push,
+    });
+  } catch (err) {
+    // Moi truong chan worker_threads thi chay thang tren main thread.
+    console.error('Worker pool that bai, chay inline:', err);
+    await runInline(run, push, workerCount * MAX_INFLIGHT);
+  }
 
   run.status = run.controller.signal.aborted ? 'cancelled' : 'done';
   run.finishedAt = Date.now();
   emit(run, 'done', summarize(run));
   setTimeout(() => runs.delete(run.runId), TTL_MS).unref();
+}
+
+async function runInline(run, push, concurrency) {
+  const queue = [...run.requests];
+  const done = new Set(run.results.map((r) => r.index));
+
+  const worker = async () => {
+    while (queue.length > 0) {
+      if (run.controller.signal.aborted) return;
+      const req = queue.shift();
+      if (done.has(req.index)) continue;
+      const record = await sendRequest(req, {
+        timeoutMs: run.options.timeoutMs,
+        signal: run.controller.signal,
+        errorCodePaths: run.options.errorCodePaths,
+      });
+      push(record);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.max(1, concurrency) }, worker));
 }
 
 export function cancelRun(runId) {

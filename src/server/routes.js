@@ -15,7 +15,7 @@ export function registerRoutes(app) {
 
     const requests = buildRequests(config);
     const run = createRun(requests, {
-      concurrency: config.advanced?.concurrency ?? 5,
+      workerCount: config.advanced?.workerCount ?? config.advanced?.concurrency ?? 4,
       timeoutMs: config.advanced?.timeoutMs ?? 30000,
       errorCodePaths: config.advanced?.errorCodePaths?.length
         ? config.advanced.errorCodePaths

@@ -19,7 +19,7 @@ export function defaultConfig() {
     ],
     globalHeaders: [],
     advanced: {
-      concurrency: 5,
+      workerCount: 4,
       timeoutMs: 30000,
       errorCodePaths: ['errorCode', 'error_code', 'code', 'error.code'],
       dedupeOnImport: true,
@@ -68,6 +68,12 @@ export function load() {
     dateRange: { ...base.dateRange, ...(saved.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(saved.advanced ?? {}) },
   });
+
+  // Cau hinh cu dung khoa concurrency, doc sang workerCount.
+  if (saved.advanced?.workerCount === undefined && saved.advanced?.concurrency !== undefined) {
+    state.advanced.workerCount = Number(saved.advanced.concurrency) || 4;
+  }
+  delete state.advanced.concurrency;
 }
 
 export function applyConfig(incoming) {
@@ -76,6 +82,13 @@ export function applyConfig(incoming) {
     dateRange: { ...base.dateRange, ...(incoming.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(incoming.advanced ?? {}) },
   });
+
+  // Cau hinh cu dung khoa concurrency, doc sang workerCount.
+  if (incoming.advanced?.workerCount === undefined && incoming.advanced?.concurrency !== undefined) {
+    state.advanced.workerCount = Number(incoming.advanced.concurrency) || 4;
+  }
+  delete state.advanced.concurrency;
+
   persist();
   notify();
 }

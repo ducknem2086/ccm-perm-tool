@@ -49,17 +49,20 @@ const resultTable = initResultTable({
 });
 
 /* ---------- advanced ---------- */
-const concurrency = document.getElementById('inp-concurrency');
+const workerCount = document.getElementById('inp-worker-count');
 const timeout = document.getElementById('inp-timeout');
 const errorPaths = document.getElementById('inp-error-paths');
 const dedupe = document.getElementById('chk-dedupe');
 
-concurrency.value = state.advanced.concurrency;
+workerCount.value = state.advanced.workerCount;
 timeout.value = state.advanced.timeoutMs;
 errorPaths.value = state.advanced.errorCodePaths.join(', ');
 dedupe.checked = state.advanced.dedupeOnImport;
 
-concurrency.addEventListener('input', () => { state.advanced.concurrency = Number(concurrency.value) || 5; persist(); });
+workerCount.addEventListener('input', () => {
+  state.advanced.workerCount = Math.max(1, Math.min(Number(workerCount.value) || 4, 16));
+  persist();
+});
 timeout.addEventListener('input', () => { state.advanced.timeoutMs = Number(timeout.value) || 30000; persist(); });
 errorPaths.addEventListener('input', () => {
   state.advanced.errorCodePaths = errorPaths.value.split(',').map((s) => s.trim()).filter(Boolean);

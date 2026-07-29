@@ -46,7 +46,7 @@ test('defaultConfig tra ve cau hinh mac dinh dung chuuan', () => {
     { key: 'toDate', value: '{{toDate}}', enabled: true },
   ]);
   assert.deepEqual(cfg.globalHeaders, []);
-  assert.equal(cfg.advanced.concurrency, 5);
+  assert.equal(cfg.advanced.workerCount, 4);
   assert.equal(cfg.advanced.timeoutMs, 30000);
   assert.deepEqual(cfg.advanced.errorCodePaths, ['errorCode', 'error_code', 'code', 'error.code']);
   assert.equal(cfg.advanced.dedupeOnImport, true);
@@ -87,14 +87,14 @@ test('persist luu state vao localStorage va load doc lai merge voi defaultConfig
     domain: 'https://test.com',
     token: 'my-token',
     dateRange: { from: '2026-01-01' },
-    advanced: { concurrency: 10 }
+    advanced: { workerCount: 10 }
   });
 
   assert.equal(state.domain, 'https://test.com');
   assert.equal(state.token, 'my-token');
   assert.equal(state.dateRange.from, '2026-01-01');
   assert.equal(state.dateRange.to, '');
-  assert.equal(state.advanced.concurrency, 10);
+  assert.equal(state.advanced.workerCount, 10);
   assert.equal(state.advanced.timeoutMs, 30000);
 
   // Clear memory state roi test load()
@@ -105,7 +105,18 @@ test('persist luu state vao localStorage va load doc lai merge voi defaultConfig
   assert.equal(state.domain, 'https://test.com');
   assert.equal(state.token, 'my-token');
   assert.equal(state.dateRange.from, '2026-01-01');
-  assert.equal(state.advanced.concurrency, 10);
+  assert.equal(state.advanced.workerCount, 10);
+});
+
+test('load migrate concurrency sang workerCount neu workerCount chua co', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    advanced: { concurrency: 8 }
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+  assert.equal(state.advanced.workerCount, 8);
+  assert.equal(state.advanced.concurrency, undefined);
 });
 
 test('persist khong bi crash khi localStorage bi loi', () => {

@@ -93,9 +93,10 @@
             <details class="card">
               <summary class="card-title">ADVANCED</summary>
               <div class="field-row">
-                <label class="field"><span class="label">Concurrency</span><input id="inp-concurrency" class="input mono" type="number" min="1" max="50" value="5" /></label>
+                <label class="field"><span class="label">Số luồng</span><input id="inp-worker-count" class="input mono" type="number" min="1" max="16" value="4" /></label>
                 <label class="field"><span class="label">Timeout (ms)</span><input id="inp-timeout" class="input mono" type="number" min="1000" step="1000" value="30000" /></label>
               </div>
+              <p class="hint">Mỗi luồng chạy tối đa 5 request cùng lúc.</p>
               <label class="field">
                 <span class="label">Đường dẫn tìm error code (cách nhau bởi dấu phẩy)</span>
                 <input id="inp-error-paths" class="input mono" type="text" value="errorCode, error_code, code, error.code" spellcheck="false" />
