@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import { parseTxt, parseCsv, parseImport } from '../src/server/file-import.js';
+import {
+  parseTxt, parseCsv, parseImport,
+  parseTxtGrid, parseCsvGrid, parseXlsxGrid, parseGrid,
+} from '../src/server/file-import.js';
 
 async function xlsxBuffer(rows) {
   const wb = new ExcelJS.Workbook();
@@ -84,3 +87,48 @@ test('parseImport bao loi voi duoi file la', async () => {
     /không hỗ trợ/
   );
 });
+
+test('parseCsvGrid giu du moi cot', () => {
+  assert.deepEqual(
+    parseCsvGrid('name,method,endpoint\nTra cuu,GET,/query/abc/{*}'),
+    [['name', 'method', 'endpoint'], ['Tra cuu', 'GET', '/query/abc/{*}']],
+  );
+});
+
+test('parseCsvGrid go dau nhay kep tung o', () => {
+  assert.deepEqual(parseCsvGrid('"Tra cuu","GET"'), [['Tra cuu', 'GET']]);
+});
+
+test('parseTxtGrid coi moi dong la mot o', () => {
+  assert.deepEqual(parseTxtGrid('/a\n/b'), [['/a'], ['/b']]);
+});
+
+test('parseXlsxGrid giu du moi cot', async () => {
+  const buffer = await xlsxBuffer([['name', 'method', 'endpoint'], ['Tra cuu', 'GET', '/query/abc/{*}']]);
+  assert.deepEqual(
+    await parseXlsxGrid(buffer),
+    [['name', 'method', 'endpoint'], ['Tra cuu', 'GET', '/query/abc/{*}']],
+  );
+});
+
+test('parseGrid tach dong dau lam header', async () => {
+  const buffer = await xlsxBuffer([['name', 'method', 'endpoint'], ['Tra cuu', 'GET', '/a/{*}'], ['Cap nhat', 'POST', '/b/{*}']]);
+  const g = await parseGrid({ filename: 'apis.xlsx', buffer });
+  assert.deepEqual(g.headers, ['name', 'method', 'endpoint']);
+  assert.equal(g.rows.length, 2);
+  assert.deepEqual(g.rows[1], ['Cap nhat', 'POST', '/b/{*}']);
+});
+
+test('parseGrid tra ve rong khi file khong co dong nao', async () => {
+  const g = await parseGrid({ filename: 'p.txt', buffer: Buffer.from('') });
+  assert.deepEqual(g.headers, []);
+  assert.deepEqual(g.rows, []);
+});
+
+test('parseGrid bao loi voi duoi file la', async () => {
+  await assert.rejects(
+    () => parseGrid({ filename: 'p.pdf', buffer: Buffer.from('') }),
+    /không hỗ trợ/,
+  );
+});
+
