@@ -11,6 +11,7 @@ function finalize({
     index: req.index,
     endpointId: req.endpointId,
     endpointName: req.endpointName,
+    pathTemplate: req.pathTemplate,
     msisdn: req.msisdn ?? null,
     request: {
       method: req.method,

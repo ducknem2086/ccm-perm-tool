@@ -96,3 +96,21 @@ test('sendRequest bao ABORTED khi bi huy tu ngoai', async () => {
     assert.equal(rec.errorCode, 'ABORTED');
   } finally { await mock.close(); }
 });
+
+test('sendRequest chuyen tiep pathTemplate xuong record', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"ok":true}');
+  });
+  try {
+    const rec = await sendRequest({
+      index: 1, endpointId: 'ep_1', endpointName: 'Tra cuu TB',
+      pathTemplate: '/query/white-list-ir-subscriber/{*}',
+      msisdn: '0912345678', method: 'GET', url: `${mock.base}/x`,
+      headers: {}, queryParams: {}, pathParams: {}, body: null, unresolved: [],
+    });
+    assert.equal(rec.pathTemplate, '/query/white-list-ir-subscriber/{*}');
+    assert.equal(rec.endpointName, 'Tra cuu TB');
+  } finally { await mock.close(); }
+});
+

@@ -132,3 +132,35 @@ test('buildRequests ap dung dateFormat khac', () => {
   const reqs = buildRequests(baseConfig({ dateFormat: 'yyyy-MM-dd' }));
   assert.equal(reqs[0].queryParams.fromDate, '2026-03-25');
 });
+
+test('buildRequests nhan msisdn voi endpoint dung placeholder sao', () => {
+  const cfg = baseConfig({ endpoints: [
+    { id: 'ep_1', enabled: true, method: 'GET', name: 'Tra cuu TB',
+      pathTemplate: '/query/white-list-ir-subscriber/{*}', queryParams: [], headers: [] },
+    { id: 'ep_2', enabled: true, method: 'POST', name: 'Cap nhat goi',
+      pathTemplate: '/command/subscriber/{*}', queryParams: [], headers: [] },
+  ] });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs.length, 4);
+  assert.equal(
+    reqs[0].url,
+    'https://abc.vn/query/white-list-ir-subscriber/0912345678?fromDate=25032026&toDate=01042026',
+  );
+  assert.equal(reqs[1].msisdn, '0913000111');
+  assert.equal(reqs[2].method, 'POST');
+});
+
+test('buildRequests mang ca endpointName lan pathTemplate', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].name = 'Tra cuu thue bao';
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].endpointName, 'Tra cuu thue bao');
+  assert.equal(reqs[0].pathTemplate, '/query/abc-information/:msisdn');
+});
+
+test('buildRequests de endpointName rong khi endpoint khong co ten', () => {
+  const reqs = buildRequests(baseConfig());
+  assert.equal(reqs[0].endpointName, '');
+  assert.equal(reqs[0].pathTemplate, '/query/abc-information/:msisdn');
+});
+

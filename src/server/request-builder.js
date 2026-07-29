@@ -73,7 +73,8 @@ function buildOne({ config, endpoint, msisdn, scope, index }) {
   return {
     index,
     endpointId: endpoint.id,
-    endpointName: endpoint.pathTemplate,
+    endpointName: endpoint.name ?? '',
+    pathTemplate: endpoint.pathTemplate,
     msisdn: msisdn ?? null,
     method: (endpoint.method || 'GET').toUpperCase(),
     url: `${base}${suffix}${qs ? `?${qs}` : ''}`,
