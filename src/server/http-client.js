@@ -82,7 +82,10 @@ function finalize({
       if (!matchedRow) {
         statusPermission = 'empty';
       } else {
-        const m1 = uc1.find((m) => m.endpointSheet === req.sheetName);
+        const m1 = uc1.find((m) => (
+          m.endpointSheet === req.sheetName
+          && String(m.authProfileName ?? '').trim().toLowerCase() === String(req.authName ?? '').trim().toLowerCase()
+        ));
         const colIdx = m1 ? headers.indexOf(m1.permissionColumn) : -1;
         const cellVal = colIdx !== -1 ? String(matchedRow[colIdx] ?? '').trim().toLowerCase() : '';
 

@@ -281,20 +281,6 @@ test('statusPermission tra ve "true" khi status 200 va profile khop quyen', asyn
   } finally { await mock.close(); }
 });
 
-test('statusPermission tra ve "true" khi status 403 va profile khong khop quyen', async () => {
-  const mock = await startMockServer((_, res) => {
-    res.writeHead(403, { 'content-type': 'application/json' });
-    res.end('{}');
-  });
-  try {
-    const rec = await sendRequest(
-      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Admin Profile' }),
-      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
-    );
-    assert.equal(rec.statusPermission, 'true');
-  } finally { await mock.close(); }
-});
-
 test('statusPermission tra ve "false" khi status NOT 200 (500) ma profile khop quyen', async () => {
   const mock = await startMockServer((_, res) => {
     res.writeHead(500, { 'content-type': 'application/json' });
@@ -309,7 +295,7 @@ test('statusPermission tra ve "false" khi status NOT 200 (500) ma profile khop q
   } finally { await mock.close(); }
 });
 
-test('statusPermission tra ve "false" khi status NOT 403 (200) ma profile khong khop quyen', async () => {
+test('statusPermission tra ve "empty" khi o quyen khong co "x"', async () => {
   const mock = await startMockServer((_, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end('{}');
@@ -319,7 +305,7 @@ test('statusPermission tra ve "false" khi status NOT 403 (200) ma profile khong 
       req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Admin Profile' }),
       { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
     );
-    assert.equal(rec.statusPermission, 'false');
+    assert.equal(rec.statusPermission, 'empty');
   } finally { await mock.close(); }
 });
 
@@ -334,6 +320,47 @@ test('statusPermission tra ve "empty" khi ten API khong co trong file quyen', as
       { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
     );
     assert.equal(rec.statusPermission, 'empty');
+  } finally { await mock.close(); }
+});
+
+test('statusPermission giai quyet dung cot mapping va authProfileName khi mot sheet co nhieu auth profile', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    // User Profile co quyen 'x' o 'Tra cuu TB' (cot Sheet 1 - User), khong co o 'Doi SIM'
+    const recUser1 = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(recUser1.statusPermission, 'true');
+
+    const recUser2 = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Doi SIM', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(recUser2.statusPermission, 'empty');
+
+    // Admin Profile co quyen 'x' o 'Doi SIM' (cot Sheet 1 - Admin), khong co o 'Tra cuu TB'
+    const recAdmin1 = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Doi SIM', sheetName: 'Sheet 1', authName: 'Admin Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(recAdmin1.statusPermission, 'true');
+
+    const recAdmin2 = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Admin Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(recAdmin2.statusPermission, 'empty');
+
+    // Matching case-insensitive va trimmed authProfileName
+    const recCaseTrim = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Doi SIM', sheetName: 'Sheet 1', authName: '  admin profile  ' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(recCaseTrim.statusPermission, 'true');
   } finally { await mock.close(); }
 });
 
