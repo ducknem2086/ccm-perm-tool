@@ -37,19 +37,7 @@
                 <input id="inp-domain" class="input" type="text" placeholder="https://api-abc.vn" spellcheck="false" />
               </label>
               <p class="hint">Phải là host của <b>API</b>, thường có tiền tố <code>api-</code>. Domain của trang web (không có <code>api-</code>) trả về HTML cho mọi path — gây lỗi NOT_JSON.</p>
-              <label class="field">
-                <span class="label">Bearer token</span>
-                <input id="inp-token" class="input mono" type="text" placeholder="dán token vào đây" spellcheck="false" />
-              </label>
-              <label class="field">
-                <span class="label">Cookie</span>
-                <input id="inp-cookie" class="input mono" type="text" placeholder="BIGipServerpool_...=...; REDIRECT_AFTER_LOGIN=..." spellcheck="false" />
-              </label>
-              <label class="field">
-                <span class="label">Refresh token <span class="hint" style="display:inline">(hiếm khi cần)</span></span>
-                <input id="inp-refresh-token" class="input mono" type="text" placeholder="để trống trừ khi API cụ thể đòi header refresh_token" spellcheck="false" />
-              </label>
-              <p class="hint">Lấy ở DevTools ▸ Network ▸ request gọi API (không phải request điều hướng trang) ▸ chuột phải ▸ Copy ▸ <b>Copy as fetch</b> — chính xác hơn Copy as cURL vì chỉ gồm header thật sự được gửi. Cookie thường chỉ là cookie hạ tầng (load balancer, redirect hint) — <b>không</b> chứa access_token/id_token, vì hai cái đó đã có ở Bearer token.</p>
+              <p class="hint">Bearer token, Cookie và Refresh token nằm ở tab <b>AUTHS</b> — mỗi profile một bộ.</p>
             </section>
 
             <section class="card" id="card-msisdn">

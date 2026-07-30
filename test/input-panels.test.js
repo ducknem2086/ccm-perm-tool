@@ -212,9 +212,9 @@ class MockElement {
 function setupMockDOM() {
   const elements = {
     'inp-domain': new MockElement('input', 'inp-domain'),
-    'inp-token': new MockElement('input', 'inp-token'),
     'token-indicator': new MockElement('span', 'token-indicator'),
     'btn-reload-token': new MockElement('button', 'btn-reload-token'),
+    'tab-auths-badge': new MockElement('span', 'tab-auths-badge'),
 
     'inp-daterange': new MockElement('input', 'inp-daterange'),
     'inp-date-from': new MockElement('input', 'inp-date-from'),
@@ -226,6 +226,9 @@ function setupMockDOM() {
 
     'tbl-query-params': new MockElement('div', 'tbl-query-params'),
     'tbl-headers': new MockElement('div', 'tbl-headers'),
+    'sel-header-mode': new MockElement('select', 'sel-header-mode'),
+    'inp-header-raw': new MockElement('textarea', 'inp-header-raw'),
+    'header-raw-count': new MockElement('p', 'header-raw-count'),
   };
 
   globalThis.document = {
@@ -242,6 +245,14 @@ function setupMockDOM() {
         return [btnQuery, btnHeader];
       }
       return [];
+    },
+    querySelector: (selector) => {
+      if (selector === '[data-add-param="header"]') {
+        const btn = new MockElement('button');
+        btn.dataset.addParam = 'header';
+        return btn;
+      }
+      return null;
     }
   };
 
@@ -267,19 +278,13 @@ function setupMockDOM() {
   return { elements, store };
 }
 
-test('Connection Panel - bindings and token load/reload', () => {
+test('Connection Panel - domain binding va validate', () => {
   const { elements } = setupMockDOM();
   Object.assign(state, defaultConfig());
+  initConnectionPanel();
 
-  const panel = initConnectionPanel();
-
-  // Test initial state
   assert.equal(elements['inp-domain'].value, '');
-  assert.equal(elements['inp-token'].value, '');
-  assert.equal(elements['token-indicator'].textContent, '○ chưa có token');
-  assert.equal(elements['token-indicator'].classList.contains('is-off'), true);
 
-  // Input Domain URL validation and change event
   elements['inp-domain'].value = 'http://test.com';
   elements['inp-domain'].dispatchEvent({ type: 'input' });
   assert.equal(state.domain, 'http://test.com');
@@ -288,25 +293,68 @@ test('Connection Panel - bindings and token load/reload', () => {
   elements['inp-domain'].value = 'invalid-domain';
   elements['inp-domain'].dispatchEvent({ type: 'input' });
   assert.equal(elements['inp-domain'].classList.contains('is-invalid'), true);
+});
 
-  // Input Token change event
-  elements['inp-token'].value = 'my-custom-token';
-  elements['inp-token'].dispatchEvent({ type: 'input' });
-  assert.equal(state.token, 'my-custom-token');
-  assert.equal(elements['token-indicator'].textContent, '● token ok');
+test('indicator dem so profile co token', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+  state.auths = [
+    { id: 'a1', name: 'A', mode: 'fields', token: 'T', cookie: '', refreshToken: '', curlRaw: '' },
+    { id: 'a2', name: 'B', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' },
+    { id: 'a3', name: 'C', mode: 'curl', token: '', cookie: '', refreshToken: '', curlRaw: "curl -H 'Authorization: Bearer z'" },
+  ];
+
+  initConnectionPanel();
+
+  assert.equal(elements['token-indicator'].textContent, '● 2/3 auth có token');
   assert.equal(elements['token-indicator'].classList.contains('is-off'), false);
+});
 
-  // Reload Token when token is not found in cookie/localStorage
+test('indicator bao is-off khi khong profile nao co token', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+  state.auths = [{ id: 'a1', name: 'A', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' }];
+
+  initConnectionPanel();
+
+  assert.equal(elements['token-indicator'].textContent, '○ 0/1 auth có token');
+  assert.equal(elements['token-indicator'].classList.contains('is-off'), true);
+});
+
+test('Reload Token ghi vao profile dau tien khi chua chon filter', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+  state.auths = [{ id: 'a1', name: 'PROD', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' }];
+
+  initConnectionPanel();
+
   elements['btn-reload-token'].dispatchEvent({ type: 'click' });
   assert.equal(globalThis.window.ccmToastCalls.length, 1);
   assert.equal(globalThis.window.ccmToastCalls[0].type, 'error');
 
-  // Reload Token when token exists in cookies
   globalThis.document.cookie = 'access_token=cookie-token-123';
   elements['btn-reload-token'].dispatchEvent({ type: 'click' });
-  assert.equal(state.token, 'cookie-token-123');
+  assert.equal(state.auths[0].token, 'cookie-token-123');
   assert.equal(globalThis.window.ccmToastCalls.length, 2);
   assert.equal(globalThis.window.ccmToastCalls[1].type, 'ok');
+  assert.ok(globalThis.window.ccmToastCalls[1].msg.includes('PROD'));
+});
+
+test('Reload Token ghi vao profile dang duoc chon trong runFilter', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+  state.auths = [
+    { id: 'a1', name: 'PROD', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' },
+    { id: 'a2', name: 'UAT', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' },
+  ];
+  state.runFilter = { methods: [], msisdnPatterns: [], authIds: ['a2'] };
+
+  initConnectionPanel();
+
+  globalThis.document.cookie = 'access_token=cookie-token-123';
+  elements['btn-reload-token'].dispatchEvent({ type: 'click' });
+  assert.equal(state.auths[1].token, 'cookie-token-123');
+  assert.equal(state.auths[0].token, '');
 });
 
 test('Date Range Panel - formatting, picker sync, validation', () => {
@@ -400,4 +448,71 @@ test('Param Tables - initialization, add/delete params, state toggling', () => {
   assert.equal(state.globalQueryParams.length, 0);
   assert.equal(table.children.length, 1);
   assert.equal(table.children[0].className, 'el-empty');
+});
+
+test('HEADERS chung mac dinh o che do bang key-value', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+
+  initParamTables();
+
+  assert.equal(elements['sel-header-mode'].value, 'kv');
+  assert.equal(elements['tbl-headers'].hidden, false);
+  assert.equal(elements['inp-header-raw'].hidden, true);
+  assert.equal(elements['header-raw-count'].hidden, true);
+});
+
+test('doi sang che do raw hien textarea, an bang key-value', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+
+  initParamTables();
+
+  elements['sel-header-mode'].value = 'raw';
+  elements['sel-header-mode'].dispatchEvent({ type: 'change' });
+
+  assert.equal(state.globalHeaderMode, 'raw');
+  assert.equal(elements['tbl-headers'].hidden, true);
+  assert.equal(elements['inp-header-raw'].hidden, false);
+  assert.equal(elements['header-raw-count'].hidden, false);
+});
+
+test('dan cURL vao textarea ghi vao state va dem dung so header, bo dong URL', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+
+  initParamTables();
+
+  elements['sel-header-mode'].value = 'raw';
+  elements['sel-header-mode'].dispatchEvent({ type: 'change' });
+
+  const curl = "curl 'https://api.vn/x?a=1' \\\n"
+    + "  -H 'Accept: application/json' \\\n"
+    + "  -H 'refresh_token: eyJ.sig' \\\n"
+    + "  -b 'access_token=aaa'";
+  elements['inp-header-raw'].value = curl;
+  elements['inp-header-raw'].dispatchEvent({ type: 'input' });
+
+  assert.equal(state.globalHeaderRaw, curl);
+  const msg = elements['header-raw-count'].textContent;
+  assert.match(msg, /Đọc được 3 header/);
+  assert.match(msg, /Accept/);
+  assert.match(msg, /refresh_token/);
+  assert.match(msg, /Cookie/);
+  assert.ok(!/https/.test(msg), 'URL khong duoc dem thanh header');
+});
+
+test('dan noi dung khong co header nao thi bao ro thay vi im lang', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+
+  initParamTables();
+  elements['sel-header-mode'].value = 'raw';
+  elements['sel-header-mode'].dispatchEvent({ type: 'change' });
+
+  elements['inp-header-raw'].value = 'https://api.vn/chi-co-url';
+  elements['inp-header-raw'].dispatchEvent({ type: 'input' });
+
+  assert.match(elements['header-raw-count'].textContent, /Chưa đọc được header nào/);
+  assert.equal(elements['header-raw-count'].classList.contains('status-down'), true);
 });
