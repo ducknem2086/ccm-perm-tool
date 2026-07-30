@@ -462,3 +462,12 @@ table.kv tr:last-child td { border-bottom: none; }
 .rf-suggest-more { padding: 4px 10px; opacity: 0.6; font-size: 12px; }
 
 .rf-auth.is-active { border-color: var(--info, #4a90d9); }
+
+/* ---------- drawer cau hinh endpoint: ba muc xep doc ---------- */
+.ed-section-title {
+  margin: 16px 0 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #2b3139);
+}
+
+.ed-section-title:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
