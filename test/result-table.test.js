@@ -448,6 +448,10 @@ test('cot status hien statusPermission va to mau khi active permissionFile', () 
     });
     tableCtrl.render();
 
+    const thead = table.querySelector('thead');
+    const headRow = thead.children[0];
+    assert.equal(headRow.children[0].textContent, 'Status · Error · Permission');
+
     const tbody = table.querySelector('tbody');
     const rows = tbody.children;
 

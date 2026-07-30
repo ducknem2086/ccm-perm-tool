@@ -61,11 +61,19 @@ export function initResultTable({
 
   function columns() {
     const keys = getVisibleColumns();
-    return [...ALL_COLUMNS.filter((c) => keys.includes(c.key)), ACTIONS_COLUMN];
+    const hasPermissions = Boolean(state.permissionFile?.filename);
+    const cols = ALL_COLUMNS.filter((c) => keys.includes(c.key)).map((c) => {
+      if (c.key === 'status' && hasPermissions) {
+        return { ...c, header: 'Status · Error · Permission' };
+      }
+      return c;
+    });
+    return [...cols, ACTIONS_COLUMN];
   }
 
   function paintHead(cols) {
-    const signature = cols.map((c) => c.key).join(',');
+    const hasPermissions = Boolean(state.permissionFile?.filename);
+    const signature = `${cols.map((c) => c.key).join(',')}|${hasPermissions}`;
     if (signature === headKeys) return;
     headKeys = signature;
 
