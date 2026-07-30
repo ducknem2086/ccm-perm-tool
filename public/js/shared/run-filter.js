@@ -15,7 +15,10 @@ export function filterMsisdns(msisdns, runFilter) {
 }
 
 export function selectedAuths(auths, runFilter) {
+  const list = auths ?? [];
+  if (list.length === 1) return list;
+
   const ids = new Set(runFilter?.authIds ?? []);
-  if (ids.size === 0) return auths ?? [];
-  return (auths ?? []).filter((a) => ids.has(a.id));
+  if (ids.size === 0) return [];
+  return list.filter((a) => ids.has(a.id));
 }

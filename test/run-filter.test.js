@@ -56,8 +56,13 @@ test('filterMsisdns khong khop gi tra mang rong', () => {
   assert.deepEqual(filterMsisdns(msisdns, { msisdnPatterns: ['0777'] }), []);
 });
 
-test('selectedAuths authIds rong tra tat ca profile', () => {
-  assert.deepEqual(ids(selectedAuths(auths, { authIds: [] })), ['a1', 'a2']);
+test('selectedAuths khi auths chi co 1 profile thi luon tra ve profile do', () => {
+  const singleAuth = [{ id: 'a1', name: 'Default' }];
+  assert.deepEqual(selectedAuths(singleAuth, { authIds: [] }), singleAuth);
+});
+
+test('selectedAuths khi auths co nhieu profile va authIds rong thi tra ve rong', () => {
+  assert.deepEqual(selectedAuths(auths, { authIds: [] }), []);
 });
 
 test('selectedAuths loc dung profile duoc chon', () => {
