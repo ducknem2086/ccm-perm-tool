@@ -76,7 +76,7 @@ test('resolveColumns bo qua dong template co selector rong', () => {
 test('mapRows doc dung ba truong', () => {
   const r = mapRows(grid([['Tra cứu TB', 'GET', '/query/abc/{*}']]), tpl());
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.records, [{ name: 'Tra cứu TB', method: 'GET', endpoint: '/query/abc/{*}' }]);
+  assert.deepEqual(r.records, [{ name: 'Tra cứu TB', method: 'GET', endpoint: '/query/abc/{*}', sheetName: 'Sheet 1' }]);
 });
 
 test('mapRows viet hoa method va mac dinh GET khi o rong', () => {
@@ -141,5 +141,5 @@ test('mapRows de trong name khi template khong khai dong name', () => {
     { id: 't2', type: 'name', selector: 'HTTP Method', target: 'method' },
     { id: 't3', type: 'name', selector: 'Đường dẫn', target: 'endpoint' },
   ]);
-  assert.deepEqual(r.records, [{ name: '', method: 'GET', endpoint: '/a/{*}' }]);
+  assert.deepEqual(r.records, [{ name: '', method: 'GET', endpoint: '/a/{*}', sheetName: 'Sheet 1' }]);
 });

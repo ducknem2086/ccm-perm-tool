@@ -1,3 +1,5 @@
+import { dedupeEndpoints } from './endpoint-dedupe.js';
+
 export const TARGETS = ['name', 'method', 'endpoint'];
 export const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -41,19 +43,16 @@ export function resolveColumns(headers, template) {
   return { columns, errors };
 }
 
-export function mapRows(grid, template, { dedupe = true } = {}) {
-  const { headers = [], rows = [] } = grid ?? {};
+function mapSingleSheetRows(sheet, template) {
+  const { headers = [], rows = [] } = sheet ?? {};
   const { columns, errors: columnErrors } = resolveColumns(headers, template);
 
-  // Cot khong khop thi khong nap dong nao — nap mot nua con kho go hon.
   if (columnErrors.length > 0) {
-    return { records: [], errors: columnErrors.map((reason) => ({ row: 1, reason })), skipped: 0 };
+    return { records: [], errors: columnErrors.map((reason) => ({ row: 1, reason })) };
   }
 
   const records = [];
   const errors = [];
-  const keys = new Set();
-  let skipped = 0;
 
   rows.forEach((cells, i) => {
     const rowNumber = i + 2;               // +1 vi 0-based, +1 vi dong header
@@ -74,14 +73,36 @@ export function mapRows(grid, template, { dedupe = true } = {}) {
     }
     const endpoint = raw.startsWith('/') ? raw : `/${raw}`;
 
-    if (dedupe) {
-      const key = `${method} ${endpoint}`;
-      if (keys.has(key)) { skipped += 1; return; }
-      keys.add(key);
-    }
-
     records.push({ name: at('name'), method, endpoint });
   });
 
-  return { records, errors, skipped };
+  return { records, errors };
+}
+
+export function mapRows(gridResult, template, options = {}) {
+  const sheets = Array.isArray(gridResult?.sheets) && gridResult.sheets.length > 0
+    ? gridResult.sheets
+    : [{ name: 'Sheet 1', headers: gridResult?.headers ?? [], rows: gridResult?.rows ?? [] }];
+
+  let allRecords = [];
+  const allErrors = [];
+  let totalSkipped = 0;
+
+  for (const sheet of sheets) {
+    const sheetName = sheet.name ?? 'Sheet 1';
+    const { records, errors } = mapSingleSheetRows(sheet, template);
+    for (const r of records) {
+      r.sheetName = sheetName;
+    }
+    allRecords.push(...records);
+    allErrors.push(...errors);
+  }
+
+  if (options.dedupe !== false) {
+    const { unique, skipped } = dedupeEndpoints(allRecords);
+    allRecords = unique;
+    totalSkipped += skipped;
+  }
+
+  return { records: allRecords, errors: allErrors, skipped: totalSkipped };
 }
