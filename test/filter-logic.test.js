@@ -84,10 +84,10 @@ test('collectErrorCodes bo qua ban ghi khong co ma loi', () => {
   assert.deepEqual(collectErrorCodes([rec({ errorCode: 'E2' }), rec({ errorCode: null }), rec({ errorCode: 'E1' })]), ['E1', 'E2']);
 });
 
-test('ALL_COLUMNS dat status ngay sau index va tach response thanh 2 cot', () => {
+test('ALL_COLUMNS dat status ngay sau index', () => {
   assert.deepEqual(
     ALL_COLUMNS.map((c) => c.key),
-    ['index', 'status', 'name', 'auth', 'path', 'request', 'responseBody', 'responseHeaders'],
+    ['index', 'status', 'name', 'auth', 'path', 'request', 'responseBody'],
   );
   assert.ok(ALL_COLUMNS.every((c) => c.default === true));
 });

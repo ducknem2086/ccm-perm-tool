@@ -177,7 +177,7 @@ test('initResultTable render empty state khi khong co ban ghi', () => {
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['index', 'status', 'name', 'path', 'request', 'responseBody', 'responseHeaders'],
+    getVisibleColumns: () => ['index', 'status', 'name', 'path', 'request', 'responseBody'],
   });
 
   tableCtrl.render();
@@ -204,7 +204,7 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['index', 'status', 'name', 'path', 'request', 'responseBody', 'responseHeaders'],
+    getVisibleColumns: () => ['index', 'status', 'name', 'path', 'request', 'responseBody'],
     onRowClick: (rec) => { clickedRecord = rec; },
   });
 
@@ -225,7 +225,6 @@ test('initResultTable render danh sach duoi nguong VIRTUAL_THRESHOLD', () => {
   assert.equal(tds0[3].textContent, '/query/abc-information/{*}');         // path
   assert.equal(tds0[4].textContent, 'GET https://api.example.com/test/1'); // request
   assert.equal(tds0[5].textContent, '{"code":0,"data":null}');             // response body: object da parse
-  assert.equal(tds0[6].textContent, 'content-type: application/json');     // response header
 
   // Check cells of row 1
   const tds1 = rows[1].children;
@@ -296,7 +295,7 @@ test('cot status hien dau gach ngang khi khong co status code', () => {
   assert.equal(td.classList.contains('status-down'), true);
 });
 
-test('cot name va response header hien dau gach ngang khi rong', () => {
+test('cot name hien dau gach ngang khi rong', () => {
   const { table } = setupMockDOM();
   const records = [makeRecord(1, {
     endpointName: '',
@@ -306,13 +305,12 @@ test('cot name va response header hien dau gach ngang khi rong', () => {
   const tableCtrl = initResultTable({
     getRecords: () => records,
     getFilter: () => emptyFilter(),
-    getVisibleColumns: () => ['name', 'responseHeaders'],
+    getVisibleColumns: () => ['name'],
   });
   tableCtrl.render();
 
   const tds = table.querySelector('tbody').children[0].children;
   assert.equal(tds[0].textContent, '—');
-  assert.equal(tds[1].textContent, '—');
 });
 
 test('cot response body hien object da parse thay vi chuoi tho', () => {

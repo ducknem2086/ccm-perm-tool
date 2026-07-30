@@ -6,7 +6,6 @@ export const ALL_COLUMNS = [
   { key: 'path', header: 'Path', default: true },
   { key: 'request', header: 'Request', default: true },
   { key: 'responseBody', header: 'Response body', default: true },
-  { key: 'responseHeaders', header: 'Response headers', default: true },
 ];
 
 // Cot nut bam, khong nam trong ALL_COLUMNS de nguoi dung khong tat nham qua
