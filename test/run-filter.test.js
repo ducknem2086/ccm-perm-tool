@@ -33,6 +33,14 @@ test('filterEndpoints chiu duoc runFilter undefined', () => {
   assert.deepEqual(ids(filterEndpoints(eps, undefined)), ['e1', 'e2', 'e4']);
 });
 
+test('filterEndpoints loc theo selectedSheet khi khac all', () => {
+  const eps = [
+    { id: '1', method: 'GET', sheetName: 'Sheet1', enabled: true },
+    { id: '2', method: 'GET', sheetName: 'Sheet2', enabled: true },
+  ];
+  assert.deepEqual(filterEndpoints(eps, {}, 'Sheet1').map(e => e.id), ['1']);
+});
+
 test('filterMsisdns patterns rong tra tat ca', () => {
   assert.deepEqual(filterMsisdns(msisdns, { msisdnPatterns: [] }), msisdns);
 });

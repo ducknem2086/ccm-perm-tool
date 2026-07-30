@@ -1,10 +1,15 @@
 // Ba truc loc dung chung cho ca nut dem o client lan buildRequests o server.
 // Quy uoc xuyen suot: danh sach dieu kien rong nghia la lay tat ca.
 
-export function filterEndpoints(endpoints, runFilter) {
+export function filterEndpoints(endpoints, runFilter, selectedSheet) {
   const wanted = new Set((runFilter?.methods ?? []).map((m) => String(m).toUpperCase()));
   return (endpoints ?? []).filter(
-    (e) => e.enabled && (wanted.size === 0 || wanted.has(String(e.method || 'GET').toUpperCase())),
+    (e) => {
+      if (!e.enabled) return false;
+      if (wanted.size > 0 && !wanted.has(String(e.method || 'GET').toUpperCase())) return false;
+      if (selectedSheet && selectedSheet !== 'all' && (e.sheetName ?? 'Sheet 1') !== selectedSheet) return false;
+      return true;
+    }
   );
 }
 
