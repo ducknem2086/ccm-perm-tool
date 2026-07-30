@@ -69,7 +69,7 @@ body { display: flex; flex-direction: column; }
 
 .input-grid {
   flex: 1 1 auto; min-height: 0; overflow: auto;
-  display: grid; grid-template-columns: 1fr 2fr;
+  display: grid; grid-template-columns: 300px 1fr;
   gap: var(--sp-md); padding: var(--sp-md);
   align-items: start;
   max-height: calc(100vh - var(--topbar-h) - 45px - 60px);
@@ -121,6 +121,7 @@ details.card > summary.card-title { cursor: pointer; list-style: revert; }
 .input.is-invalid { border-color: var(--down); }
 .input-sm { height: 28px; font-size: var(--fs-sm); }
 select.input { padding: 0 var(--sp-xs); }
+.el-search { flex: 0 0 auto; width: 200px; text-transform: none; letter-spacing: normal; font-weight: 400; }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -204,6 +205,19 @@ select.input { padding: 0 var(--sp-xs); }
   font-size: var(--fs-caption); color: var(--muted); white-space: nowrap;
 }
 .el-msisdn-toggle label { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
+.el-gear { flex: 0 0 auto; padding: 0 8px; }
+.el-gear.has-config { border-color: var(--info); color: var(--info); }
+
+/* ---------- endpoint drawer ---------- */
+.ed-mode-row { display: flex; align-items: center; gap: var(--sp-sm); }
+.ed-textarea {
+  width: 100%; min-height: 120px; resize: vertical;
+  padding: var(--sp-xs) var(--sp-sm);
+  background: var(--canvas); color: var(--body);
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+}
+.ed-textarea.is-invalid { border-color: var(--down); }
+.drawer-panes { margin-top: var(--sp-sm); display: flex; flex-direction: column; gap: var(--sp-sm); }
 
 /* ---------- param table ---------- */
 .param-table { display: flex; flex-direction: column; gap: var(--sp-xxs); }
@@ -346,3 +360,42 @@ table.kv tr:last-child td { border-bottom: none; }
 }
 .toast.is-error { border-left-color: var(--down); }
 .toast.is-ok { border-left-color: var(--up); }
+
+/* ---------- tab AUTHS ---------- */
+.auths-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.auths-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 900px;
+}
+
+.auth-card > .auth-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.auth-head .auth-name { flex: 1 1 220px; max-width: 260px; }
+.auth-head .token-indicator { margin-left: auto; }
+
+.auth-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.auth-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

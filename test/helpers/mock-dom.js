@@ -134,6 +134,7 @@ export function installMockDocument(elementsById = {}) {
   globalThis.document = {
     getElementById: (id) => elements[id] ?? null,
     createElement: (tagName) => new MockElement(tagName),
+    createTextNode: (text) => String(text),
     addEventListener: (type, fn) => {
       if (!docListeners[type]) docListeners[type] = [];
       docListeners[type].push(fn);
