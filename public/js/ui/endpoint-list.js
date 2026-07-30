@@ -64,6 +64,87 @@ function hasCustomConfig(ep) {
   return queryActive || headerActive || (ep.bodyMode ?? 'none') !== 'none';
 }
 
+export function getEndpointsInCurrentTab() {
+  const selected = state.selectedSheet ?? 'all';
+  if (!selected || selected === 'all') return state.endpoints;
+  return state.endpoints.filter((e) => (e?.sheetName ?? 'Sheet 1') === selected);
+}
+
+export function allEnabledInCurrentTab() {
+  const list = getEndpointsInCurrentTab();
+  return list.length > 0 && list.every((e) => e.enabled !== false);
+}
+
+export function setAllEnabledInCurrentTab(value) {
+  const selected = state.selectedSheet ?? 'all';
+  if (!selected || selected === 'all') {
+    state.endpoints = state.endpoints.map((e) => ({ ...e, enabled: value }));
+  } else {
+    state.endpoints = state.endpoints.map((e) => {
+      if ((e?.sheetName ?? 'Sheet 1') === selected) {
+        return { ...e, enabled: value };
+      }
+      return e;
+    });
+  }
+  persist();
+  notify();
+}
+
+export function toggleAllEnabled() {
+  setAllEnabledInCurrentTab(!allEnabledInCurrentTab());
+}
+
+export function allMsisdnInCurrentTab() {
+  const list = getEndpointsInCurrentTab();
+  return list.length > 0 && list.every((e) => e.attachMsisdn !== false);
+}
+
+export function setAllMsisdnInCurrentTab(val) {
+  const selected = state.selectedSheet ?? 'all';
+  if (!selected || selected === 'all') {
+    state.endpoints = state.endpoints.map((e) => ({ ...e, attachMsisdn: val }));
+  } else {
+    state.endpoints = state.endpoints.map((e) => {
+      if ((e?.sheetName ?? 'Sheet 1') === selected) {
+        return { ...e, attachMsisdn: val };
+      }
+      return e;
+    });
+  }
+  persist();
+  notify();
+}
+
+export function toggleAllMsisdn() {
+  setAllMsisdnInCurrentTab(!allMsisdnInCurrentTab());
+}
+
+export function allCommonQueryInCurrentTab() {
+  const list = getEndpointsInCurrentTab();
+  return list.length > 0 && list.every((e) => e.attachCommonQuery !== false);
+}
+
+export function setAllCommonQueryInCurrentTab(val) {
+  const selected = state.selectedSheet ?? 'all';
+  if (!selected || selected === 'all') {
+    state.endpoints = state.endpoints.map((e) => ({ ...e, attachCommonQuery: val }));
+  } else {
+    state.endpoints = state.endpoints.map((e) => {
+      if ((e?.sheetName ?? 'Sheet 1') === selected) {
+        return { ...e, attachCommonQuery: val };
+      }
+      return e;
+    });
+  }
+  persist();
+  notify();
+}
+
+export function toggleAllCommonQuery() {
+  setAllCommonQueryInCurrentTab(!allCommonQueryInCurrentTab());
+}
+
 export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   // Du lieu cu trong localStorage co the la mang chuoi, thieu name hoac thieu attachMsisdn.
   state.endpoints = (state.endpoints ?? []).map((e) => (
@@ -136,39 +217,6 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       });
       sheetTabsContainer.append(tab);
     }
-  }
-
-  // Nut check-all (toggle): thay vi luon mac dinh tat ca endpoint deu enabled,
-  // cho phep bat/tat hang loat de chi dinh nhanh nhung API nao tao request.
-  function getEndpointsInCurrentTab() {
-    const selected = state.selectedSheet ?? 'all';
-    if (!selected || selected === 'all') return state.endpoints;
-    return state.endpoints.filter((e) => (e.sheetName ?? 'Sheet 1') === selected);
-  }
-
-  function allEnabledInCurrentTab() {
-    const list = getEndpointsInCurrentTab();
-    return list.length > 0 && list.every((e) => e.enabled !== false);
-  }
-
-  function setAllEnabledInCurrentTab(value) {
-    const selected = state.selectedSheet ?? 'all';
-    if (!selected || selected === 'all') {
-      state.endpoints = state.endpoints.map((e) => ({ ...e, enabled: value }));
-    } else {
-      state.endpoints = state.endpoints.map((e) => {
-        if ((e.sheetName ?? 'Sheet 1') === selected) {
-          return { ...e, enabled: value };
-        }
-        return e;
-      });
-    }
-    persist();
-    notify();
-  }
-
-  function toggleAllEnabled() {
-    setAllEnabledInCurrentTab(!allEnabledInCurrentTab());
   }
 
   function showErrors(errors) {
@@ -252,6 +300,20 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     label: '☑ Check all',
     title: 'Bật/tắt tất cả endpoint để tạo request',
     onClick: toggleAllEnabled,
+  });
+
+  const msisdnAllActionIndex = extraActions.length;
+  extraActions.push({
+    label: '☑ MSISDN: Tất cả Có',
+    title: 'Bật/tắt MSISDN cho tất cả endpoint trong tab hiện tại',
+    onClick: toggleAllMsisdn,
+  });
+
+  const commonQueryAllActionIndex = extraActions.length;
+  extraActions.push({
+    label: '☑ Query: Tất cả Có',
+    title: 'Bật/tắt Query chung cho tất cả endpoint trong tab hiện tại',
+    onClick: toggleAllCommonQuery,
   });
 
   const list = createEditableList({
@@ -392,15 +454,35 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   }
 
   const checkAllBtn = host.querySelector(`[data-extra-action="${checkAllActionIndex}"]`);
+  const msisdnAllBtn = host.querySelector(`[data-extra-action="${msisdnAllActionIndex}"]`);
+  const commonQueryAllBtn = host.querySelector(`[data-extra-action="${commonQueryAllActionIndex}"]`);
 
   function refreshCheckAllBtn() {
-    if (!checkAllBtn) return;
-    const on = allEnabledInCurrentTab();
     const isSingleTab = state.selectedSheet && state.selectedSheet !== 'all';
-    checkAllBtn.textContent = on ? '☐ Bỏ chọn tất cả' : '☑ Chọn tất cả';
-    checkAllBtn.title = on
-      ? (isSingleTab ? `Bỏ chọn tất cả endpoint trong ${state.selectedSheet}` : 'Bỏ chọn tất cả endpoint')
-      : (isSingleTab ? `Chọn tất cả endpoint trong ${state.selectedSheet}` : 'Chọn tất cả endpoint');
+
+    if (checkAllBtn) {
+      const on = allEnabledInCurrentTab();
+      checkAllBtn.textContent = on ? '☐ Bỏ chọn tất cả' : '☑ Chọn tất cả';
+      checkAllBtn.title = on
+        ? (isSingleTab ? `Bỏ chọn tất cả endpoint trong ${state.selectedSheet}` : 'Bỏ chọn tất cả endpoint')
+        : (isSingleTab ? `Chọn tất cả endpoint trong ${state.selectedSheet}` : 'Chọn tất cả endpoint');
+    }
+
+    if (msisdnAllBtn) {
+      const msisdnOn = allMsisdnInCurrentTab();
+      msisdnAllBtn.textContent = msisdnOn ? '☑ MSISDN: Tất cả Có' : '☐ MSISDN: Tất cả Không';
+      msisdnAllBtn.title = msisdnOn
+        ? (isSingleTab ? `Tắt MSISDN cho tất cả endpoint trong ${state.selectedSheet}` : 'Tắt MSISDN cho tất cả endpoint')
+        : (isSingleTab ? `Bật MSISDN cho tất cả endpoint trong ${state.selectedSheet}` : 'Bật MSISDN cho tất cả endpoint');
+    }
+
+    if (commonQueryAllBtn) {
+      const queryOn = allCommonQueryInCurrentTab();
+      commonQueryAllBtn.textContent = queryOn ? '☑ Query: Tất cả Có' : '☐ Query: Tất cả Không';
+      commonQueryAllBtn.title = queryOn
+        ? (isSingleTab ? `Tắt Query chung cho tất cả endpoint trong ${state.selectedSheet}` : 'Tắt Query chung cho tất cả endpoint')
+        : (isSingleTab ? `Bật Query chung cho tất cả endpoint trong ${state.selectedSheet}` : 'Bật Query chung cho tất cả endpoint');
+    }
   }
 
   refreshSheetSelect();
