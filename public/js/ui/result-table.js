@@ -1,5 +1,6 @@
 import { ALL_COLUMNS, ACTIONS_COLUMN, applyFilter } from '../shared/filter-logic.js';
 import { bodyPreview } from '../shared/response-body.js';
+import { state } from '../state.js';
 
 const ROW_H = 34;              // khop --row-h trong tokens.css
 const BUFFER = 10;
@@ -7,7 +8,10 @@ const VIRTUAL_THRESHOLD = 500; // duoi nguong nay render thang cho don gian
 
 const truncate = (s, n = 120) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
-function statusText(rec) {
+function statusText(rec, hasPermissions) {
+  if (hasPermissions && rec.statusPermission != null) {
+    return `${rec.response.status === null ? '—' : String(rec.response.status)} · ${rec.statusPermission}`;
+  }
   const bits = [
     rec.response.status === null ? '—' : String(rec.response.status),
     rec.errorCode ?? '',
@@ -29,7 +33,10 @@ function cellText(rec, key) {
     case 'request': return `${rec.request.method} ${rec.request.url}`;
     case 'responseBody': return truncate(bodyPreview(rec)) || '—';
     case 'responseHeaders': return truncate(headerLine(rec.response.headers)) || '—';
-    case 'status': return statusText(rec);
+    case 'status': {
+      const hasPermissions = Boolean(state.permissionFile?.filename);
+      return statusText(rec, hasPermissions);
+    }
     default: return '';
   }
 }
@@ -109,8 +116,14 @@ export function initResultTable({
       td.textContent = cellText(rec, col.key);
       if (NUMERIC.has(col.key)) td.classList.add('num', 'mono');
       if (col.key === 'status') {
-        const ok = rec.response.status !== null && rec.response.status < 400;
-        td.classList.add(ok ? 'status-up' : 'status-down');
+        const hasPermissions = Boolean(state.permissionFile?.filename);
+        if (hasPermissions && rec.statusPermission != null) {
+          td.classList.toggle('status-up', rec.statusPermission === 'true');
+          td.classList.toggle('status-down', rec.statusPermission === 'false');
+        } else {
+          const ok = rec.response.status !== null && rec.response.status < 400;
+          td.classList.add(ok ? 'status-up' : 'status-down');
+        }
       }
       td.title = cellText(rec, col.key);
       tr.append(td);

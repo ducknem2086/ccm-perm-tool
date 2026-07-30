@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ExcelJS from 'exceljs';
 import {
-  maskToken, maskCookie, serializeHeaders, exportFilename, writeResultsToStream, EXPORT_COLUMNS
+  maskToken, maskCookie, serializeHeaders, exportFilename, writeResultsToStream, EXPORT_COLUMNS, getExportColumns,
 } from '../src/server/excel-export.js';
 
 const LONG_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abcdefMWQx';
@@ -228,4 +228,42 @@ test('EXPORT_COLUMNS giu cot MSISDN va them cot Response Headers', () => {
   assert.ok(keys.includes('responseHeaders'), 'phai co cot responseHeaders');
   assert.equal(keys.indexOf('responseHeaders'), keys.indexOf('bodyText') + 1);
 });
+
+test('getExportColumns thay cot durationMs bang statusPermission khi hasPermission true', () => {
+  const colsNormal = getExportColumns(false);
+  assert.equal(colsNormal[11].header, 'Duration (ms)');
+  assert.equal(colsNormal[11].key, 'durationMs');
+
+  const colsPerm = getExportColumns(true);
+  assert.equal(colsPerm[11].header, 'Status Permission');
+  assert.equal(colsPerm[11].key, 'statusPermission');
+});
+
+test('writeResultsToStream thay duration bang statusPermission va to mau khi hasPermission true', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccm-'));
+  const file = join(dir, 'out.xlsx');
+  try {
+    const records = [
+      record({ index: 1, statusPermission: 'true' }),
+      record({ index: 2, statusPermission: 'false' }),
+      record({ index: 3, statusPermission: 'empty' }),
+    ];
+    await writeResultsToStream(createWriteStream(file), records, { includeToken: false, hasPermission: true });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(file);
+    const ws = wb.getWorksheet('Results');
+
+    assert.equal(ws.getRow(1).getCell(12).value, 'Status Permission');
+    assert.equal(ws.getRow(2).getCell(12).value, 'true');
+    assert.equal(ws.getRow(2).getCell(12).font?.color?.argb, 'FF0ECB81');
+    assert.equal(ws.getRow(3).getCell(12).value, 'false');
+    assert.equal(ws.getRow(3).getCell(12).font?.color?.argb, 'FFF6465D');
+    assert.equal(ws.getRow(4).getCell(12).value, 'empty');
+    assert.equal(ws.getRow(4).getCell(12).font?.color?.argb, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 

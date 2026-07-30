@@ -127,7 +127,8 @@ export function registerRoutes(app) {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     try {
-      await writeResultsToStream(res, records, { includeToken: Boolean(includeToken) });
+      const hasPermission = Boolean(run.options?.permissionFile?.filename);
+      await writeResultsToStream(res, records, { includeToken: Boolean(includeToken), hasPermission });
     } catch (err) {
       console.error('Export that bai:', err);
       if (!res.headersSent) res.status(500).json({ error: err.message });

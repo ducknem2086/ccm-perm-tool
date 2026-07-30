@@ -71,8 +71,16 @@ export function exportFilename(now = new Date()) {
   return `ccm-result-${s}.xlsx`;
 }
 
-function toRow(rec, includeToken) {
-  return {
+export function getExportColumns(hasPermission) {
+  const cols = [...EXPORT_COLUMNS];
+  if (hasPermission) {
+    cols[11] = { header: 'Status Permission', key: 'statusPermission', width: 18 };
+  }
+  return cols;
+}
+
+function toRow(rec, includeToken, hasPermission = false) {
+  const row = {
     index: rec.index,
     name: rec.endpointName ?? '',
     path: rec.pathTemplate ?? '',
@@ -84,21 +92,27 @@ function toRow(rec, includeToken) {
     queryParams: Object.entries(rec.request.queryParams ?? {}).map(([k, v]) => `${k}=${v}`).join('\n'),
     status: rec.response.status ?? '',
     errorCode: rec.errorCode ?? '',
-    durationMs: rec.durationMs,
     bodyText: bodyPretty(rec),
     responseHeaders: serializeHeaders(rec.response.headers, true),
     errorMessage: rec.errorMessage ?? '',
     startedAt: rec.startedAt,
   };
+  if (hasPermission) {
+    row.statusPermission = rec.statusPermission ?? 'empty';
+  } else {
+    row.durationMs = rec.durationMs;
+  }
+  return row;
 }
 
-export async function writeResultsToStream(stream, records, { includeToken = false } = {}) {
+export async function writeResultsToStream(stream, records, { includeToken = false, hasPermission = false } = {}) {
   const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream, useStyles: true });
   const ws = wb.addWorksheet('Results', {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
-  ws.columns = EXPORT_COLUMNS;
-  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: EXPORT_COLUMNS.length } };
+  const cols = getExportColumns(hasPermission);
+  ws.columns = cols;
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
 
   const header = ws.getRow(1);
   header.font = { bold: true, color: { argb: COLOR_BODY } };
@@ -106,11 +120,20 @@ export async function writeResultsToStream(stream, records, { includeToken = fal
   header.commit();
 
   for (const rec of records) {
-    const row = ws.addRow(toRow(rec, includeToken));
+    const row = ws.addRow(toRow(rec, includeToken, hasPermission));
     const status = rec.response.status;
     const isOk = status !== null && status < 400;
     row.getCell('status').font = { color: { argb: isOk ? COLOR_UP : COLOR_DOWN }, bold: true };
     if (!isOk) row.getCell('errorCode').font = { color: { argb: COLOR_DOWN } };
+    if (hasPermission) {
+      const permCell = row.getCell('statusPermission');
+      const val = String(rec.statusPermission ?? '');
+      if (val === 'true') {
+        permCell.font = { color: { argb: COLOR_UP } };
+      } else if (val === 'false') {
+        permCell.font = { color: { argb: COLOR_DOWN } };
+      }
+    }
     row.commit();
   }
 

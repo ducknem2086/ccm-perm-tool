@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initResultTable } from '../public/js/ui/result-table.js';
 import { ALL_COLUMNS, emptyFilter } from '../public/js/shared/filter-logic.js';
+import { state } from '../public/js/state.js';
 
 class MockElement {
   constructor(tagName = 'div', id = '') {
@@ -26,6 +27,12 @@ class MockElement {
       add(...cs) { cs.forEach(c => self._classList.add(c)); },
       remove(...cs) { cs.forEach(c => self._classList.delete(c)); },
       contains(c) { return self._classList.has(c); },
+      toggle(c, force) {
+        const shouldAdd = force !== undefined ? Boolean(force) : !self._classList.has(c);
+        if (shouldAdd) self._classList.add(c);
+        else self._classList.delete(c);
+        return shouldAdd;
+      },
     };
   }
 
@@ -423,3 +430,41 @@ test('filterCell duoc gan vao hang filter dung cot', () => {
   assert.equal(filterRow.children.length, 4, '3 cot chon + cot cURL luon co');
   assert.equal(filterRow.children[2].children[0], nameInput);
 });
+
+test('cot status hien statusPermission va to mau khi active permissionFile', () => {
+  const { table } = setupMockDOM();
+  const records = [
+    makeRecord(1, { response: { status: 200, statusText: 'OK', headers: {} }, statusPermission: 'true' }),
+    makeRecord(2, { response: { status: 403, statusText: 'Forbidden', headers: {} }, statusPermission: 'false' }),
+    makeRecord(3, { response: { status: 200, statusText: 'OK', headers: {} }, statusPermission: 'empty' }),
+  ];
+
+  state.permissionFile = { filename: 'rules.xlsx', headers: [], rows: [] };
+  try {
+    const tableCtrl = initResultTable({
+      getRecords: () => records,
+      getFilter: () => emptyFilter(),
+      getVisibleColumns: () => ['status'],
+    });
+    tableCtrl.render();
+
+    const tbody = table.querySelector('tbody');
+    const rows = tbody.children;
+
+    const td0 = rows[0].children[0];
+    assert.equal(td0.textContent, '200 · true');
+    assert.equal(td0.classList.contains('status-up'), true);
+
+    const td1 = rows[1].children[0];
+    assert.equal(td1.textContent, '403 · false');
+    assert.equal(td1.classList.contains('status-down'), true);
+
+    const td2 = rows[2].children[0];
+    assert.equal(td2.textContent, '200 · empty');
+    assert.equal(td2.classList.contains('status-up'), false);
+    assert.equal(td2.classList.contains('status-down'), false);
+  } finally {
+    state.permissionFile = { filename: '', headers: [], rows: [] };
+  }
+});
+
