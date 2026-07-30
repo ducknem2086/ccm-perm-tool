@@ -7,11 +7,15 @@ import { initConnectionPanel } from './ui/connection-panel.js';
 import { initDateRange } from './ui/date-range.js';
 import { initMsisdnDrawer } from './ui/msisdn-drawer.js';
 import { initTemplateDrawer } from './ui/template-drawer.js';
+import { initEndpointDrawer } from './ui/endpoint-drawer.js';
 import { initEndpointList } from './ui/endpoint-list.js';
 import { initParamTables } from './ui/param-table.js';
 import { initFilters } from './ui/filters.js';
 import { initResultTable } from './ui/result-table.js';
 import { initDetailDrawer } from './ui/detail-drawer.js';
+import { formatConfigErrors } from './shared/error-format.js';
+import { initAuthsPanel } from './ui/auths-panel.js';
+import { initRunFilterBar } from './ui/run-filter-bar.js';
 
 /* ---------- toast ---------- */
 const toastHost = document.getElementById('toast-host');
@@ -46,8 +50,22 @@ initConnectionPanel();
 initDateRange();
 initMsisdnDrawer();
 
+const authsPanel = initAuthsPanel();
+const runFilterBar = initRunFilterBar();
+
+// Xoa endpoint, doi method, import msisdn deu lam so lieu tren filter bar cu
+// di — ve lai bar moi lan state doi.
+subscribe(() => {
+  authsPanel.render();
+  runFilterBar.render();
+});
+
 const templateDrawer = initTemplateDrawer();
-initEndpointList({ onOpenTemplate: () => templateDrawer.open() });
+const endpointDrawer = initEndpointDrawer();
+initEndpointList({
+  onOpenTemplate: () => templateDrawer.open(),
+  onOpenConfig: (index) => endpointDrawer.open(index),
+});
 initParamTables();
 
 const drawer = initDetailDrawer();
@@ -158,7 +176,7 @@ btnRun.addEventListener('click', async () => {
   } catch (err) {
     running = false;
     refreshRunButton();
-    const detail = (err.errors ?? []).map((e) => `• ${e.message}`).join('\n');
+    const detail = formatConfigErrors(err.errors, state.endpoints);
     window.ccmToast(detail ? `Cấu hình chưa hợp lệ:\n${detail}` : err.message, 'error');
     tabs.select('input');
   }
