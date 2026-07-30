@@ -16,8 +16,8 @@ test('HTML co dung 2 cot trong input-grid', () => {
   assert.equal(colCount, 2, 'phai co dung 2 cot trong input-grid');
 });
 
-test('CSS dinh nghia grid 1fr 2fr cho input-grid', () => {
-  assert.match(readCss(), /grid-template-columns:\s*1fr\s+2fr/);
+test('CSS dinh nghia grid 300px 1fr cho input-grid', () => {
+  assert.match(readCss(), /grid-template-columns:\s*300px\s+1fr/);
 });
 
 test('cot hep chua CONNECTION, MSISDN, DATE RANGE, QUERY PARAMS theo dung thu tu', () => {
@@ -28,17 +28,18 @@ test('cot hep chua CONNECTION, MSISDN, DATE RANGE, QUERY PARAMS theo dung thu tu
   assert.deepEqual(order, ['CONNECTION', 'MSISDN', 'DATE RANGE', 'QUERY PARAMS']);
 });
 
-test('cot rong co col-row chua HEADERS va ADVANCED, roi den ENDPOINTS', () => {
+test('cot rong co col-row chua HEADERS, BODY CHUNG va ADVANCED, roi den ENDPOINTS', () => {
   const html = readHtml();
   const col = html.match(/<div class="col col-wide">([\s\S]*?)<div class="actionbar">/);
   assert.ok(col, 'phai tim thay cot rong');
   assert.ok(col[1].includes('class="col-row"'), 'phai co div col-row');
   assert.ok(col[1].includes('>HEADERS'), 'phai co card HEADERS');
+  assert.ok(col[1].includes('BODY CHUNG'), 'phai co card BODY CHUNG');
   assert.ok(col[1].includes('>ADVANCED'), 'phai co card ADVANCED');
   assert.ok(col[1].includes('id="list-endpoint"'), 'phai co card ENDPOINTS');
   assert.ok(col[1].indexOf('class="col-row"') < col[1].indexOf('id="list-endpoint"'));
 });
 
-test('CSS dinh nghia col-row hai cot', () => {
-  assert.match(readCss(), /\.col-row\s*\{[^}]*grid-template-columns:\s*1fr\s+1fr/);
+test('CSS dinh nghia col-row ba cot', () => {
+  assert.match(readCss(), /\.col-row\s*\{[^}]*grid-template-columns:\s*1fr\s+1fr\s+1fr/);
 });
