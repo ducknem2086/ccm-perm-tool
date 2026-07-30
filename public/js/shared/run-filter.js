@@ -20,7 +20,7 @@ export function parseCommonEndpoints(text) {
         name: `Common ${idx + 1}`,
         method,
         pathTemplate,
-        attachMsisdn: true,
+        attachMsisdn: false,
         sheetName: 'Common',
         queryParams: [],
         headers: [],

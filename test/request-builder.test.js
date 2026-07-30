@@ -850,17 +850,13 @@ test('buildRequests loc theo selectedSheet va cong them commonEndpoints', () => 
     commonEndpoints: 'POST /common-post/{*}\n/common-get/{*}'
   });
   const reqs = buildRequests(cfg);
-  // ep_1 (1 request) + common-post (2 requests) + common-get (2 requests) = 5 total requests
-  assert.equal(reqs.length, 5);
+  // ep_1 (1 request) + common-post (1 request) + common-get (1 request) = 3 total requests
+  assert.equal(reqs.length, 3);
   assert.equal(reqs[0].url, 'https://abc.vn/q1?fromDate=25032026&toDate=01042026');
   assert.equal(reqs[1].method, 'POST');
-  assert.equal(reqs[1].url, 'https://abc.vn/common-post/0912345678?fromDate=25032026&toDate=01042026');
-  assert.equal(reqs[2].method, 'POST');
-  assert.equal(reqs[2].url, 'https://abc.vn/common-post/0913000111?fromDate=25032026&toDate=01042026');
-  assert.equal(reqs[3].method, 'GET');
-  assert.equal(reqs[3].url, 'https://abc.vn/common-get/0912345678?fromDate=25032026&toDate=01042026');
-  assert.equal(reqs[4].method, 'GET');
-  assert.equal(reqs[4].url, 'https://abc.vn/common-get/0913000111?fromDate=25032026&toDate=01042026');
+  assert.equal(reqs[1].url, 'https://abc.vn/common-post?fromDate=25032026&toDate=01042026');
+  assert.equal(reqs[2].method, 'GET');
+  assert.equal(reqs[2].url, 'https://abc.vn/common-get?fromDate=25032026&toDate=01042026');
 });
 
 test('validateConfig cho phep chi co commonEndpoints duoc nhap', () => {
