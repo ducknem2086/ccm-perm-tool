@@ -97,6 +97,21 @@
                 <p class="hint">Authorization được tự thêm từ token ở trên, trừ khi bạn tự khai đè ở đây.</p>
               </section>
 
+              <section class="card">
+                <h2 class="card-title">
+                  <span>BODY CHUNG <button class="btn-icon" data-add-param="body" type="button" title="Thêm dòng">＋</button></span>
+                  <select id="sel-body-mode" class="input input-sm" title="Cách nhập body chung">
+                    <option value="none">None</option>
+                    <option value="kv">Key-value</option>
+                    <option value="raw">Chuỗi thô (JSON/text)</option>
+                  </select>
+                </h2>
+                <div id="tbl-body-common" class="param-table"></div>
+                <textarea id="inp-body-raw" class="input mono ed-textarea" spellcheck="false" hidden
+                  placeholder='{&#10;  "msisdn": "{{msisdn}}"&#10;}'></textarea>
+                <p class="hint">Áp dụng cho endpoint đang để Body = None. Endpoint tự khai Body riêng thì dùng cấu hình riêng, không cộng dồn với body chung.</p>
+              </section>
+
               <details class="card">
                 <summary class="card-title">ADVANCED</summary>
                 <div class="field-row">
