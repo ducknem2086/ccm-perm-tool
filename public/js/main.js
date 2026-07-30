@@ -46,16 +46,17 @@ let running = false;
 let stream = null;
 
 const tabs = initTabs();
-initConnectionPanel();
+const connectionPanel = initConnectionPanel();
 initDateRange();
 initMsisdnDrawer();
 
 const authsPanel = initAuthsPanel();
 const runFilterBar = initRunFilterBar();
 
-// Xoa endpoint, doi method, import msisdn deu lam so lieu tren filter bar cu
-// di — ve lai bar moi lan state doi.
+// Sua token/them-bot auth o tab AUTHS lam indicator tren topbar va so lieu
+// filter bar cu di — ve lai ca ba moi lan state doi tu bat ky dau.
 subscribe(() => {
+  connectionPanel.refresh();
   authsPanel.render();
   runFilterBar.render();
 });
