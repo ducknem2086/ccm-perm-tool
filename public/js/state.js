@@ -19,6 +19,7 @@ export function makeAuth(over = {}) {
 export function defaultConfig() {
   return {
     domain: '',
+    selectedSheet: 'all',
     auths: [makeAuth({ name: 'Default' })],
     runFilter: { methods: [], msisdnPatterns: [], authIds: [] },
     dateRange: { from: '', to: '' },
@@ -37,6 +38,9 @@ export function defaultConfig() {
     globalHeaders: [],
     globalHeaderMode: 'kv',
     globalHeaderRaw: '',
+    globalBodyMode: 'none',
+    globalBodyParams: [],
+    globalBodyRaw: '',
     advanced: {
       workerCount: 4,
       timeoutMs: 30000,

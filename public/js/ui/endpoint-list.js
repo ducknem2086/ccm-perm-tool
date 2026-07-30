@@ -1,32 +1,77 @@
-import { state, persist, notify } from '../state.js';
+import { state, persist, notify, subscribe } from '../state.js';
 import { createEditableList } from './editable-list.js';
 import { mapRows } from '../shared/endpoint-mapping.js';
 import { importGrid } from '../api.js';
+import { matchesEndpointSearch } from '../shared/endpoint-search.js';
+import { createMethodFilterGroup } from './method-filter.js';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const MAX_SHOWN_ERRORS = 10;
 let seq = 0;
 const nextId = () => `ep_${Date.now().toString(36)}_${(seq += 1)}`;
 
-function makeEndpoint(path) {
+// Endpoint cu trong localStorage thieu 7 truong nay — them mac dinh de chay
+// y het truoc khi co cau hinh rieng.
+const CONFIG_DEFAULTS = {
+  queryMode: 'kv', queryRaw: '',
+  headerMode: 'kv', headerRaw: '',
+  bodyMode: 'none', bodyRaw: '', bodyParams: [],
+};
+
+function makeEndpoint(path, sheetName = 'Sheet 1') {
   return {
     id: nextId(), enabled: true, name: '', method: 'GET',
     pathTemplate: String(path ?? ''), attachMsisdn: true,
+    sheetName: String(sheetName ?? 'Sheet 1'),
     queryParams: [], headers: [],
+    ...CONFIG_DEFAULTS,
   };
 }
 
 function fromRecord(rec) {
-  return { ...makeEndpoint(rec.endpoint), name: rec.name, method: rec.method };
+  return {
+    ...makeEndpoint(rec.endpoint, rec.sheetName),
+    name: rec.name,
+    method: rec.method,
+    sheetName: rec.sheetName ?? 'Sheet 1',
+  };
 }
 
-export function initEndpointList({ onOpenTemplate } = {}) {
+function allEnabled(endpoints) {
+  return endpoints.length > 0 && endpoints.every((e) => e.enabled !== false);
+}
+
+// "Da co cau hinh rieng" duoc tinh theo mode dang chon — kv thi xet dong bat
+// trong bang, raw thi xet chuoi co rong hay khong.
+function hasCustomConfig(ep) {
+  const queryActive = (ep.queryMode ?? 'kv') === 'raw'
+    ? String(ep.queryRaw ?? '').trim() !== ''
+    : (ep.queryParams ?? []).some((p) => p.enabled !== false);
+  const headerActive = (ep.headerMode ?? 'kv') === 'raw'
+    ? String(ep.headerRaw ?? '').trim() !== ''
+    : (ep.headers ?? []).some((p) => p.enabled !== false);
+  return queryActive || headerActive || (ep.bodyMode ?? 'none') !== 'none';
+}
+
+export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   // Du lieu cu trong localStorage co the la mang chuoi, thieu name hoac thieu attachMsisdn.
   state.endpoints = (state.endpoints ?? []).map((e) => (
-    typeof e === 'string' ? makeEndpoint(e) : { name: '', attachMsisdn: true, ...e }
+    typeof e === 'string' ? makeEndpoint(e) : { name: '', attachMsisdn: true, ...CONFIG_DEFAULTS, ...e }
   ));
 
   const host = document.getElementById('list-endpoint');
+
+  // Nut check-all (toggle): thay vi luon mac dinh tat ca endpoint deu enabled,
+  // cho phep bat/tat hang loat de chi dinh nhanh nhung API nao tao request.
+  function setAllEnabled(value) {
+    state.endpoints = state.endpoints.map((e) => ({ ...e, enabled: value }));
+    persist();
+    notify();
+  }
+
+  function toggleAllEnabled() {
+    setAllEnabled(!allEnabled(state.endpoints));
+  }
 
   function showErrors(errors) {
     host.querySelector('.el-errors')?.remove();
@@ -100,6 +145,17 @@ export function initEndpointList({ onOpenTemplate } = {}) {
     }
   }
 
+  const extraActions = [];
+  if (onOpenTemplate) {
+    extraActions.push({ label: '⊢ Template', title: 'Cấu hình cột khi import', onClick: onOpenTemplate });
+  }
+  const checkAllActionIndex = extraActions.length;
+  extraActions.push({
+    label: '☑ Check all',
+    title: 'Bật/tắt tất cả endpoint để tạo request',
+    onClick: toggleAllEnabled,
+  });
+
   const list = createEditableList({
     host,
     title: 'ENDPOINTS',
@@ -112,9 +168,11 @@ export function initEndpointList({ onOpenTemplate } = {}) {
     setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
     makeItem: makeEndpoint,
     onImport: handleImport,
-    extraActions: onOpenTemplate
-      ? [{ label: '⊢ Template', title: 'Cấu hình cột khi import', onClick: onOpenTemplate }]
-      : [],
+    search: {
+      placeholder: 'Tìm theo tên hoặc endpoint...',
+      match: matchesEndpointSearch,
+    },
+    extraActions,
     renderExtra: (ep, index, row) => {
       const check = document.createElement('input');
       check.type = 'checkbox';
@@ -173,9 +231,44 @@ export function initEndpointList({ onOpenTemplate } = {}) {
         msisdnBox.append(wrap);
       }
 
-      row.append(check, method, name, msisdnBox);
+      const gearBtn = document.createElement('button');
+      gearBtn.type = 'button';
+      gearBtn.className = 'btn btn-secondary btn-sm el-gear';
+      gearBtn.classList.toggle('has-config', hasCustomConfig(ep));
+      gearBtn.textContent = '⚙';
+      gearBtn.title = 'Cấu hình riêng cho endpoint này (query, headers, body)';
+      gearBtn.addEventListener('click', () => onOpenConfig?.(index));
+
+      row.append(check, method, name, msisdnBox, gearBtn);
     },
   });
+
+  // Filter method dat canh o tim endpoint theo ten — cung mot bang runFilter
+  // voi run-filter-bar, chi doi cho hien thi.
+  const methodFilter = createMethodFilterGroup();
+  const searchInput = host.querySelector('[data-search]');
+  if (searchInput) {
+    const row = document.createElement('div');
+    row.className = 'el-search-row';
+    searchInput.replaceWith(row);
+    row.append(methodFilter.el, searchInput);
+  }
+
+  const checkAllBtn = host.querySelector(`[data-extra-action="${checkAllActionIndex}"]`);
+
+  function refreshCheckAllBtn() {
+    if (!checkAllBtn) return;
+    const on = allEnabled(state.endpoints);
+    checkAllBtn.textContent = on ? '☐ Bỏ chọn tất cả' : '☑ Chọn tất cả';
+    checkAllBtn.title = on
+      ? 'Bỏ chọn tất cả endpoint (không tạo request)'
+      : 'Chọn tất cả endpoint để tạo request';
+  }
+  refreshCheckAllBtn();
+
+  // Drawer cau hinh rieng ghi thang vao state roi notify() — can render lai
+  // de cham "has-config" tren nut gear cap nhat ngay.
+  subscribe(() => { list.render(); methodFilter.render(); refreshCheckAllBtn(); });
 
   return list;
 }
