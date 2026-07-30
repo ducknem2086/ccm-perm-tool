@@ -280,9 +280,17 @@ test('buildRequests headers endpoint mode raw parse va tron dung', () => {
 
 /* ---------- cau hinh rieng endpoint: body ---------- */
 
-test('buildRequests body mode none khong gui body', () => {
+test('buildRequests mac dinh body la {} cho POST khi chua cau hinh body', () => {
+  const cfg = baseConfig({
+    endpoints: [{ id: 'e1', method: 'POST', pathTemplate: '/api/test/{*}', enabled: true }],
+  });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].body, '{}');
+  assert.equal(reqs[0].headers['Content-Type'], 'application/json');
+});
+
+test('buildRequests body mode none khong gui body cho GET', () => {
   const cfg = baseConfig();
-  cfg.endpoints[0].method = 'POST';
   assert.equal(buildRequests(cfg)[0].body, null);
 });
 
@@ -361,7 +369,6 @@ test('buildRequests khong gui body chung cho method GET', () => {
 
 test('buildRequests globalBodyMode none thi khong anh huong gi (mac dinh cu)', () => {
   const cfg = baseConfig();
-  cfg.endpoints[0].method = 'POST';
   assert.equal(buildRequests(cfg)[0].body, null);
 });
 

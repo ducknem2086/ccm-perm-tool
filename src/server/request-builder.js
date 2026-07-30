@@ -117,19 +117,31 @@ function globalHeaderPairs(config) {
     : activeOnly(config.globalHeaders);
 }
 
-// Body khong tron voi cau hinh chung — endpoint quyet dinh hoan toan.
-function buildBody(ep, take) {
-  const mode = ep.bodyMode ?? 'none';
-  if (mode === 'none') return null;
-  if (mode === 'kv') {
-    const obj = {};
-    for (const p of activeOnly(ep.bodyParams)) obj[take(p.key)] = take(p.value);
-    return JSON.stringify(obj);
-  }
-  return take(ep.bodyRaw ?? '');
+// Endpoint tu khai Body (khac 'none') thi dung rieng, khong cong don voi
+// body chung. Endpoint de 'none' — hoac chua tung khai — moi roi xuong dung
+// body chung, giong cach QUERY/HEADERS chung ap dung cho key endpoint khong khai.
+function effectiveBodyMode(ep, config) {
+  const own = ep.bodyMode ?? 'none';
+  return own !== 'none' ? own : (config.globalBodyMode ?? 'none');
 }
 
-const CONTENT_TYPE_BY_BODY_MODE = { json: 'application/json', kv: 'application/json', text: 'text/plain' };
+function buildBody(ep, config, take) {
+  const mode = effectiveBodyMode(ep, config);
+  if (mode === 'none') return null;
+
+  const useGlobal = (ep.bodyMode ?? 'none') === 'none';
+  if (mode === 'kv') {
+    const obj = {};
+    const rows = useGlobal ? activeOnly(config.globalBodyParams) : activeOnly(ep.bodyParams);
+    for (const p of rows) obj[take(p.key)] = take(p.value);
+    return JSON.stringify(obj);
+  }
+  return take((useGlobal ? config.globalBodyRaw : ep.bodyRaw) ?? '');
+}
+
+const CONTENT_TYPE_BY_BODY_MODE = {
+  json: 'application/json', kv: 'application/json', text: 'text/plain', raw: 'application/json',
+};
 
 // Request di tu Node nen khong co cac header trinh duyet tu gan. Thieu chung
 // thi API/WAF phia sau co the tra ve trang HTML chan thay vi JSON — dac biet
@@ -192,8 +204,14 @@ function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
   putIfAbsent(headers, 'Cookie', auth?.cookie);
   putIfAbsent(headers, 'refresh_token', auth?.refreshToken);
 
-  const body = buildBody(endpoint, take);
-  putIfAbsent(headers, 'Content-Type', CONTENT_TYPE_BY_BODY_MODE[endpoint.bodyMode ?? 'none']);
+  const method = (endpoint.method || 'GET').toUpperCase();
+  let body = NO_BODY_METHODS.has(method) ? null : buildBody(endpoint, config, take);
+  if (!NO_BODY_METHODS.has(method) && (body === null || body === '')) {
+    body = '{}';
+  }
+  if (body !== null) {
+    putIfAbsent(headers, 'Content-Type', CONTENT_TYPE_BY_BODY_MODE[effectiveBodyMode(endpoint, config)] || 'application/json');
+  }
 
   // Origin la origin cua chinh tool, khong phai domain dich — giong app that
   // goi API cross-site. Referer phai co dau '/' cuoi nhu trinh duyet gui.
@@ -218,7 +236,7 @@ function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
     authName: auth?.name ?? '',
     pathTemplate: endpoint.pathTemplate,
     msisdn: msisdn ?? null,
-    method: (endpoint.method || 'GET').toUpperCase(),
+    method,
     url: `${base}${suffix}${qs ? `?${qs}` : ''}`,
     headers,
     queryParams,
