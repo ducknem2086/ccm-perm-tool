@@ -16,6 +16,7 @@ import { initDetailDrawer } from './ui/detail-drawer.js';
 import { formatConfigErrors } from './shared/error-format.js';
 import { initAuthsPanel } from './ui/auths-panel.js';
 import { initRunFilterBar } from './ui/run-filter-bar.js';
+import { dedupeEndpoints } from './shared/endpoint-dedupe.js';
 
 /* ---------- toast ---------- */
 const toastHost = document.getElementById('toast-host');
@@ -138,6 +139,12 @@ const seenIndexes = new Set();
 
 btnRun.addEventListener('click', async () => {
   try {
+    const enabledEndpoints = state.endpoints.filter((e) => e.enabled !== false);
+    const { skipped } = dedupeEndpoints(enabledEndpoints);
+    if (skipped > 0) {
+      window.ccmToast?.(`Đã loại bỏ ${skipped} endpoint trùng lặp trước khi chạy`, 'ok');
+    }
+
     stream?.close();
     seenIndexes.clear();
     resetResults();
