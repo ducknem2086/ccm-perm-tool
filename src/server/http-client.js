@@ -82,25 +82,34 @@ function finalize({
       if (!matchedRow) {
         statusPermission = 'empty';
       } else {
-        const m1 = uc1.find((m) => (
+        let m1 = uc1.find((m) => (
           m.endpointSheet === req.sheetName
           && String(m.authProfileName ?? '').trim().toLowerCase() === String(req.authName ?? '').trim().toLowerCase()
         ));
-        const colIdx = m1 ? headers.indexOf(m1.permissionColumn) : -1;
-        const cellVal = colIdx !== -1 ? String(matchedRow[colIdx] ?? '').trim().toLowerCase() : '';
+        let isProfileMatch = false;
 
-        if (cellVal === 'x') {
-          const isProfileMatch = Boolean(
-            m1?.authProfileName
-            && String(req.authName ?? '').trim().toLowerCase() === String(m1.authProfileName).trim().toLowerCase(),
-          );
-          if (isProfileMatch) {
-            statusPermission = status === 200 ? 'true' : 'false';
-          } else {
-            statusPermission = status === 403 ? 'true' : 'false';
-          }
+        if (m1) {
+          isProfileMatch = true;
         } else {
+          m1 = uc1.find((m) => m.endpointSheet === req.sheetName);
+          isProfileMatch = false;
+        }
+
+        if (!m1) {
           statusPermission = 'empty';
+        } else {
+          const colIdx = headers.indexOf(m1.permissionColumn);
+          const cellVal = colIdx !== -1 ? String(matchedRow[colIdx] ?? '').trim().toLowerCase() : '';
+
+          if (cellVal === 'x') {
+            if (isProfileMatch) {
+              statusPermission = status === 200 ? 'true' : 'false';
+            } else {
+              statusPermission = status === 403 ? 'true' : 'false';
+            }
+          } else {
+            statusPermission = 'empty';
+          }
         }
       }
     }

@@ -364,3 +364,44 @@ test('statusPermission giai quyet dung cot mapping va authProfileName khi mot sh
   } finally { await mock.close(); }
 });
 
+test('statusPermission tra ve "true" khi status 403 va profile khong khop (unauthorized profile)', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Unauthorized Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('statusPermission tra ve "false" khi status NOT 403 (200 hoac 500) va profile khong khop (unauthorized profile)', async () => {
+  const mock200 = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec200 = await sendRequest(
+      req({ url: `${mock200.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Unauthorized Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec200.statusPermission, 'false');
+  } finally { await mock200.close(); }
+
+  const mock500 = await startMockServer((_, res) => {
+    res.writeHead(500, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec500 = await sendRequest(
+      req({ url: `${mock500.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Unauthorized Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec500.statusPermission, 'false');
+  } finally { await mock500.close(); }
+});
+
+

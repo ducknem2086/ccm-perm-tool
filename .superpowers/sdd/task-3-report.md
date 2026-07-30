@@ -135,3 +135,68 @@ In `test/http-client.test.js`:
 ℹ duration_ms 395.7791
 ```
 
+## Task 3 Remaining Fix: Fallback / Unauthorized Profile Matching Support
+
+**Fixed Date:** 2026-07-30  
+**Status:** SUCCESS  
+
+### Summary of Changes
+
+1. **Permission Evaluation Logic in `src/server/http-client.js`**:
+   - First searches `uc1` mapping for exact match: `endpointSheet === req.sheetName` AND `authProfileName === req.authName` (case-insensitive & trimmed). If found, `isProfileMatch = true`.
+   - If exact match is not found, falls back to finding any mapping in `uc1` where `endpointSheet === req.sheetName`. If found, `isProfileMatch = false`.
+   - If still not found, sets `statusPermission = 'empty'`.
+   - If found, reads cell value at mapped column index. If cell value is `'x'`:
+     - If `isProfileMatch === true`, returns `'true'` for status 200, else `'false'`.
+     - If `isProfileMatch === false` (unauthorized profile), returns `'true'` for status 403, else `'false'`.
+   - If cell value is not `'x'`, returns `'empty'`.
+
+2. **Unit Tests Added in `test/http-client.test.js`**:
+   - `statusPermission tra ve "true" khi status 403 va profile khong khop (unauthorized profile)`
+   - `statusPermission tra ve "false" khi status NOT 403 (200 hoac 500) va profile khong khop (unauthorized profile)`
+
+### Unit Test Execution Output
+
+```
+node --test test/http-client.test.js
+✔ sendRequest tra ve status va body JSON da parse (29.5026ms)
+✔ sendRequest giu nguyen token day du trong record (5.0619ms)
+✔ sendRequest trich error code tu body loi (3.6702ms)
+✔ sendRequest khong coi body khong phai JSON la loi (6.1964ms)
+✔ sendRequest bao ETIMEDOUT khi qua han (154.3398ms)
+✔ sendRequest bao ECONNREFUSED khi khong ket noi duoc (1.805ms)
+✔ sendRequest khong gui khi con bien chua resolve (0.2251ms)
+✔ sendRequest bao ABORTED khi bi huy tu ngoai (2.3244ms)
+✔ sendRequest chuyen tiep pathTemplate xuong record (3.685ms)
+[ccm] REDIRECTED — GET http://127.0.0.1:63259/api/query
+  status=200 content-type=text/html redirected-to=http://127.0.0.1:63259/login
+  request-headers={"Authorization":"Bearer TOKEN123"}
+✔ bi day ve trang dang nhap thi bao REDIRECTED kem URL chang cuoi (5.3681ms)
+[ccm] NOT_JSON — GET http://127.0.0.1:63262/x
+  status=200 content-type=text/html; charset=utf-8
+  request-headers={"Authorization":"Bearer TOKEN123"}
+✔ server tra HTML ma khong redirect thi bao NOT_JSON (3.2275ms)
+✔ response JSON hop le thi khong gan ma chan doan nao (3.1763ms)
+✔ status loi kem HTML thi khong de NOT_JSON che mat ma loi tu body (2.7333ms)
+✔ body rong khong bi coi la loi NOT_JSON (2.5971ms)
+✔ redirect toi endpoint van tra JSON thi khong bao loi (3.9945ms)
+✔ record mang lai authId va authName tu request (4.7974ms)
+✔ record dat authId/authName rong khi request khong co (3.5407ms)
+✔ statusPermission tra ve null khi khong bat permission check (2.4927ms)
+✔ statusPermission tra ve "true" khi status 200 va profile khop quyen (3.57ms)
+✔ statusPermission tra ve "false" khi status NOT 200 (500) ma profile khop quyen (2.6574ms)
+✔ statusPermission tra ve "empty" khi o quyen khong co "x" (2.4191ms)
+✔ statusPermission tra ve "empty" khi ten API khong co trong file quyen (2.3099ms)
+✔ statusPermission giai quyet dung cot mapping va authProfileName khi mot sheet co nhieu auth profile (4.7827ms)
+✔ statusPermission tra ve "true" khi status 403 va profile khong khop (unauthorized profile) (2.5542ms)
+✔ statusPermission tra ve "false" khi status NOT 403 (200 hoac 500) va profile khong khop (unauthorized profile) (4.437ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 417.1605
+```
+
