@@ -16,6 +16,7 @@ import { initResultTable } from './ui/result-table.js';
 import { initDetailDrawer } from './ui/detail-drawer.js';
 import { formatConfigErrors } from './shared/error-format.js';
 import { initAuthsPanel } from './ui/auths-panel.js';
+import { initPermissionsPanel } from './ui/permissions-panel.js';
 import { initRunFilterBar } from './ui/run-filter-bar.js';
 import { dedupeEndpoints } from './shared/endpoint-dedupe.js';
 
@@ -53,6 +54,7 @@ initDateRange();
 initMsisdnDrawer();
 
 const authsPanel = initAuthsPanel();
+initPermissionsPanel();
 const runFilterBar = initRunFilterBar();
 const endpointsCommon = document.getElementById('inp-endpoints-common');
 const chkCommonEnabled = document.getElementById('chk-common-enabled');

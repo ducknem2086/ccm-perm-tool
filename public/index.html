@@ -129,6 +129,34 @@
                 placeholder="Nhập danh sách endpoint chung (mỗi dòng 1 endpoint, có thể bắt đầu bằng METHOD).&#10;Ví dụ:&#10;/api/v1/health&#10;POST /api/v1/submit" style="height: 120px;"></textarea>
             </section>
 
+            <section class="card" id="card-permissions" style="margin-bottom: var(--sp-md);">
+              <h2 class="card-title">PHÂN QUYỀN (PERMISSIONS)</h2>
+              <div class="field">
+                <span class="label">File Phân Quyền</span>
+                <div style="display: flex; gap: var(--sp-xs); align-items: center;">
+                  <button id="btn-import-permissions" type="button" class="btn btn-secondary btn-sm">📁 Import file</button>
+                  <span id="permissions-file-info" class="hint mono" style="margin: 0; word-break: break-all;">chưa nạp file</span>
+                </div>
+              </div>
+              <div id="permissions-mapping-area" hidden>
+                <div class="field" style="margin-top: var(--sp-sm);">
+                  <span class="label">Usecase 2: Cột Name phân quyền</span>
+                  <select id="sel-permissions-name-col" class="input"></select>
+                </div>
+                <div class="field">
+                  <span class="label">Usecase 2: Sheet endpoints đích</span>
+                  <select id="sel-permissions-target-sheet" class="input">
+                    <option value="all">Tất cả sheet (All)</option>
+                  </select>
+                </div>
+                <div class="field" style="margin-top: var(--sp-sm);">
+                  <span class="label">Usecase 1: Mappings Cột ↔ Sheet ↔ Auth Profile</span>
+                  <div id="permissions-usecase1-table" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-xs);"></div >
+                  <button id="btn-permissions-add-usecase1" type="button" class="btn btn-secondary btn-sm" style="width: 100%; margin-top: var(--sp-xs);">＋ Thêm mapping</button>
+                </div>
+              </div>
+            </section>
+
             <section class="card" id="list-endpoint"></section>
           </div>
         </div>

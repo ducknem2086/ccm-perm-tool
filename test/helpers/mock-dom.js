@@ -8,6 +8,7 @@ export class MockElement {
     this.attributes = {};
     this.listeners = {};
     this.dataset = {};
+    this.style = {};
     this.hidden = false;
     this.value = '';
     this.type = '';
