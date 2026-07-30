@@ -18,6 +18,17 @@ const CONFIG_DEFAULTS = {
   bodyMode: 'none', bodyRaw: '', bodyParams: [],
 };
 
+export function getUniqueSheets(endpoints) {
+  if (!Array.isArray(endpoints)) return [];
+  const set = new Set(endpoints.map((e) => e?.sheetName).filter(Boolean));
+  return Array.from(set);
+}
+
+function filterBySheet(endpoints, selectedSheet) {
+  if (!selectedSheet || selectedSheet === 'all') return endpoints;
+  return endpoints.filter((e) => (e?.sheetName ?? 'Sheet 1') === selectedSheet);
+}
+
 function makeEndpoint(path, sheetName = 'Sheet 1') {
   return {
     id: nextId(), enabled: true, name: '', method: 'GET',
@@ -60,6 +71,72 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   ));
 
   const host = document.getElementById('list-endpoint');
+
+  const sheetSelect = document.createElement('select');
+  sheetSelect.className = 'el-sheet-select';
+
+  function refreshSheetSelect() {
+    const sheets = getUniqueSheets(state.endpoints);
+    sheetSelect.replaceChildren();
+
+    const optAll = document.createElement('option');
+    optAll.value = 'all';
+    optAll.textContent = 'Tất cả sheet (All)';
+    sheetSelect.append(optAll);
+
+    for (const s of sheets) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      sheetSelect.append(opt);
+    }
+    sheetSelect.value = state.selectedSheet ?? 'all';
+  }
+
+  sheetSelect.addEventListener('change', () => {
+    state.selectedSheet = sheetSelect.value;
+    persist();
+    notify();
+  });
+
+  const sheetTabsContainer = document.createElement('div');
+  sheetTabsContainer.className = 'el-sheet-tabs';
+
+  function refreshSheetTabs() {
+    sheetTabsContainer.replaceChildren();
+    const sheets = getUniqueSheets(state.endpoints);
+    if (sheets.length <= 1) {
+      sheetTabsContainer.hidden = true;
+      return;
+    }
+    sheetTabsContainer.hidden = false;
+
+    const activeSheet = state.selectedSheet ?? 'all';
+
+    const allTab = document.createElement('button');
+    allTab.type = 'button';
+    allTab.className = `btn btn-sm ${activeSheet === 'all' ? 'btn-primary' : 'btn-secondary'}`;
+    allTab.textContent = 'Tất cả (All)';
+    allTab.addEventListener('click', () => {
+      state.selectedSheet = 'all';
+      persist();
+      notify();
+    });
+    sheetTabsContainer.append(allTab);
+
+    for (const s of sheets) {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = `btn btn-sm ${activeSheet === s ? 'btn-primary' : 'btn-secondary'}`;
+      tab.textContent = s;
+      tab.addEventListener('click', () => {
+        state.selectedSheet = s;
+        persist();
+        notify();
+      });
+      sheetTabsContainer.append(tab);
+    }
+  }
 
   // Nut check-all (toggle): thay vi luon mac dinh tat ca endpoint deu enabled,
   // cho phep bat/tat hang loat de chi dinh nhanh nhung API nao tao request.
@@ -161,12 +238,21 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     title: 'ENDPOINTS',
     kind: 'endpoint',
     placeholder: '/DataAggregationEngine/query/abc-information/{*}',
-    getItems: () => state.endpoints,
-    setItems: (v) => { state.endpoints = v; persist(); },
+    getItems: () => filterBySheet(state.endpoints, state.selectedSheet),
+    setItems: (v) => {
+      const sheet = state.selectedSheet ?? 'all';
+      if (!sheet || sheet === 'all') {
+        state.endpoints = v;
+      } else {
+        const others = state.endpoints.filter((e) => (e?.sheetName ?? 'Sheet 1') !== sheet);
+        state.endpoints = [...others, ...v];
+      }
+      persist();
+    },
     onChange: notify,
     getValue: (ep) => ep.pathTemplate,
     setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
-    makeItem: makeEndpoint,
+    makeItem: (path) => makeEndpoint(path, (state.selectedSheet && state.selectedSheet !== 'all') ? state.selectedSheet : 'Sheet 1'),
     onImport: handleImport,
     search: {
       placeholder: 'Tìm theo tên hoặc endpoint...',
@@ -174,12 +260,15 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     },
     extraActions,
     renderExtra: (ep, index, row) => {
+      const realIndex = state.endpoints.findIndex((item) => item.id === ep.id || item === ep);
+      const targetIdx = realIndex !== -1 ? realIndex : index;
+
       const check = document.createElement('input');
       check.type = 'checkbox';
       check.checked = ep.enabled !== false;
       check.title = 'Bật/tắt endpoint này';
       check.addEventListener('change', () => {
-        state.endpoints[index] = { ...state.endpoints[index], enabled: check.checked };
+        state.endpoints[targetIdx] = { ...state.endpoints[targetIdx], enabled: check.checked };
         persist();
         notify();
       });
@@ -194,7 +283,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       }
       method.value = ep.method ?? 'GET';
       method.addEventListener('change', () => {
-        state.endpoints[index] = { ...state.endpoints[index], method: method.value };
+        state.endpoints[targetIdx] = { ...state.endpoints[targetIdx], method: method.value };
         persist();
         notify();
       });
@@ -206,7 +295,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       name.placeholder = 'Tên API';
       name.value = ep.name ?? '';
       name.addEventListener('input', () => {
-        state.endpoints[index] = { ...state.endpoints[index], name: name.value };
+        state.endpoints[targetIdx] = { ...state.endpoints[targetIdx], name: name.value };
         persist();
         notify();
       });
@@ -223,7 +312,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
         radio.name = groupName;
         radio.checked = (ep.attachMsisdn !== false) === opt.v;
         radio.addEventListener('change', () => {
-          state.endpoints[index] = { ...state.endpoints[index], attachMsisdn: opt.v };
+          state.endpoints[targetIdx] = { ...state.endpoints[targetIdx], attachMsisdn: opt.v };
           persist();
           notify();
         });
@@ -237,7 +326,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       gearBtn.classList.toggle('has-config', hasCustomConfig(ep));
       gearBtn.textContent = '⚙';
       gearBtn.title = 'Cấu hình riêng cho endpoint này (query, headers, body)';
-      gearBtn.addEventListener('click', () => onOpenConfig?.(index));
+      gearBtn.addEventListener('click', () => onOpenConfig?.(targetIdx));
 
       row.append(check, method, name, msisdnBox, gearBtn);
     },
@@ -251,7 +340,14 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     const row = document.createElement('div');
     row.className = 'el-search-row';
     searchInput.replaceWith(row);
-    row.append(methodFilter.el, searchInput);
+    row.append(sheetSelect, methodFilter.el, searchInput);
+  }
+
+  const bodyEl = host.querySelector('[data-body]');
+  if (typeof host.insertBefore === 'function' && bodyEl) {
+    host.insertBefore(sheetTabsContainer, bodyEl);
+  } else {
+    host.append(sheetTabsContainer);
   }
 
   const checkAllBtn = host.querySelector(`[data-extra-action="${checkAllActionIndex}"]`);
@@ -264,11 +360,20 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       ? 'Bỏ chọn tất cả endpoint (không tạo request)'
       : 'Chọn tất cả endpoint để tạo request';
   }
+
+  refreshSheetSelect();
+  refreshSheetTabs();
   refreshCheckAllBtn();
 
   // Drawer cau hinh rieng ghi thang vao state roi notify() — can render lai
   // de cham "has-config" tren nut gear cap nhat ngay.
-  subscribe(() => { list.render(); methodFilter.render(); refreshCheckAllBtn(); });
+  subscribe(() => {
+    refreshSheetSelect();
+    refreshSheetTabs();
+    list.render();
+    methodFilter.render();
+    refreshCheckAllBtn();
+  });
 
   return list;
 }

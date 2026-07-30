@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { state, defaultConfig, applyConfig } from '../public/js/state.js';
 import { initConnectionPanel, tryLoadToken } from '../public/js/ui/connection-panel.js';
 import { initDateRange } from '../public/js/ui/date-range.js';
-import { initEndpointList } from '../public/js/ui/endpoint-list.js';
+import { initEndpointList, getUniqueSheets } from '../public/js/ui/endpoint-list.js';
 import { initParamTables } from '../public/js/ui/param-table.js';
 
 class MockElement {
@@ -92,9 +92,21 @@ class MockElement {
       inputFile.attributes['data-file'] = '';
 
       actions.append(btnAdd, btnImport, btnClear, inputFile);
+
+      // extraActions (vd nut "Template", "Check all") duoc noi thang vao chuoi
+      // HTML that boi editable-list.js — dung regex doc lai de tao node that.
+      for (const m of html.matchAll(/data-extra-action="(\d+)"/g)) {
+        const btn = new MockElement('button');
+        btn.className = 'btn btn-secondary btn-sm';
+        btn.attributes['data-extra-action'] = m[1];
+        actions.append(btn);
+      }
+
       this.append(h2, body, actions);
     }
   }
+
+  getAttribute(name) { return this.attributes[name]; }
 
   get innerHTML() {
     return '';
@@ -109,6 +121,20 @@ class MockElement {
         this.textContent += node;
       }
     }
+  }
+
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.append(...nodes);
+  }
+
+  replaceWith(node) {
+    const parent = this.parentElement;
+    if (!parent) return;
+    const i = parent.children.indexOf(this);
+    if (i !== -1) parent.children[i] = node;
+    node.parentElement = parent;
+    this.parentElement = null;
   }
 
   querySelector(selector) {
@@ -229,6 +255,10 @@ function setupMockDOM() {
     'sel-header-mode': new MockElement('select', 'sel-header-mode'),
     'inp-header-raw': new MockElement('textarea', 'inp-header-raw'),
     'header-raw-count': new MockElement('p', 'header-raw-count'),
+
+    'tbl-body-common': new MockElement('div', 'tbl-body-common'),
+    'sel-body-mode': new MockElement('select', 'sel-body-mode'),
+    'inp-body-raw': new MockElement('textarea', 'inp-body-raw'),
   };
 
   globalThis.document = {
@@ -406,6 +436,29 @@ test('Endpoint List Panel - custom endpoint objects and checkboxes', () => {
   assert.equal(state.endpoints[1].method, 'POST');
 });
 
+test('Endpoint List Panel - nut check all (toggle) bat/tat het enabled', () => {
+  const { elements } = setupMockDOM();
+  Object.assign(state, defaultConfig());
+  state.endpoints = [
+    { id: 'ep1', enabled: true, method: 'GET', pathTemplate: '/e1', queryParams: [], headers: [] },
+    { id: 'ep2', enabled: false, method: 'POST', pathTemplate: '/e2', queryParams: [], headers: [] },
+  ];
+
+  initEndpointList();
+
+  const host = elements['list-endpoint'];
+  const checkAllBtn = host.querySelector('[data-extra-action="0"]');
+  assert.ok(checkAllBtn, 'phai co nut check-all trong el-actions');
+
+  // Dang co 1 bat 1 tat -> bam lan 1 phai BAT het (khong phai mac dinh check-all).
+  checkAllBtn.dispatchEvent({ type: 'click' });
+  assert.deepEqual(state.endpoints.map((e) => e.enabled), [true, true]);
+
+  // Bam lan 2 (toggle) phai TAT het.
+  checkAllBtn.dispatchEvent({ type: 'click' });
+  assert.deepEqual(state.endpoints.map((e) => e.enabled), [false, false]);
+});
+
 test('Param Tables - initialization, add/delete params, state toggling', () => {
   const { elements } = setupMockDOM();
   Object.assign(state, defaultConfig());
@@ -515,4 +568,32 @@ test('dan noi dung khong co header nao thi bao ro thay vi im lang', () => {
 
   assert.match(elements['header-raw-count'].textContent, /Chưa đọc được header nào/);
   assert.equal(elements['header-raw-count'].classList.contains('status-down'), true);
+});
+
+test('getUniqueSheets tra ve danh sach ten sheet khong trung nhau', () => {
+  const endpoints = [
+    { sheetName: 'Sheet1' },
+    { sheetName: 'Sheet2' },
+    { sheetName: 'Sheet1' },
+    { sheetName: '' },
+    {},
+  ];
+  assert.deepEqual(getUniqueSheets(endpoints), ['Sheet1', 'Sheet2']);
+});
+
+test('Endpoint list - loc theo selectedSheet khi dropdown hoac tab doi', () => {
+  setupMockDOM();
+  Object.assign(state, defaultConfig(), {
+    selectedSheet: 'all',
+    endpoints: [
+      { id: 'ep1', enabled: true, pathTemplate: '/api1', sheetName: 'Sheet A' },
+      { id: 'ep2', enabled: true, pathTemplate: '/api2', sheetName: 'Sheet B' },
+    ],
+  });
+
+  initEndpointList();
+  assert.equal(state.selectedSheet, 'all');
+
+  state.selectedSheet = 'Sheet A';
+  assert.equal(state.selectedSheet, 'Sheet A');
 });
