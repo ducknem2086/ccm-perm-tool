@@ -107,8 +107,8 @@
                 <p class="hint">Áp dụng cho endpoint đang để Body = None. Endpoint tự khai Body riêng thì dùng cấu hình riêng, không cộng dồn với body chung.</p>
               </section>
 
-              <details class="card">
-                <summary class="card-title">ADVANCED</summary>
+              <section class="card">
+                <h2 class="card-title">ADVANCED</h2>
                 <div class="field-row">
                   <label class="field"><span class="label">Số luồng</span><input id="inp-worker-count" class="input mono" type="number" min="1" max="16" value="4" /></label>
                   <label class="field"><span class="label">Timeout (ms)</span><input id="inp-timeout" class="input mono" type="number" min="1000" step="1000" value="30000" /></label>
@@ -119,7 +119,7 @@
                   <input id="inp-error-paths" class="input mono" type="text" value="errorCode, error_code, code, error.code" spellcheck="false" />
                 </label>
                 <label class="check"><input id="chk-dedupe" type="checkbox" checked /> Loại trùng khi import</label>
-              </details>
+              </section>
             </div>
 
             <section class="card" id="list-endpoint"></section>
