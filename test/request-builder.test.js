@@ -859,6 +859,17 @@ test('buildRequests loc theo selectedSheet va cong them commonEndpoints', () => 
   assert.equal(reqs[2].url, 'https://abc.vn/common-get?fromDate=25032026&toDate=01042026');
 });
 
+test('buildRequests cho endpoint chung khong co msisdn placeholder chay 1 request duy nhat', () => {
+  const cfg = baseConfig({
+    selectedSheet: 'Sheet1',
+    endpoints: [],
+    commonEndpoints: 'GET /api/v1/health'
+  });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].url, 'https://abc.vn/api/v1/health');
+});
+
 test('validateConfig cho phep chi co commonEndpoints duoc nhap', () => {
   const cfg = baseConfig({
     endpoints: [],

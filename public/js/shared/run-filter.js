@@ -1,3 +1,5 @@
+import { hasMsisdnPlaceholder } from './endpoint-path.js';
+
 // Ba truc loc dung chung cho ca nut dem o client lan buildRequests o server.
 // Quy uoc xuyen suot: danh sach dieu kien rong nghia la lay tat ca.
 
@@ -14,13 +16,20 @@ export function parseCommonEndpoints(text) {
         method = parts[0].toUpperCase();
         pathTemplate = parts.slice(1).join(' ');
       }
+      if (/^https?:\/\//i.test(pathTemplate)) {
+        try {
+          const u = new URL(pathTemplate);
+          pathTemplate = u.pathname + u.search + u.hash;
+        } catch {}
+      }
       return {
         id: `common_${idx}`,
         enabled: true,
         name: `Common ${idx + 1}`,
         method,
         pathTemplate,
-        attachMsisdn: false,
+        attachMsisdn: hasMsisdnPlaceholder(pathTemplate),
+        attachCommonQuery: true,
         sheetName: 'Common',
         queryParams: [],
         headers: [],
