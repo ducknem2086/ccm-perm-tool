@@ -48,10 +48,6 @@ function fromRecord(rec) {
   };
 }
 
-function allEnabled(endpoints) {
-  return endpoints.length > 0 && endpoints.every((e) => e.enabled !== false);
-}
-
 // "Da co cau hinh rieng" duoc tinh theo mode dang chon — kv thi xet dong bat
 // trong bang, raw thi xet chuoi co rong hay khong.
 function hasCustomConfig(ep) {
@@ -140,14 +136,35 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
 
   // Nut check-all (toggle): thay vi luon mac dinh tat ca endpoint deu enabled,
   // cho phep bat/tat hang loat de chi dinh nhanh nhung API nao tao request.
-  function setAllEnabled(value) {
-    state.endpoints = state.endpoints.map((e) => ({ ...e, enabled: value }));
+  function getEndpointsInCurrentTab() {
+    const selected = state.selectedSheet ?? 'all';
+    if (!selected || selected === 'all') return state.endpoints;
+    return state.endpoints.filter((e) => (e.sheetName ?? 'Sheet 1') === selected);
+  }
+
+  function allEnabledInCurrentTab() {
+    const list = getEndpointsInCurrentTab();
+    return list.length > 0 && list.every((e) => e.enabled !== false);
+  }
+
+  function setAllEnabledInCurrentTab(value) {
+    const selected = state.selectedSheet ?? 'all';
+    if (!selected || selected === 'all') {
+      state.endpoints = state.endpoints.map((e) => ({ ...e, enabled: value }));
+    } else {
+      state.endpoints = state.endpoints.map((e) => {
+        if ((e.sheetName ?? 'Sheet 1') === selected) {
+          return { ...e, enabled: value };
+        }
+        return e;
+      });
+    }
     persist();
     notify();
   }
 
   function toggleAllEnabled() {
-    setAllEnabled(!allEnabled(state.endpoints));
+    setAllEnabledInCurrentTab(!allEnabledInCurrentTab());
   }
 
   function showErrors(errors) {
@@ -354,11 +371,12 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
 
   function refreshCheckAllBtn() {
     if (!checkAllBtn) return;
-    const on = allEnabled(state.endpoints);
+    const on = allEnabledInCurrentTab();
+    const isSingleTab = state.selectedSheet && state.selectedSheet !== 'all';
     checkAllBtn.textContent = on ? '☐ Bỏ chọn tất cả' : '☑ Chọn tất cả';
     checkAllBtn.title = on
-      ? 'Bỏ chọn tất cả endpoint (không tạo request)'
-      : 'Chọn tất cả endpoint để tạo request';
+      ? (isSingleTab ? `Bỏ chọn tất cả endpoint trong ${state.selectedSheet}` : 'Bỏ chọn tất cả endpoint')
+      : (isSingleTab ? `Chọn tất cả endpoint trong ${state.selectedSheet}` : 'Chọn tất cả endpoint');
   }
 
   refreshSheetSelect();

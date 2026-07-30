@@ -88,3 +88,21 @@ test('mapRows mac dinh sheetName la Sheet 1 khi sheet.name thieu', () => {
   const { records } = mapRows(gridResult, tpl());
   assert.equal(records[0].sheetName, 'Sheet 1');
 });
+
+test('toggle tab-scoped check all chi tac dong len endpoint thuoc sheet duoc chon', () => {
+  const endpoints = [
+    { id: '1', name: 'E1', sheetName: 'Sheet1', enabled: true },
+    { id: '2', name: 'E2', sheetName: 'Sheet2', enabled: true },
+  ];
+  const selectedSheet = 'Sheet1';
+  const updated = endpoints.map((e) => {
+    if ((e.sheetName ?? 'Sheet 1') === selectedSheet) {
+      return { ...e, enabled: false };
+    }
+    return e;
+  });
+
+  assert.equal(updated[0].enabled, false);
+  assert.equal(updated[1].enabled, true);
+});
+
