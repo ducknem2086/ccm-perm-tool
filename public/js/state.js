@@ -43,6 +43,11 @@ export function defaultConfig() {
     globalBodyMode: 'none',
     globalBodyParams: [],
     globalBodyRaw: '',
+    permissionFile: { filename: '', headers: [], rows: [] },
+    permissionMapping: {
+      usecase1: [],
+      usecase2: { permissionColumn: '', targetSheet: 'all' }
+    },
     advanced: {
       workerCount: 4,
       timeoutMs: 30000,
@@ -111,6 +116,15 @@ export function load() {
     dateRange: { ...base.dateRange, ...(saved.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(saved.advanced ?? {}) },
     runFilter: { ...base.runFilter, ...(saved.runFilter ?? {}) },
+    permissionFile: { ...base.permissionFile, ...(saved.permissionFile ?? {}) },
+    permissionMapping: {
+      ...base.permissionMapping,
+      ...(saved.permissionMapping ?? {}),
+      usecase2: {
+        ...base.permissionMapping?.usecase2,
+        ...(saved.permissionMapping?.usecase2 ?? {})
+      }
+    }
   });
   migrateAuths(state, saved);
 
@@ -127,6 +141,15 @@ export function applyConfig(incoming) {
     dateRange: { ...base.dateRange, ...(incoming.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(incoming.advanced ?? {}) },
     runFilter: { ...base.runFilter, ...(incoming.runFilter ?? {}) },
+    permissionFile: { ...base.permissionFile, ...(incoming.permissionFile ?? {}) },
+    permissionMapping: {
+      ...base.permissionMapping,
+      ...(incoming.permissionMapping ?? {}),
+      usecase2: {
+        ...base.permissionMapping?.usecase2,
+        ...(incoming.permissionMapping?.usecase2 ?? {})
+      }
+    }
   });
   migrateAuths(state, incoming);
 

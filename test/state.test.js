@@ -53,10 +53,19 @@ test('defaultConfig tra ve cau hinh mac dinh dung chuuan', () => {
     { key: 'toDate', value: '{{toDate}}', enabled: true },
   ]);
   assert.deepEqual(cfg.globalHeaders, []);
+  assert.equal(cfg.globalBodyMode, 'none');
+  assert.deepEqual(cfg.globalBodyParams, []);
+  assert.equal(cfg.globalBodyRaw, '');
   assert.equal(cfg.advanced.workerCount, 4);
   assert.equal(cfg.advanced.timeoutMs, 30000);
   assert.deepEqual(cfg.advanced.errorCodePaths, ['errorCode', 'error_code', 'code', 'error.code']);
   assert.equal(cfg.advanced.dedupeOnImport, true);
+});
+
+test('defaultConfig has permission configs', () => {
+  const config = defaultConfig();
+  assert.deepEqual(config.permissionFile, { filename: '', headers: [], rows: [] });
+  assert.deepEqual(config.permissionMapping, { usecase1: [], usecase2: { permissionColumn: '', targetSheet: 'all' } });
 });
 
 test('runId getter va setter hoat dong', () => {
@@ -259,3 +268,32 @@ test('applyConfig migrate config cu giong load', () => {
   assert.equal(state.token, undefined);
 });
 
+test('load va applyConfig merge safe permissionFile va permissionMapping', () => {
+  setupMockLocalStorage();
+  applyConfig({
+    permissionFile: { filename: 'test.xlsx', headers: ['a'], rows: [['1']] },
+    permissionMapping: {
+      usecase1: ['colA'],
+      usecase2: { permissionColumn: 'colB', targetSheet: 'Sheet1' }
+    }
+  });
+
+  assert.equal(state.permissionFile.filename, 'test.xlsx');
+  assert.deepEqual(state.permissionFile.headers, ['a']);
+  assert.deepEqual(state.permissionMapping.usecase1, ['colA']);
+  assert.equal(state.permissionMapping.usecase2.permissionColumn, 'colB');
+  assert.equal(state.permissionMapping.usecase2.targetSheet, 'Sheet1');
+
+  // Test load with partial config
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    permissionMapping: {
+      usecase2: { permissionColumn: 'colC' }
+    }
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.permissionFile.filename, '');
+  assert.equal(state.permissionMapping.usecase2.permissionColumn, 'colC');
+  assert.equal(state.permissionMapping.usecase2.targetSheet, 'all');
+});
