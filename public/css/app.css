@@ -75,7 +75,7 @@ body { display: flex; flex-direction: column; }
   max-height: calc(100vh - var(--topbar-h) - 45px - 60px);
 }
 .col { display: flex; flex-direction: column; gap: var(--sp-md); min-width: 0; }
-.col-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-md); align-items: start; }
+.col-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sp-md); align-items: start; }
 @media (max-width: 1280px) {
   .input-grid { grid-template-columns: 1fr; max-height: none; }
   .col-row { grid-template-columns: 1fr; }
@@ -122,6 +122,13 @@ details.card > summary.card-title { cursor: pointer; list-style: revert; }
 .input-sm { height: 28px; font-size: var(--fs-sm); }
 select.input { padding: 0 var(--sp-xs); }
 .el-search { flex: 0 0 auto; width: 200px; text-transform: none; letter-spacing: normal; font-weight: 400; }
+
+.el-search-row {
+  display: flex; align-items: center; gap: var(--sp-sm);
+  text-transform: none; letter-spacing: normal; font-weight: 400;
+}
+.el-method-filter { display: flex; align-items: center; gap: 6px; }
+.el-method-filter .rf-method { display: inline-flex; align-items: center; gap: 3px; font-size: var(--fs-sm); color: var(--muted); }
 
 /* ---------- buttons ---------- */
 .btn {
