@@ -20,33 +20,60 @@ function cellToString(cell) {
   return String(cell);
 }
 
-export async function parseXlsxGrid(buffer) {
+export async function parseXlsxGrid(buffer, { targetSheets } = {}) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
-  const ws = wb.worksheets[0];
-  if (!ws) return [];
-  const out = [];
-  ws.eachRow((row) => {
-    const cells = [];
-    // row.cellCount bo qua o trong o cuoi dong, nhung du de doc het cac cot co du lieu.
-    for (let i = 1; i <= row.cellCount; i += 1) cells.push(cellToString(row.getCell(i).value).trim());
-    out.push(cells);
+
+  let worksheets = wb.worksheets;
+  if (Array.isArray(targetSheets) && targetSheets.length > 0) {
+    const set = new Set(targetSheets);
+    worksheets = worksheets.filter((ws) => set.has(ws.name));
+  }
+
+  if (worksheets.length === 0) worksheets = wb.worksheets.slice(0, 1);
+
+  const sheets = worksheets.map((ws) => {
+    const out = [];
+    ws.eachRow((row) => {
+      const cells = [];
+      for (let i = 1; i <= row.cellCount; i += 1) {
+        cells.push(cellToString(row.getCell(i).value).trim());
+      }
+      out.push(cells);
+    });
+
+    const nonEmpty = out.filter((row) => row.some((c) => c !== ''));
+    if (nonEmpty.length === 0) return { name: ws.name, headers: [], rows: [] };
+    return { name: ws.name, headers: nonEmpty[0], rows: nonEmpty.slice(1) };
   });
-  return out;
+
+  return sheets;
 }
 
-export async function parseGrid({ filename, buffer }) {
+export async function parseGrid({ filename, buffer, targetSheets }) {
   const ext = String(filename ?? '').toLowerCase().split('.').pop();
+
+  if (ext === 'xlsx' || ext === 'xls') {
+    const sheets = await parseXlsxGrid(buffer, { targetSheets });
+    const first = sheets[0] ?? { headers: [], rows: [] };
+    return { sheets, headers: first.headers, rows: first.rows };
+  }
 
   let grid;
   if (ext === 'txt') grid = parseTxtGrid(buffer.toString('utf8'));
   else if (ext === 'csv') grid = parseCsvGrid(buffer.toString('utf8'));
-  else if (ext === 'xlsx' || ext === 'xls') grid = await parseXlsxGrid(buffer);
   else throw new Error(`Đuôi file không hỗ trợ: .${ext}`);
 
   const nonEmpty = grid.filter((row) => row.some((c) => c !== ''));
-  if (nonEmpty.length === 0) return { headers: [], rows: [] };
-  return { headers: nonEmpty[0], rows: nonEmpty.slice(1) };
+  const parsed = nonEmpty.length === 0
+    ? { headers: [], rows: [] }
+    : { headers: nonEmpty[0], rows: nonEmpty.slice(1) };
+
+  return {
+    sheets: [{ name: 'Default', headers: parsed.headers, rows: parsed.rows }],
+    headers: parsed.headers,
+    rows: parsed.rows,
+  };
 }
 
 export function parseTxt(text) {
@@ -58,7 +85,13 @@ export function parseCsv(text) {
 }
 
 export async function parseXlsx(buffer) {
-  return (await parseXlsxGrid(buffer)).map((row) => row[0] ?? '');
+  const sheets = await parseXlsxGrid(buffer);
+  const rows = [];
+  for (const s of sheets) {
+    if (s.headers.length) rows.push(s.headers[0]);
+    for (const r of s.rows) rows.push(r[0] ?? '');
+  }
+  return rows;
 }
 
 function stripHeaderRow(values, kind) {

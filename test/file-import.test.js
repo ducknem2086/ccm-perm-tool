@@ -103,12 +103,34 @@ test('parseTxtGrid coi moi dong la mot o', () => {
   assert.deepEqual(parseTxtGrid('/a\n/b'), [['/a'], ['/b']]);
 });
 
+async function multiSheetXlsxBuffer(sheetDataMap) {
+  const wb = new ExcelJS.Workbook();
+  for (const [sheetName, rows] of Object.entries(sheetDataMap)) {
+    const ws = wb.addWorksheet(sheetName);
+    for (const r of rows) ws.addRow(r);
+  }
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
 test('parseXlsxGrid giu du moi cot', async () => {
   const buffer = await xlsxBuffer([['name', 'method', 'endpoint'], ['Tra cuu', 'GET', '/query/abc/{*}']]);
   assert.deepEqual(
     await parseXlsxGrid(buffer),
-    [['name', 'method', 'endpoint'], ['Tra cuu', 'GET', '/query/abc/{*}']],
+    [{ name: 'Sheet1', headers: ['name', 'method', 'endpoint'], rows: [['Tra cuu', 'GET', '/query/abc/{*}']] }],
   );
+});
+
+test('parseGrid doc tat ca cac sheet trong file xlsx', async () => {
+  const buffer = await multiSheetXlsxBuffer({
+    Sheet1: [['name', 'method', 'endpoint'], ['Api 1', 'GET', '/a/{*}']],
+    Sheet2: [['name', 'method', 'endpoint'], ['Api 2', 'POST', '/b/{*}']],
+  });
+  const res = await parseGrid({ filename: 'multi.xlsx', buffer });
+  assert.equal(res.sheets.length, 2);
+  assert.equal(res.sheets[0].name, 'Sheet1');
+  assert.deepEqual(res.sheets[0].rows, [['Api 1', 'GET', '/a/{*}']]);
+  assert.equal(res.sheets[1].name, 'Sheet2');
+  assert.deepEqual(res.sheets[1].rows, [['Api 2', 'POST', '/b/{*}']]);
 });
 
 test('parseGrid tach dong dau lam header', async () => {
