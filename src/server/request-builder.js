@@ -1,11 +1,16 @@
 import { resolve } from './variables.js';
 import { validateRange, formatDate } from './date-format.js';
 import { isEndpointPath } from '../../public/js/shared/validators.js';
-import { splitTemplate, parseInlineQuery, hasMsisdnPlaceholder } from '../../public/js/shared/endpoint-path.js';
+import {
+  splitTemplate, parseInlineQuery, hasMsisdnPlaceholder, parseRawHeaders,
+} from '../../public/js/shared/endpoint-path.js';
+import { filterEndpoints, filterMsisdns, selectedAuths } from '../../public/js/shared/run-filter.js';
+import { authHeaderPairs } from '../../public/js/shared/auth-utils.js';
 
 // Endpoint cu chua co field nay thi mac dinh la co gan msisdn.
 const wantsMsisdn = (ep) => ep?.attachMsisdn !== false;
 const activeOnly = (list) => (list ?? []).filter((p) => p.enabled !== false);
+const NO_BODY_METHODS = new Set(['GET', 'HEAD']);
 
 export function validateConfig(config) {
   const errors = [];
@@ -33,22 +38,99 @@ export function validateConfig(config) {
     if (wantsMsisdn(ep) && msisdns.length === 0) {
       errors.push({ field: `endpoint:${ep.id}`, message: 'Endpoint cần msisdn nhưng danh sách MSISDN đang rỗng' });
     }
+
+    const bodyMode = ep.bodyMode ?? 'none';
+    if (bodyMode === 'json' && String(ep.bodyRaw ?? '').trim() !== '') {
+      try {
+        JSON.parse(ep.bodyRaw);
+      } catch (err) {
+        errors.push({ field: `endpoint:${ep.id}`, message: `Body JSON của endpoint không hợp lệ: ${err.message}` });
+      }
+    }
+    if (bodyMode !== 'none' && NO_BODY_METHODS.has((ep.method || 'GET').toUpperCase())) {
+      errors.push({
+        field: `endpoint:${ep.id}`,
+        message: `Method ${(ep.method || 'GET').toUpperCase()} không gửi được body. Đổi method hoặc đặt Body về None.`,
+      });
+    }
   }
 
   return errors;
 }
 
-// Thu tu chen quyet dinh ca thu tu trong URL lan do uu tien: cai vao truoc thang.
-function mergePairs(inlineList, endpointList, globalList) {
+// Danh sach truyen vao phai da duoc loc active san — ham chi lo thu tu uu
+// tien, danh sach dau tien thang khi trung key.
+function mergePairs(...lists) {
   const map = new Map();
   const put = (k, v) => { if (k && !map.has(k)) map.set(k, v); };
-  for (const p of inlineList ?? []) put(p.key, p.value);
-  for (const p of activeOnly(endpointList)) put(p.key, p.value);
-  for (const p of activeOnly(globalList)) put(p.key, p.value);
+  for (const list of lists) {
+    for (const p of list ?? []) put(p.key, p.value);
+  }
   return map;
 }
 
-function buildOne({ config, endpoint, msisdn, scope, index }) {
+// Cau hinh rieng cua endpoint: mode 'raw' la chuoi nguoi dung go tay, mode
+// 'kv' la bang key-value — hai nguon luu song song, chi nguon khop mode duoc dung.
+function effectiveQueryPairs(ep) {
+  return (ep.queryMode ?? 'kv') === 'raw'
+    ? parseInlineQuery(ep.queryRaw ?? '')
+    : activeOnly(ep.queryParams);
+}
+
+function effectiveHeaderPairs(ep) {
+  return (ep.headerMode ?? 'kv') === 'raw'
+    ? parseRawHeaders(ep.headerRaw ?? '')
+    : activeOnly(ep.headers);
+}
+
+// HEADERS chung cung co 2 kieu nhap: bang key-value, hoac o dan nguyen lenh cURL.
+function globalHeaderPairs(config) {
+  return (config.globalHeaderMode ?? 'kv') === 'raw'
+    ? parseRawHeaders(config.globalHeaderRaw ?? '')
+    : activeOnly(config.globalHeaders);
+}
+
+// Body khong tron voi cau hinh chung — endpoint quyet dinh hoan toan.
+function buildBody(ep, take) {
+  const mode = ep.bodyMode ?? 'none';
+  if (mode === 'none') return null;
+  if (mode === 'kv') {
+    const obj = {};
+    for (const p of activeOnly(ep.bodyParams)) obj[take(p.key)] = take(p.value);
+    return JSON.stringify(obj);
+  }
+  return take(ep.bodyRaw ?? '');
+}
+
+const CONTENT_TYPE_BY_BODY_MODE = { json: 'application/json', kv: 'application/json', text: 'text/plain' };
+
+// Request di tu Node nen khong co cac header trinh duyet tu gan. Thieu chung
+// thi API/WAF phia sau co the tra ve trang HTML chan thay vi JSON — dac biet
+// la User-Agent 'node' va Accept '*/*' mac dinh cua undici.
+const BROWSER_HEADERS = {
+  Accept: 'application/json, text/plain, */*',
+  'Accept-Language': 'en,vi;q=0.9',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    + ' (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+  'Sec-Fetch-Dest': 'empty',
+  'Sec-Fetch-Mode': 'cors',
+  'Sec-Fetch-Site': 'cross-site',
+  'Sec-Fetch-Storage-Access': 'active',
+  'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+};
+
+// Nguoi dung tu khai header cung ten (o HEADERS chung hoac rieng) thi ton
+// trong khai bao do — mac dinh chi lap vao cho con trong.
+function putIfAbsent(headers, name, value) {
+  if (!value) return;
+  const lower = name.toLowerCase();
+  if (Object.keys(headers).some((k) => k.toLowerCase() === lower)) return;
+  headers[name] = value;
+}
+
+function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
   const missing = new Set();
   const take = (tpl) => {
     const r = resolve(tpl, scope);
@@ -62,18 +144,40 @@ function buildOne({ config, endpoint, msisdn, scope, index }) {
     path = `${path.replace(/\/+$/, '')}/${msisdn}`;
   }
 
+  // Uu tien: cau hinh rieng endpoint > query dinh sau {*} trong path > cau hinh chung.
   const queryParams = {};
-  for (const [k, v] of mergePairs(parseInlineQuery(inlineQuery), endpoint.queryParams, config.globalQueryParams)) {
+  for (const [k, v] of mergePairs(
+    effectiveQueryPairs(endpoint), parseInlineQuery(inlineQuery), activeOnly(config.globalQueryParams),
+  )) {
     queryParams[take(k)] = take(v);
   }
 
   const headers = {};
-  for (const [k, v] of mergePairs([], endpoint.headers, config.globalHeaders)) {
+  for (const [k, v] of mergePairs(
+    effectiveHeaderPairs(endpoint), authHeaderPairs(auth), globalHeaderPairs(config),
+  )) {
     headers[take(k)] = take(v);
   }
 
-  const hasAuth = Object.keys(headers).some((k) => k.toLowerCase() === 'authorization');
-  if (config.token && !hasAuth) headers.Authorization = `Bearer ${config.token}`;
+  // Ba credential nay het han theo phien dang nhap nen nam o profile rieng,
+  // khong nhet vao BROWSER_HEADERS.
+  putIfAbsent(headers, 'Authorization', auth?.token ? `Bearer ${auth.token}` : '');
+  putIfAbsent(headers, 'Cookie', auth?.cookie);
+  putIfAbsent(headers, 'refresh_token', auth?.refreshToken);
+
+  const body = buildBody(endpoint, take);
+  putIfAbsent(headers, 'Content-Type', CONTENT_TYPE_BY_BODY_MODE[endpoint.bodyMode ?? 'none']);
+
+  // Origin la origin cua chinh tool, khong phai domain dich — giong app that
+  // goi API cross-site. Referer phai co dau '/' cuoi nhu trinh duyet gui.
+  const origin = String(config.origin ?? '').trim().replace(/\/+$/, '');
+  putIfAbsent(headers, 'Origin', origin);
+  putIfAbsent(headers, 'Referer', origin ? `${origin}/` : '');
+  // App that gui URL trang dang xem. Khong doan duoc route cu the nen dung
+  // origin lam gia tri toi thieu; khai de o HEADERS neu API soi ky hon.
+  putIfAbsent(headers, 'X-Current-Url', origin ? `${origin}/` : '');
+
+  for (const [k, v] of Object.entries(BROWSER_HEADERS)) putIfAbsent(headers, k, v);
 
   const base = String(config.domain).trim().replace(/\/+$/, '');
   const suffix = path.startsWith('/') ? path : `/${path}`;
@@ -83,6 +187,8 @@ function buildOne({ config, endpoint, msisdn, scope, index }) {
     index,
     endpointId: endpoint.id,
     endpointName: endpoint.name ?? '',
+    authId: auth?.id ?? '',
+    authName: auth?.name ?? '',
     pathTemplate: endpoint.pathTemplate,
     msisdn: msisdn ?? null,
     method: (endpoint.method || 'GET').toUpperCase(),
@@ -90,7 +196,7 @@ function buildOne({ config, endpoint, msisdn, scope, index }) {
     headers,
     queryParams,
     pathParams: msisdn ? { msisdn } : {},
-    body: endpoint.body ?? null,
+    body,
     unresolved: [...missing],
   };
 }
@@ -105,17 +211,27 @@ export function buildRequests(config) {
     toDate: formatDate(range.to, fmt),
   };
 
+  const runFilter = config.runFilter ?? {};
+  // Loc mot lan roi dung lai — de trong vong lap thi filterMsisdns chay lai
+  // auths.length x endpoints.length lan vo ich.
+  const auths = selectedAuths(config.auths, runFilter);
+  const eps = filterEndpoints(config.endpoints, runFilter);
+  const msisdns = filterMsisdns(config.msisdns, runFilter);
+
   const requests = [];
   let index = 0;
 
-  for (const endpoint of (config.endpoints ?? []).filter((e) => e.enabled)) {
-    const list = wantsMsisdn(endpoint) ? (config.msisdns ?? []) : [null];
-    for (const msisdn of list) {
-      index += 1;
-      requests.push(buildOne({
-        config, endpoint, msisdn, index,
-        scope: { ...baseScope, msisdn },
-      }));
+  // Auth o vong ngoai cung: request cua cung mot profile nam lien khoi.
+  for (const auth of auths) {
+    for (const endpoint of eps) {
+      const list = wantsMsisdn(endpoint) ? msisdns : [null];
+      for (const msisdn of list) {
+        index += 1;
+        requests.push(buildOne({
+          config, auth, endpoint, msisdn, index,
+          scope: { ...baseScope, msisdn },
+        }));
+      }
     }
   }
 

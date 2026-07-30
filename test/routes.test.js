@@ -36,7 +36,8 @@ test('GET /api/health tra ve ok', async () => {
 function config(base) {
   return {
     domain: base,
-    token: 'TOKEN123',
+    auths: [{ id: 'a1', name: 'Default', mode: 'fields', token: 'TOKEN123', cookie: '', refreshToken: '', curlRaw: '' }],
+    runFilter: { methods: [], msisdnPatterns: [], authIds: [] },
     dateRange: { from: '25/03/2026', to: '01/04/2026' },
     dateFormat: 'ddMMyyyy',
     msisdns: ['0912345678', '0913000111'],
