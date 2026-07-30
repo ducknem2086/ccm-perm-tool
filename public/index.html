@@ -18,6 +18,9 @@
 
     <div class="tabs" role="tablist" aria-label="Khu vực làm việc">
       <button id="tab-input" class="tab is-active" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">INPUT</button>
+      <button id="tab-auths" class="tab" role="tab" aria-controls="panel-auths" aria-selected="false" tabindex="-1">
+        AUTHS <span id="tab-auths-badge" class="tab-badge">1</span>
+      </button>
       <button id="tab-output" class="tab" role="tab" aria-controls="panel-output" aria-selected="false" tabindex="-1">
         OUTPUT <span id="tab-output-badge" class="tab-badge" hidden>0</span>
       </button>
@@ -31,12 +34,22 @@
               <h2 class="card-title">CONNECTION</h2>
               <label class="field">
                 <span class="label">Domain</span>
-                <input id="inp-domain" class="input" type="text" placeholder="https://abc.vn" spellcheck="false" />
+                <input id="inp-domain" class="input" type="text" placeholder="https://api-abc.vn" spellcheck="false" />
               </label>
+              <p class="hint">Phải là host của <b>API</b>, thường có tiền tố <code>api-</code>. Domain của trang web (không có <code>api-</code>) trả về HTML cho mọi path — gây lỗi NOT_JSON.</p>
               <label class="field">
                 <span class="label">Bearer token</span>
                 <input id="inp-token" class="input mono" type="text" placeholder="dán token vào đây" spellcheck="false" />
               </label>
+              <label class="field">
+                <span class="label">Cookie</span>
+                <input id="inp-cookie" class="input mono" type="text" placeholder="BIGipServerpool_...=...; REDIRECT_AFTER_LOGIN=..." spellcheck="false" />
+              </label>
+              <label class="field">
+                <span class="label">Refresh token <span class="hint" style="display:inline">(hiếm khi cần)</span></span>
+                <input id="inp-refresh-token" class="input mono" type="text" placeholder="để trống trừ khi API cụ thể đòi header refresh_token" spellcheck="false" />
+              </label>
+              <p class="hint">Lấy ở DevTools ▸ Network ▸ request gọi API (không phải request điều hướng trang) ▸ chuột phải ▸ Copy ▸ <b>Copy as fetch</b> — chính xác hơn Copy as cURL vì chỉ gồm header thật sự được gửi. Cookie thường chỉ là cookie hạ tầng (load balancer, redirect hint) — <b>không</b> chứa access_token/id_token, vì hai cái đó đã có ở Bearer token.</p>
             </section>
 
             <section class="card" id="card-msisdn">
@@ -82,8 +95,17 @@
           <div class="col col-wide">
             <div class="col-row">
               <section class="card">
-                <h2 class="card-title">HEADERS <button class="btn-icon" data-add-param="header" type="button" title="Thêm dòng">＋</button></h2>
+                <h2 class="card-title">
+                  <span>HEADERS <button class="btn-icon" data-add-param="header" type="button" title="Thêm dòng">＋</button></span>
+                  <select id="sel-header-mode" class="input input-sm" title="Cách nhập headers chung">
+                    <option value="kv">Key-value</option>
+                    <option value="raw">Dán cURL / text</option>
+                  </select>
+                </h2>
                 <div id="tbl-headers" class="param-table"></div>
+                <textarea id="inp-header-raw" class="input mono ed-textarea" spellcheck="false" hidden
+                  placeholder="Dán nguyên lệnh Copy as cURL vào đây — dòng URL và các cờ khác tự bị bỏ qua.&#10;Hoặc gõ tay mỗi dòng một header:&#10;Accept: application/json&#10;refresh_token: eyJ..."></textarea>
+                <p id="header-raw-count" class="hint" hidden></p>
                 <p class="hint">Authorization được tự thêm từ token ở trên, trừ khi bạn tự khai đè ở đây.</p>
               </section>
 
@@ -113,6 +135,15 @@
         </div>
       </section>
 
+      <section id="panel-auths" class="panel" role="tabpanel" aria-labelledby="tab-auths" tabindex="0" hidden>
+        <div class="auths-head">
+          <h2 class="card-title">AUTHS</h2>
+          <button id="btn-add-auth" type="button" class="btn btn-secondary btn-sm">＋ Thêm profile</button>
+        </div>
+        <div id="auths-list" class="auths-list"></div>
+        <p class="hint">Mỗi profile là một bộ credential. Filter trước RUN ALL chọn profile nào sẽ chạy; không chọn gì thì chạy tất cả.</p>
+      </section>
+
       <section id="panel-output" class="panel" role="tabpanel" aria-labelledby="tab-output" tabindex="0" hidden>
         <div class="runbar">
           <div class="runbar-left">
@@ -122,14 +153,14 @@
           <div class="runbar-right">
             <button id="btn-cancel" class="btn btn-secondary" type="button" disabled>■ Dừng</button>
             <fieldset class="token-radio">
-              <legend>Token trong file</legend>
+              <legend>Token/Cookie trong file</legend>
               <label><input id="radio-token-include" type="radio" name="tokenmode" value="include" /> Kèm đầy đủ</label>
               <label><input id="radio-token-mask" type="radio" name="tokenmode" value="mask" checked /> Che</label>
             </fieldset>
             <button id="btn-export-excel" class="btn btn-secondary" type="button" disabled>⬇ Export Excel</button>
           </div>
         </div>
-        <p id="token-warning" class="warning" hidden>File sẽ chứa bearer token còn hạn — cân nhắc trước khi chia sẻ.</p>
+        <p id="token-warning" class="warning" hidden>File sẽ chứa bearer token và cookie session còn hạn — cân nhắc trước khi chia sẻ.</p>
 
         <div class="filterbar">
           <label class="filter grow"><span>🔍</span><input id="flt-msisdn" class="input input-sm mono" type="search" placeholder="tìm theo msisdn" /></label>
@@ -145,6 +176,7 @@
     <aside id="drawer" class="drawer" hidden aria-hidden="true" aria-label="Chi tiết request"></aside>
     <aside id="msisdn-drawer" class="drawer msisdn-drawer" hidden aria-hidden="true" aria-label="Quản lý danh sách MSISDN"></aside>
     <aside id="template-drawer" class="drawer" hidden aria-hidden="true" aria-label="Template map cột khi import endpoint"></aside>
+    <aside id="endpoint-drawer" class="drawer" hidden aria-hidden="true" aria-label="Cấu hình riêng cho endpoint"></aside>
     <div id="toast-host" class="toast-host" aria-live="polite"></div>
 
     <script type="module" src="/js/main.js"></script>

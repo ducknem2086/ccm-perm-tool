@@ -72,8 +72,10 @@ class MockElement {
 function setupMockDOM() {
   const elements = {
     'tab-input': new MockElement('tab-input'),
+    'tab-auths': new MockElement('tab-auths'),
     'tab-output': new MockElement('tab-output'),
     'panel-input': new MockElement('panel-input'),
+    'panel-auths': new MockElement('panel-auths'),
     'panel-output': new MockElement('panel-output')
   };
 
@@ -87,7 +89,7 @@ function setupMockDOM() {
 test('initTabs khoi tao tab input active theo mac dinh', () => {
   const elements = setupMockDOM();
   const onChangeCalls = [];
-  
+
   const { select } = initTabs({
     onChange: (id) => onChangeCalls.push(id)
   });
@@ -97,12 +99,27 @@ test('initTabs khoi tao tab input active theo mac dinh', () => {
   assert.equal(elements['tab-input'].classList.contains('is-active'), true);
   assert.equal(elements['panel-input'].hidden, false);
 
+  assert.equal(elements['tab-auths'].getAttribute('aria-selected'), 'false');
+  assert.equal(elements['panel-auths'].hidden, true);
+
   assert.equal(elements['tab-output'].getAttribute('aria-selected'), 'false');
   assert.equal(elements['tab-output'].tabIndex, -1);
   assert.equal(elements['tab-output'].classList.contains('is-active'), false);
   assert.equal(elements['panel-output'].hidden, true);
 
   assert.deepEqual(onChangeCalls, ['input']);
+});
+
+test('select auths mo panel auths va dong hai panel kia', () => {
+  const elements = setupMockDOM();
+  const { select } = initTabs();
+
+  select('auths');
+
+  assert.equal(elements['panel-auths'].hidden, false);
+  assert.equal(elements['panel-input'].hidden, true);
+  assert.equal(elements['panel-output'].hidden, true);
+  assert.equal(elements['tab-auths'].classList.contains('is-active'), true);
 });
 
 test('select chuyen tab va goi onChange', () => {
@@ -139,14 +156,14 @@ test('dieu huong ban phim mui ten trai/phai, home/end', () => {
   const elements = setupMockDOM();
   initTabs();
 
-  // Tu tab input nhan ArrowRight -> sang tab output
+  // Tu tab input nhan ArrowRight -> sang tab auths
   const prevented = elements['tab-input'].keydown('ArrowRight');
   assert.equal(prevented, true);
-  assert.equal(elements['tab-output'].classList.contains('is-active'), true);
-  assert.equal(elements['tab-output'].focused, true);
+  assert.equal(elements['tab-auths'].classList.contains('is-active'), true);
+  assert.equal(elements['tab-auths'].focused, true);
 
-  // Tu tab output nhan ArrowLeft -> ve tab input
-  elements['tab-output'].keydown('ArrowLeft');
+  // Tu tab auths nhan ArrowLeft -> ve tab input
+  elements['tab-auths'].keydown('ArrowLeft');
   assert.equal(elements['tab-input'].classList.contains('is-active'), true);
 
   // Nhan End -> nhay ve output
