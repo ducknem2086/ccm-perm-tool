@@ -22,25 +22,6 @@ function setup(over = {}) {
   return { host, breakdown, bar };
 }
 
-test('tick method ghi vao runFilter.methods', () => {
-  const { host } = setup();
-  host.querySelector('[data-method=GET]').click();
-  assert.deepEqual(state.runFilter.methods, ['GET']);
-});
-
-test('bo tick method go khoi runFilter.methods', () => {
-  const { host } = setup();
-  host.querySelector('[data-method=GET]').click();
-  host.querySelector('[data-method=GET]').click();
-  assert.deepEqual(state.runFilter.methods, []);
-});
-
-test('moi method hien so endpoint dang bat', () => {
-  const { host } = setup();
-  const rows = host.querySelectorAll('.rf-method').map((n) => n.textContent);
-  assert.deepEqual(rows, ['GET (1)', 'POST (1)', 'PUT (0)', 'PATCH (0)', 'DELETE (0)']);
-});
-
 test('go vao o msisdn hien goi y cac so chua chuoi do', () => {
   const { host } = setup();
   host.querySelector('.rf-msisdn-input').input('0912');
@@ -103,18 +84,23 @@ test('chon auth luu id chu khong luu name', () => {
   assert.deepEqual(state.runFilter.authIds, [id]);
 });
 
-test('chua chon auth nao thi hien chip mo tat ca', () => {
+test('chua chon auth nao thi hien chip chua chon (0)', () => {
   const { host } = setup();
-  assert.ok(host.querySelector('.rf-auth-all').textContent.includes('tất cả (2)'));
+  assert.ok(host.querySelector('.rf-auth-none').textContent.includes('chưa chọn (0)'));
 });
 
 test('dong phan ra hien dung ba thua so', () => {
-  const { breakdown } = setup();
+  const auths = [{ id: 'a1', name: 'PROD' }, { id: 'a2', name: 'UAT' }];
+  const { breakdown } = setup({ auths, runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] } });
   assert.equal(breakdown.textContent, '2 endpoint × 3 msisdn × 2 auth');
 });
 
 test('dong phan ra cap nhat sau khi loc', () => {
-  const { host, breakdown } = setup();
-  host.querySelector('[data-method=GET]').click();
+  // Filter method gio nam o endpoint-list.js (canh o tim ten), nhung van ghi
+  // vao cung state.runFilter.methods ma run-filter-bar doc de tinh dong phan ra.
+  const auths = [{ id: 'a1', name: 'PROD' }, { id: 'a2', name: 'UAT' }];
+  const { bar, breakdown } = setup({ auths, runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] } });
+  state.runFilter.methods = ['GET'];
+  bar.render();
   assert.equal(breakdown.textContent, '1 endpoint × 3 msisdn × 2 auth');
 });

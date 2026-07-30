@@ -44,6 +44,7 @@ test('countRequests chiu duoc state rong', () => {
 test('countRequests nhan them so profile duoc chon', () => {
   const s = st([{ enabled: true, attachMsisdn: true }], ['0912345678', '0913000111'], {
     auths: [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }],
+    runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] },
   });
   assert.equal(countRequests(s), 4);
 });
@@ -75,7 +76,7 @@ test('countRequests loc theo pattern msisdn', () => {
 test('countRequests khong nhan msisdn cho endpoint attachMsisdn false', () => {
   const s = st([{ enabled: true, attachMsisdn: false }], ['0912345678', '0913000111'], {
     auths: [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }],
-    runFilter: { methods: [], msisdnPatterns: ['0913'], authIds: [] },
+    runFilter: { methods: [], msisdnPatterns: ['0913'], authIds: ['a1', 'a2'] },
   });
   assert.equal(countRequests(s), 2);
 });

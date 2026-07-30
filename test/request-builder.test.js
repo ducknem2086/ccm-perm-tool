@@ -325,6 +325,55 @@ test('buildRequests body ghi lai bien thieu vao unresolved', () => {
   assert.deepEqual(reqs[0].unresolved, ['unknownVar']);
 });
 
+/* ---------- BODY CHUNG (fallback khi endpoint de None) ---------- */
+
+test('buildRequests dung body chung (kv) khi endpoint de bodyMode none', () => {
+  const cfg = baseConfig({
+    globalBodyMode: 'kv',
+    globalBodyParams: [{ key: 'msisdn', value: '{{msisdn}}', enabled: true }],
+  });
+  cfg.endpoints[0].method = 'POST';
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].body, JSON.stringify({ msisdn: '0912345678' }));
+});
+
+test('buildRequests dung body chung (raw) khi endpoint de bodyMode none', () => {
+  const cfg = baseConfig({ globalBodyMode: 'raw', globalBodyRaw: 'hello {{msisdn}}' });
+  cfg.endpoints[0].method = 'POST';
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].body, 'hello 0912345678');
+});
+
+test('buildRequests endpoint tu khai body thi bo qua body chung, khong cong don', () => {
+  const cfg = baseConfig({ globalBodyMode: 'kv', globalBodyParams: [{ key: 'a', value: '1', enabled: true }] });
+  cfg.endpoints[0].method = 'POST';
+  cfg.endpoints[0].bodyMode = 'kv';
+  cfg.endpoints[0].bodyParams = [{ key: 'msisdn', value: '{{msisdn}}', enabled: true }];
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].body, JSON.stringify({ msisdn: '0912345678' }));
+});
+
+test('buildRequests khong gui body chung cho method GET', () => {
+  const cfg = baseConfig({ globalBodyMode: 'raw', globalBodyRaw: '{"a":1}' });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].body, null);
+});
+
+test('buildRequests globalBodyMode none thi khong anh huong gi (mac dinh cu)', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].method = 'POST';
+  assert.equal(buildRequests(cfg)[0].body, null);
+});
+
+test('buildRequests Content-Type application/json khi dung body chung kv', () => {
+  const cfg = baseConfig({
+    globalBodyMode: 'kv',
+    globalBodyParams: [{ key: 'a', value: '1', enabled: true }],
+  });
+  cfg.endpoints[0].method = 'POST';
+  assert.equal(buildRequests(cfg)[0].headers['Content-Type'], 'application/json');
+});
+
 /* ---------- Content-Type tu dat ---------- */
 
 test('buildRequests Content-Type tu dat application/json cho bodyMode json', () => {
@@ -594,18 +643,18 @@ const TWO_AUTHS = [
 ];
 
 test('buildRequests nhan them so profile', () => {
-  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS }));
+  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS, runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] } }));
   assert.equal(reqs.length, 4);
   assert.deepEqual(reqs.map((r) => r.index), [1, 2, 3, 4]);
 });
 
 test('buildRequests xep request cung profile lien khoi', () => {
-  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS }));
+  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS, runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] } }));
   assert.deepEqual(reqs.map((r) => r.authName), ['PROD', 'PROD', 'UAT', 'UAT']);
 });
 
 test('buildRequests gan dung credential cua tung profile', () => {
-  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS }));
+  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS, runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] } }));
   assert.equal(reqs[0].headers.Authorization, 'Bearer T1');
   assert.equal(reqs[0].headers.Cookie, 'C1');
   assert.equal(reqs[2].headers.Authorization, 'Bearer T2');
@@ -613,7 +662,7 @@ test('buildRequests gan dung credential cua tung profile', () => {
 });
 
 test('buildRequests gan authId va authName vao request', () => {
-  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS }));
+  const reqs = buildRequests(baseConfig({ auths: TWO_AUTHS, runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] } }));
   assert.equal(reqs[0].authId, 'a1');
   assert.equal(reqs[3].authName, 'UAT');
 });
@@ -722,10 +771,13 @@ test('validateConfig bat ten auth trung nhau', () => {
 });
 
 test('validateConfig khong coi PROD va prod la trung', () => {
-  const errs = validateConfig(baseConfig({ auths: [
-    { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: '', refreshToken: '', curlRaw: '' },
-    { id: 'a2', name: 'prod', mode: 'fields', token: 'T2', cookie: '', refreshToken: '', curlRaw: '' },
-  ] }));
+  const errs = validateConfig(baseConfig({
+    auths: [
+      { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: '', refreshToken: '', curlRaw: '' },
+      { id: 'a2', name: 'prod', mode: 'fields', token: 'T2', cookie: '', refreshToken: '', curlRaw: '' },
+    ],
+    runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] },
+  }));
   assert.deepEqual(errs, []);
 });
 
@@ -745,6 +797,7 @@ test('validateConfig bat filter khong khop msisdn nao', () => {
 
 test('validateConfig bat filter khong khop auth nao', () => {
   const errs = validateConfig(baseConfig({
+    auths: TWO_AUTHS,
     runFilter: { methods: [], msisdnPatterns: [], authIds: ['khong-ton-tai'] },
   }));
   assert.ok(errs.some((e) => e.field === 'runFilter'));

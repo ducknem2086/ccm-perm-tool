@@ -1,6 +1,7 @@
 import { state, load, persist, notify, subscribe, results, resetResults, getRunId, setRunId, applyConfig } from './state.js';
 import { startRun, openStream, cancelRun, exportExcel } from './api.js';
 import { countRequests } from './shared/request-count.js';
+import { selectedAuths } from './shared/run-filter.js';
 import { toCurl, curlFilename } from './shared/curl.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
@@ -111,7 +112,17 @@ dedupe.addEventListener('change', () => { state.advanced.dedupeOnImport = dedupe
 const btnRun = document.getElementById('btn-run');
 
 function refreshRunButton() {
+  const activeAuthCount = selectedAuths(state.auths, state.runFilter).length;
   const n = countRequests(state);
+
+  if (activeAuthCount === 0) {
+    btnRun.textContent = '▶ RUN ALL (Cần chọn Auth)';
+    btnRun.disabled = true;
+    btnRun.title = 'Vui lòng chọn ít nhất 1 Auth Profile ở thanh filter bên dưới';
+    return;
+  }
+
+  btnRun.title = '';
   btnRun.textContent = `▶ RUN ALL (${n})`;
   btnRun.disabled = n === 0 || running;
 }

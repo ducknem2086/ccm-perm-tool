@@ -1,7 +1,6 @@
 import { state, persist, notify } from '../state.js';
 import { filterEndpoints, filterMsisdns, selectedAuths } from '../shared/run-filter.js';
 
-const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const MAX_SUGGEST = 20;
 
 function chip(label, onDelete, extraClass = '') {
@@ -37,32 +36,6 @@ export function initRunFilterBar() {
     const list = filter()[key] ?? [];
     filter()[key] = list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
     commit();
-  }
-
-  function methodGroup() {
-    const box = document.createElement('div');
-    box.className = 'rf-group rf-methods';
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = 'method';
-    box.append(label);
-
-    const enabled = (state.endpoints ?? []).filter((e) => e.enabled);
-    for (const m of METHODS) {
-      const count = enabled.filter((e) => String(e.method || 'GET').toUpperCase() === m).length;
-      const wrap = document.createElement('label');
-      wrap.className = 'rf-method';
-
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.dataset.method = m;
-      cb.checked = (filter().methods ?? []).includes(m);
-      cb.addEventListener('click', () => toggleInList('methods', m));
-
-      wrap.append(cb, document.createTextNode(`${m} (${count})`));
-      box.append(wrap);
-    }
-    return box;
   }
 
   // render() dung lai o nhap moi nen con tro se van ra ngoai — tra focus lai
@@ -161,18 +134,20 @@ export function initRunFilterBar() {
     label.textContent = 'auth';
     box.append(label);
 
-    const chosen = filter().authIds ?? [];
-    if (chosen.length === 0) {
-      const all = document.createElement('span');
-      all.className = 'rf-chip rf-auth-all';
-      all.textContent = `tất cả (${(state.auths ?? []).length})`;
-      box.append(all);
+    const activeAuths = selectedAuths(state.auths, filter());
+    const activeIds = new Set(activeAuths.map((a) => a.id));
+
+    if ((state.auths ?? []).length > 1 && activeIds.size === 0) {
+      const none = document.createElement('span');
+      none.className = 'rf-chip rf-auth-none status-down';
+      none.textContent = 'chưa chọn (0)';
+      box.append(none);
     }
 
     for (const a of state.auths ?? []) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `btn btn-secondary btn-sm rf-auth${chosen.includes(a.id) ? ' is-active' : ''}`;
+      btn.className = `btn btn-secondary btn-sm rf-auth${activeIds.has(a.id) ? ' is-active' : ''}`;
       btn.dataset.auth = a.id;
       btn.textContent = a.name || '(chưa đặt tên)';
       btn.addEventListener('click', () => toggleInList('authIds', a.id));
@@ -182,7 +157,7 @@ export function initRunFilterBar() {
   }
 
   function render() {
-    host.replaceChildren(methodGroup(), msisdnGroup(), authGroup());
+    host.replaceChildren(msisdnGroup(), authGroup());
     if (!breakdown) return;
     const f = filter();
     const e = filterEndpoints(state.endpoints, f).length;
