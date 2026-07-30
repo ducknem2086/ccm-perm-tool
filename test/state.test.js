@@ -11,7 +11,8 @@ import {
   notify,
   persist,
   load,
-  applyConfig
+  applyConfig,
+  makeAuth
 } from '../public/js/state.js';
 
 function setupMockLocalStorage() {
@@ -36,7 +37,13 @@ function setupMockLocalStorage() {
 test('defaultConfig tra ve cau hinh mac dinh dung chuuan', () => {
   const cfg = defaultConfig();
   assert.equal(cfg.domain, '');
-  assert.equal(cfg.token, '');
+  assert.equal(cfg.token, undefined);
+  assert.equal(cfg.cookie, undefined);
+  assert.equal(cfg.refreshToken, undefined);
+  assert.equal(cfg.auths.length, 1);
+  assert.equal(cfg.auths[0].name, 'Default');
+  assert.equal(cfg.auths[0].mode, 'fields');
+  assert.deepEqual(cfg.runFilter, { methods: [], msisdnPatterns: [], authIds: [] });
   assert.deepEqual(cfg.dateRange, { from: '', to: '' });
   assert.equal(cfg.dateFormat, 'ddMMyyyy');
   assert.deepEqual(cfg.msisdns, []);
@@ -85,13 +92,13 @@ test('persist luu state vao localStorage va load doc lai merge voi defaultConfig
   // Apply state moi
   applyConfig({
     domain: 'https://test.com',
-    token: 'my-token',
+    auths: [{ id: 'a1', name: 'P', mode: 'fields', token: 'my-token', cookie: '', refreshToken: '', curlRaw: '' }],
     dateRange: { from: '2026-01-01' },
     advanced: { workerCount: 10 }
   });
 
   assert.equal(state.domain, 'https://test.com');
-  assert.equal(state.token, 'my-token');
+  assert.equal(state.auths[0].token, 'my-token');
   assert.equal(state.dateRange.from, '2026-01-01');
   assert.equal(state.dateRange.to, '');
   assert.equal(state.advanced.workerCount, 10);
@@ -103,7 +110,7 @@ test('persist luu state vao localStorage va load doc lai merge voi defaultConfig
 
   load();
   assert.equal(state.domain, 'https://test.com');
-  assert.equal(state.token, 'my-token');
+  assert.equal(state.auths[0].token, 'my-token');
   assert.equal(state.dateRange.from, '2026-01-01');
   assert.equal(state.advanced.workerCount, 10);
 });
@@ -159,5 +166,96 @@ test('load giu nguyen importTemplate nguoi dung da sua', () => {
   assert.deepEqual(state.importTemplate, [
     { id: 'x', type: 'index', selector: '3', target: 'endpoint' },
   ]);
+});
+
+test('makeAuth sinh id khac nhau moi lan goi', () => {
+  const a = makeAuth();
+  const b = makeAuth();
+  assert.notEqual(a.id, b.id);
+  assert.ok(a.id.startsWith('auth_'));
+});
+
+test('load goi config cu thanh auths[0] ten Default', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    domain: 'https://api-abc.vn', token: 'TOK', cookie: 'CK', refreshToken: 'RF',
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.auths.length, 1);
+  assert.equal(state.auths[0].name, 'Default');
+  assert.equal(state.auths[0].mode, 'fields');
+  assert.equal(state.auths[0].token, 'TOK');
+  assert.equal(state.auths[0].cookie, 'CK');
+  assert.equal(state.auths[0].refreshToken, 'RF');
+});
+
+test('load xoa ba khoa credential cu khoi state', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({ token: 'TOK', cookie: 'CK', refreshToken: 'RF' }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.token, undefined);
+  assert.equal(state.cookie, undefined);
+  assert.equal(state.refreshToken, undefined);
+});
+
+test('load van sinh Default khi ba o credential cu deu rong', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({ domain: 'https://x.vn' }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.auths.length, 1);
+  assert.equal(state.auths[0].name, 'Default');
+  assert.equal(state.auths[0].token, '');
+});
+
+test('load khong dung vao auths da co san', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [
+      { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: '', refreshToken: '', curlRaw: '' },
+      { id: 'a2', name: 'UAT', mode: 'curl', token: '', cookie: '', refreshToken: '', curlRaw: 'curl -H "a: b"' },
+    ],
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.auths.length, 2);
+  assert.deepEqual(state.auths.map((a) => a.name), ['PROD', 'UAT']);
+});
+
+test('load bu truong con thieu cho auth luu tu ban cu', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ id: 'a1', name: 'PROD', token: 'T1' }],
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.auths[0].mode, 'fields');
+  assert.equal(state.auths[0].curlRaw, '');
+  assert.equal(state.auths[0].cookie, '');
+});
+
+test('load bu runFilter con thieu', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({ runFilter: { methods: ['GET'] } }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.deepEqual(state.runFilter, { methods: ['GET'], msisdnPatterns: [], authIds: [] });
+});
+
+test('applyConfig migrate config cu giong load', () => {
+  setupMockLocalStorage();
+  applyConfig({ domain: 'https://api-abc.vn', token: 'TOK' });
+
+  assert.equal(state.auths[0].name, 'Default');
+  assert.equal(state.auths[0].token, 'TOK');
+  assert.equal(state.token, undefined);
 });
 

@@ -1,9 +1,26 @@
 const STORAGE_KEY = 'ccm-tool-config';
 
+let authSeq = 0;
+
+export function makeAuth(over = {}) {
+  authSeq += 1;
+  return {
+    id: `auth_${Date.now().toString(36)}_${authSeq}`,
+    name: '',
+    mode: 'fields',
+    token: '',
+    cookie: '',
+    refreshToken: '',
+    curlRaw: '',
+    ...over,
+  };
+}
+
 export function defaultConfig() {
   return {
     domain: '',
-    token: '',
+    auths: [makeAuth({ name: 'Default' })],
+    runFilter: { methods: [], msisdnPatterns: [], authIds: [] },
     dateRange: { from: '', to: '' },
     dateFormat: 'ddMMyyyy',
     msisdns: [],
@@ -18,6 +35,8 @@ export function defaultConfig() {
       { key: 'toDate', value: '{{toDate}}', enabled: true },
     ],
     globalHeaders: [],
+    globalHeaderMode: 'kv',
+    globalHeaderRaw: '',
     advanced: {
       workerCount: 4,
       timeoutMs: 30000,
@@ -56,6 +75,24 @@ export function persist() {
   } catch { /* localStorage full or disabled — ignore safely */ }
 }
 
+// Ban cu luu credential o ba khoa phang cua state. Goi chung lai thanh mot
+// profile ten 'Default' de cau hinh cu mo len chay y het truoc.
+function migrateAuths(target, incoming) {
+  const saved = Array.isArray(incoming?.auths) ? incoming.auths : [];
+  target.auths = saved.length > 0
+    ? saved.map((a) => ({ ...makeAuth(), ...a }))
+    : [makeAuth({
+      name: 'Default',
+      token: String(incoming?.token ?? ''),
+      cookie: String(incoming?.cookie ?? ''),
+      refreshToken: String(incoming?.refreshToken ?? ''),
+    })];
+
+  delete target.token;
+  delete target.cookie;
+  delete target.refreshToken;
+}
+
 export function load() {
   let saved;
   try {
@@ -67,7 +104,9 @@ export function load() {
   Object.assign(state, base, saved, {
     dateRange: { ...base.dateRange, ...(saved.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(saved.advanced ?? {}) },
+    runFilter: { ...base.runFilter, ...(saved.runFilter ?? {}) },
   });
+  migrateAuths(state, saved);
 
   // Cau hinh cu dung khoa concurrency, doc sang workerCount.
   if (saved.advanced?.workerCount === undefined && saved.advanced?.concurrency !== undefined) {
@@ -81,7 +120,9 @@ export function applyConfig(incoming) {
   Object.assign(state, base, incoming, {
     dateRange: { ...base.dateRange, ...(incoming.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(incoming.advanced ?? {}) },
+    runFilter: { ...base.runFilter, ...(incoming.runFilter ?? {}) },
   });
+  migrateAuths(state, incoming);
 
   // Cau hinh cu dung khoa concurrency, doc sang workerCount.
   if (incoming.advanced?.workerCount === undefined && incoming.advanced?.concurrency !== undefined) {
