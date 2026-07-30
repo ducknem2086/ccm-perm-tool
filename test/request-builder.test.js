@@ -16,7 +16,7 @@ function baseConfig(over = {}) {
     msisdns: ['0912345678', '0913000111'],
     endpoints: [
       { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: true,
-        pathTemplate: '/query/abc-information', queryParams: [], headers: [] }
+        pathTemplate: '/query/abc-information/{*}', queryParams: [], headers: [] }
     ],
     globalQueryParams: [
       { key: 'fromDate', value: '{{fromDate}}', enabled: true },
@@ -128,26 +128,28 @@ test('buildRequests mang ca endpointName lan pathTemplate', () => {
   cfg.endpoints[0].name = 'Tra cuu thue bao';
   const reqs = buildRequests(cfg);
   assert.equal(reqs[0].endpointName, 'Tra cuu thue bao');
-  assert.equal(reqs[0].pathTemplate, '/query/abc-information');
+  assert.equal(reqs[0].pathTemplate, '/query/abc-information/{*}');
 });
 
 test('buildRequests de endpointName rong khi endpoint khong co ten', () => {
   const reqs = buildRequests(baseConfig());
   assert.equal(reqs[0].endpointName, '');
-  assert.equal(reqs[0].pathTemplate, '/query/abc-information');
+  assert.equal(reqs[0].pathTemplate, '/query/abc-information/{*}');
 });
 
-test('buildRequests noi msisdn vao cuoi path khi khong co placeholder', () => {
-  const reqs = buildRequests(baseConfig());
+test('buildRequests chi gan msisdn va không gan globalQueryParams khi endpoint khong co {*}', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].pathTemplate = '/query/abc-information';
+  const reqs = buildRequests(cfg);
   assert.equal(reqs.length, 2);
   assert.equal(
     reqs[0].url,
-    'https://abc.vn/query/abc-information/0912345678?fromDate=25032026&toDate=01042026',
+    'https://abc.vn/query/abc-information/0912345678',
   );
   assert.equal(reqs[1].msisdn, '0913000111');
 });
 
-test('buildRequests coi path co dau sao giong het path tran', () => {
+test('buildRequests noi msisdn vao cuoi path va gan globalQueryParams khi path co {*}', () => {
   const cfg = baseConfig();
   cfg.endpoints[0].pathTemplate = '/query/abc-information/{*}';
   assert.equal(
@@ -185,7 +187,7 @@ test('buildRequests giu cu phap msisdn cu va khong noi them o cuoi', () => {
   cfg.endpoints[0].pathTemplate = '/query/abc-information/:msisdn/detail';
   assert.equal(
     buildRequests(cfg)[0].url,
-    'https://abc.vn/query/abc-information/0912345678/detail?fromDate=25032026&toDate=01042026',
+    'https://abc.vn/query/abc-information/0912345678/detail',
   );
 });
 
@@ -197,7 +199,7 @@ test('buildRequests chay 1 request khi attachMsisdn false', () => {
   assert.equal(reqs.length, 1);
   assert.equal(reqs[0].msisdn, null);
   assert.deepEqual(reqs[0].pathParams, {});
-  assert.equal(reqs[0].url, 'https://abc.vn/system/health?fromDate=25032026&toDate=01042026');
+  assert.equal(reqs[0].url, 'https://abc.vn/system/health');
 });
 
 test('buildRequests coi endpoint thieu attachMsisdn la true', () => {
@@ -834,10 +836,10 @@ test('buildRequests loc theo selectedSheet va cong them commonEndpoints', () => 
   const cfg = baseConfig({
     selectedSheet: 'Sheet1',
     endpoints: [
-      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q1', sheetName: 'Sheet1' },
-      { id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q2', sheetName: 'Sheet2' },
+      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q1/{*}', sheetName: 'Sheet1' },
+      { id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q2/{*}', sheetName: 'Sheet2' },
     ],
-    commonEndpoints: 'POST /common-post\n/common-get'
+    commonEndpoints: 'POST /common-post/{*}\n/common-get/{*}'
   });
   const reqs = buildRequests(cfg);
   // ep_1 (1 request) + common-post (2 requests) + common-get (2 requests) = 5 total requests

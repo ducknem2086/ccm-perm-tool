@@ -180,16 +180,18 @@ function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
     return r.value;
   };
 
+  const hasStar = String(endpoint.pathTemplate ?? '').includes('{*}');
   const { path: rawPath, inlineQuery } = splitTemplate(endpoint.pathTemplate);
   let path = take(rawPath);
   if (msisdn && !hasMsisdnPlaceholder(rawPath)) {
     path = `${path.replace(/\/+$/, '')}/${msisdn}`;
   }
 
-  // Uu tien: cau hinh rieng endpoint > query dinh sau {*} trong path > cau hinh chung.
+  // Uu tien: cau hinh rieng endpoint > query dinh sau {*} trong path > cau hinh chung (chi khi co {*}).
   const queryParams = {};
+  const globalQueries = hasStar ? activeOnly(config.globalQueryParams) : [];
   for (const [k, v] of mergePairs(
-    effectiveQueryPairs(endpoint), parseInlineQuery(inlineQuery), activeOnly(config.globalQueryParams),
+    effectiveQueryPairs(endpoint), parseInlineQuery(inlineQuery), globalQueries,
   )) {
     queryParams[take(k)] = take(v);
   }
