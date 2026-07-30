@@ -27,9 +27,10 @@ body { display: flex; flex-direction: column; }
   padding: 0 var(--sp-lg);
   background: var(--canvas);
   border-bottom: 1px solid var(--hairline);
+  gap: var(--sp-md);
 }
 .wordmark { color: var(--primary); font-weight: 700; letter-spacing: .5px; font-size: 18px; }
-.topbar-right { display: flex; align-items: center; gap: var(--sp-sm); }
+.topbar-right { display: flex; align-items: center; gap: var(--sp-sm); overflow-x: auto; }
 .token-indicator { font-size: var(--fs-caption); color: var(--up); }
 .token-indicator.is-off { color: var(--muted); }
 
@@ -37,10 +38,22 @@ body { display: flex; flex-direction: column; }
 .tabs {
   flex: 0 0 auto;
   display: flex;
-  gap: var(--sp-xxs);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
   padding: 0 var(--sp-lg);
   background: var(--canvas);
   border-bottom: 1px solid var(--hairline);
+}
+.tabs-left {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xxs);
+}
+.tabs-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
 }
 .tab {
   appearance: none;
@@ -72,7 +85,7 @@ body { display: flex; flex-direction: column; }
   display: grid; grid-template-columns: 300px 1fr;
   gap: var(--sp-md); padding: var(--sp-md);
   align-items: start;
-  max-height: calc(100vh - var(--topbar-h) - 45px - 60px);
+  max-height: calc(100vh - var(--topbar-h) - 48px);
 }
 .col { display: flex; flex-direction: column; gap: var(--sp-md); min-width: 0; }
 .col-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sp-md); align-items: start; }
@@ -166,7 +179,8 @@ select.input { padding: 0 var(--sp-xs); }
 .el-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-xs); }
 .el-count { font-family: var(--font-num); font-size: var(--fs-caption); color: var(--muted-strong); }
 .el-body {
-  max-height: 320px; overflow-y: auto;
+  max-height: calc(100vh - 280px); flex: 1; min-height: 250px;
+  overflow-y: auto;
   display: flex; flex-direction: column; gap: 2px;
   border: 1px solid var(--hairline); border-radius: var(--radius-lg);
   padding: var(--sp-xs);
