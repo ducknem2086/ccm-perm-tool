@@ -238,6 +238,7 @@ function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
     index,
     endpointId: endpoint.id,
     endpointName: endpoint.name ?? '',
+    sheetName: endpoint.sheetName ?? 'Sheet 1',
     authId: auth?.id ?? '',
     authName: auth?.name ?? '',
     pathTemplate: endpoint.pathTemplate,

@@ -73,6 +73,8 @@ export async function startRun(run) {
       workerCount,
       timeoutMs: run.options.timeoutMs,
       errorCodePaths: run.options.errorCodePaths,
+      permissionFile: run.options.permissionFile,
+      permissionMapping: run.options.permissionMapping,
       signal: run.controller.signal,
       onRecord: push,
     });
@@ -101,6 +103,8 @@ async function runInline(run, push, concurrency) {
         timeoutMs: run.options.timeoutMs,
         signal: run.controller.signal,
         errorCodePaths: run.options.errorCodePaths,
+        permissionFile: run.options.permissionFile,
+        permissionMapping: run.options.permissionMapping,
       });
       push(record);
     }

@@ -233,3 +233,107 @@ test('record dat authId/authName rong khi request khong co', async () => {
     assert.equal(rec.authName, '');
   } finally { await mock.close(); }
 });
+
+/* ---------- kiem tra statusPermission ---------- */
+
+const samplePermissionFile = {
+  filename: 'permissions.xlsx',
+  headers: ['API Name', 'Sheet 1 - User', 'Sheet 1 - Admin'],
+  rows: [
+    ['Tra cuu TB', 'x', ''],
+    ['Doi SIM', '', 'x'],
+  ],
+};
+
+const samplePermissionMapping = {
+  usecase1: [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+    { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - Admin', authProfileName: 'Admin Profile' },
+  ],
+  usecase2: {
+    permissionColumn: 'API Name',
+    targetSheet: 'all',
+  },
+};
+
+test('statusPermission tra ve null khi khong bat permission check', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x` }));
+    assert.equal(rec.statusPermission, null);
+  } finally { await mock.close(); }
+});
+
+test('statusPermission tra ve "true" khi status 200 va profile khop quyen', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('statusPermission tra ve "true" khi status 403 va profile khong khop quyen', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Admin Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('statusPermission tra ve "false" khi status NOT 200 (500) ma profile khop quyen', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(500, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.statusPermission, 'false');
+  } finally { await mock.close(); }
+});
+
+test('statusPermission tra ve "false" khi status NOT 403 (200) ma profile khong khop quyen', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'Admin Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.statusPermission, 'false');
+  } finally { await mock.close(); }
+});
+
+test('statusPermission tra ve "empty" khi ten API khong co trong file quyen', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'API Khong Ton Tai', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.statusPermission, 'empty');
+  } finally { await mock.close(); }
+});
+

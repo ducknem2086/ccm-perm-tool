@@ -14,6 +14,9 @@ function crashRecord(req) {
     index: req.index,
     endpointId: req.endpointId,
     endpointName: req.endpointName,
+    sheetName: req.sheetName ?? 'Sheet 1',
+    authId: req.authId ?? '',
+    authName: req.authName ?? '',
     pathTemplate: req.pathTemplate,
     msisdn: req.msisdn ?? null,
     request: {
@@ -21,6 +24,7 @@ function crashRecord(req) {
       pathParams: req.pathParams ?? {}, queryParams: req.queryParams ?? {}, body: req.body ?? null,
     },
     response: { status: null, statusText: '', headers: {}, body: null, bodyText: '', sizeBytes: 0 },
+    statusPermission: null,
     errorCode: 'WORKER_CRASH',
     errorMessage: 'Worker thread dừng bất thường',
     durationMs: 0,
@@ -32,6 +36,7 @@ function crashRecord(req) {
 export function runPool(requests, options = {}) {
   const {
     workerCount = 4, timeoutMs = 30000, errorCodePaths,
+    permissionFile = null, permissionMapping = null,
     signal, onRecord = () => {},
     _Worker = Worker,
   } = options;
@@ -95,7 +100,9 @@ export function runPool(requests, options = {}) {
     };
 
     function spawn() {
-      const worker = new _Worker(WORKER_URL, { workerData: { timeoutMs, errorCodePaths } });
+      const worker = new _Worker(WORKER_URL, {
+        workerData: { timeoutMs, errorCodePaths, permissionFile, permissionMapping },
+      });
       const slot = { worker, inflight: new Map() };
       pool.push(slot);
 

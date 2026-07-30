@@ -57,11 +57,57 @@ function finalize({
   redirected = false, finalUrl = '',
   errorCode = null, errorMessage = null,
   errorCodePaths = DEFAULT_ERROR_CODE_PATHS,
+  permissionFile = null,
+  permissionMapping = null,
 }) {
+  let statusPermission = null;
+
+  if (permissionFile && permissionFile.filename) {
+    const mapping = permissionMapping || {};
+    const uc2 = mapping.usecase2 || {};
+    const uc1 = mapping.usecase1 || [];
+
+    const targetSheet = uc2.targetSheet || 'all';
+    if (targetSheet !== 'all' && targetSheet !== req.sheetName) {
+      statusPermission = 'empty';
+    } else {
+      const headers = permissionFile.headers || [];
+      const rows = permissionFile.rows || [];
+      const nameColIdx = headers.indexOf(uc2.permissionColumn);
+      const matchedRow = rows.find((row) => (
+        nameColIdx !== -1
+        && String(row[nameColIdx] ?? '').trim().toLowerCase() === String(req.endpointName ?? '').trim().toLowerCase()
+      ));
+
+      if (!matchedRow) {
+        statusPermission = 'empty';
+      } else {
+        const m1 = uc1.find((m) => m.endpointSheet === req.sheetName);
+        const colIdx = m1 ? headers.indexOf(m1.permissionColumn) : -1;
+        const cellVal = colIdx !== -1 ? String(matchedRow[colIdx] ?? '').trim().toLowerCase() : '';
+
+        if (cellVal === 'x') {
+          const isProfileMatch = Boolean(
+            m1?.authProfileName
+            && String(req.authName ?? '').trim().toLowerCase() === String(m1.authProfileName).trim().toLowerCase(),
+          );
+          if (isProfileMatch) {
+            statusPermission = status === 200 ? 'true' : 'false';
+          } else {
+            statusPermission = status === 403 ? 'true' : 'false';
+          }
+        } else {
+          statusPermission = 'empty';
+        }
+      }
+    }
+  }
+
   return {
     index: req.index,
     endpointId: req.endpointId,
     endpointName: req.endpointName,
+    sheetName: req.sheetName ?? 'Sheet 1',
     authId: req.authId ?? '',
     authName: req.authName ?? '',
     pathTemplate: req.pathTemplate,
@@ -84,6 +130,7 @@ function finalize({
       redirected,
       finalUrl: finalUrl || req.url,
     },
+    statusPermission,
     errorCode: errorCode ?? extractErrorCode(body, errorCodePaths),
     errorMessage,
     durationMs: Math.round(performance.now() - t0),
@@ -93,7 +140,10 @@ function finalize({
 }
 
 export async function sendRequest(req, options = {}) {
-  const { timeoutMs = 30000, signal, errorCodePaths = DEFAULT_ERROR_CODE_PATHS } = options;
+  const {
+    timeoutMs = 30000, signal, errorCodePaths = DEFAULT_ERROR_CODE_PATHS,
+    permissionFile = null, permissionMapping = null,
+  } = options;
   const startedAt = new Date();
   const t0 = performance.now();
 
@@ -103,6 +153,8 @@ export async function sendRequest(req, options = {}) {
       errorCode: 'UNRESOLVED_VAR',
       errorMessage: `Thiếu giá trị cho biến: ${req.unresolved.join(', ')}`,
       errorCodePaths,
+      permissionFile,
+      permissionMapping,
     });
   }
 
@@ -156,6 +208,8 @@ export async function sendRequest(req, options = {}) {
       errorCode: hint?.code ?? null,
       errorMessage: hint?.message ?? null,
       errorCodePaths,
+      permissionFile,
+      permissionMapping,
     });
   } catch (err) {
     let code;
@@ -168,6 +222,8 @@ export async function sendRequest(req, options = {}) {
       errorCode: code,
       errorMessage: err.message || String(err),
       errorCodePaths,
+      permissionFile,
+      permissionMapping,
     });
   }
 }

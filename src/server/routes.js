@@ -20,6 +20,8 @@ export function registerRoutes(app) {
       errorCodePaths: config.advanced?.errorCodePaths?.length
         ? config.advanced.errorCodePaths
         : DEFAULT_ERROR_CODE_PATHS,
+      permissionFile: config.permissionFile ?? null,
+      permissionMapping: config.permissionMapping ?? null,
     });
 
     startRun(run).catch((err) => console.error('startRun that bai:', err));
