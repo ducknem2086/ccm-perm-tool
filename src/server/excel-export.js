@@ -10,6 +10,7 @@ export const EXPORT_COLUMNS = [
   { header: 'Name', key: 'name', width: 30 },
   { header: 'Path', key: 'path', width: 45 },
   { header: 'MSISDN', key: 'msisdn', width: 16 },
+  { header: 'Auth', key: 'auth', width: 18 },
   { header: 'Method', key: 'method', width: 10 },
   { header: 'URL', key: 'url', width: 70 },
   { header: 'Headers', key: 'headers', width: 45, style: MULTILINE },
@@ -36,11 +37,28 @@ export function maskToken(headerValue) {
   return `Bearer ${token.slice(0, 6)}…${token.slice(-4)}`;
 }
 
+// Cookie khong theo dinh dang "Bearer xxx" nen khong dung chung maskToken —
+// nhung van la thong tin dang nhap, che theo cung nguyen tac giu dau/cuoi.
+export function maskCookie(headerValue) {
+  const s = String(headerValue ?? '');
+  if (s.length <= 10) return '****';
+  return `${s.slice(0, 6)}…${s.slice(-4)}`;
+}
+
+// Cookie mang access_token/id_token, va app that con gui refresh_token qua
+// header rieng — deu la credential con han, phai che khi ghi ra file.
+const SECRET_HEADERS = new Set(['cookie', 'refresh_token', 'id_token', 'access_token']);
+
 export function serializeHeaders(headers, includeToken) {
   return Object.entries(headers ?? {})
     .map(([k, v]) => {
-      const isAuth = k.toLowerCase() === 'authorization';
-      return `${k}: ${isAuth && !includeToken ? maskToken(v) : v}`;
+      const lower = k.toLowerCase();
+      let value = v;
+      if (!includeToken) {
+        if (lower === 'authorization') value = maskToken(v);
+        else if (SECRET_HEADERS.has(lower)) value = maskCookie(v);
+      }
+      return `${k}: ${value}`;
     })
     .join('\n');
 }
@@ -59,6 +77,7 @@ function toRow(rec, includeToken) {
     name: rec.endpointName ?? '',
     path: rec.pathTemplate ?? '',
     msisdn: rec.msisdn ?? '',
+    auth: rec.authName ?? '',
     method: rec.request.method,
     url: rec.request.url,
     headers: serializeHeaders(rec.request.headers, includeToken),
