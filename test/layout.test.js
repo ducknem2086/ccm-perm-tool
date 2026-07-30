@@ -28,12 +28,12 @@ test('cot hep chua CONNECTION, MSISDN, DATE RANGE, QUERY PARAMS theo dung thu tu
   assert.deepEqual(order, ['CONNECTION', 'MSISDN', 'DATE RANGE', 'QUERY PARAMS']);
 });
 
-test('cot rong co col-row chua HEADERS, BODY CHUNG va ADVANCED, roi den ENDPOINTS', () => {
+test('cot rong co col-row chua BODY CHUNG va ADVANCED, roi den ENDPOINTS', () => {
   const html = readHtml();
   const col = html.match(/<div class="col col-wide">([\s\S]*?)<div class="actionbar">/);
   assert.ok(col, 'phai tim thay cot rong');
   assert.ok(col[1].includes('class="col-row"'), 'phai co div col-row');
-  assert.ok(col[1].includes('>HEADERS'), 'phai co card HEADERS');
+  assert.ok(!col[1].includes('>HEADERS'), 'khong co card HEADERS');
   assert.ok(col[1].includes('BODY CHUNG'), 'phai co card BODY CHUNG');
   assert.ok(col[1].includes('>ADVANCED'), 'phai co card ADVANCED');
   assert.ok(col[1].includes('id="list-endpoint"'), 'phai co card ENDPOINTS');
