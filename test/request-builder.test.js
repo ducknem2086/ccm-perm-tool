@@ -816,3 +816,28 @@ test('validateConfig khong bao loi khi authIds con it nhat mot id hop le', () =>
   }));
   assert.deepEqual(errs, []);
 });
+
+test('buildRequests loc theo selectedSheet', () => {
+  const cfg = baseConfig({
+    selectedSheet: 'Sheet1',
+    endpoints: [
+      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: true, pathTemplate: '/q1', sheetName: 'Sheet1' },
+      { id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: true, pathTemplate: '/q2', sheetName: 'Sheet2' },
+    ]
+  });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs.length, 2); // 2 msisdns for ep_1
+  assert.ok(reqs.every((r) => r.endpointId === 'ep_1'));
+});
+
+test('validateConfig bat filter selectedSheet khong khop endpoint nao', () => {
+  const cfg = baseConfig({
+    selectedSheet: 'Sheet2',
+    endpoints: [
+      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: true, pathTemplate: '/q1', sheetName: 'Sheet1' }
+    ]
+  });
+  const errs = validateConfig(cfg);
+  assert.ok(errs.some((e) => e.field === 'runFilter'));
+});
+

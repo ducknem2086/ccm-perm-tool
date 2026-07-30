@@ -73,10 +73,11 @@ export function validateConfig(config) {
   // Filter loc sach thi khong co gi de chay — bao ngay chu khong chay 0 request
   // roi bao "xong".
   const runFilter = config?.runFilter ?? {};
+  const selectedSheet = config?.selectedSheet;
   const hasRows = selectedAuths(auths, runFilter).length > 0
-    && filterEndpoints(config?.endpoints, runFilter).length > 0
+    && filterEndpoints(config?.endpoints, runFilter, selectedSheet).length > 0
     && (filterMsisdns(msisdns, runFilter).length > 0
-      || filterEndpoints(config?.endpoints, runFilter).every((e) => !wantsMsisdn(e)));
+      || filterEndpoints(config?.endpoints, runFilter, selectedSheet).every((e) => !wantsMsisdn(e)));
 
   if (enabled.length > 0 && auths.length > 0 && !hasRows) {
     errors.push({ field: 'runFilter', message: 'Filter không khớp dòng nào — không có request để chạy' });
@@ -260,7 +261,7 @@ export function buildRequests(config) {
   // Loc mot lan roi dung lai — de trong vong lap thi filterMsisdns chay lai
   // auths.length x endpoints.length lan vo ich.
   const auths = selectedAuths(config.auths, runFilter);
-  const eps = filterEndpoints(config.endpoints, runFilter);
+  const eps = filterEndpoints(config.endpoints, runFilter, config.selectedSheet);
   const msisdns = filterMsisdns(config.msisdns, runFilter);
 
   const requests = [];

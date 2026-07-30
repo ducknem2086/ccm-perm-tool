@@ -80,3 +80,14 @@ test('countRequests khong nhan msisdn cho endpoint attachMsisdn false', () => {
   });
   assert.equal(countRequests(s), 2);
 });
+
+test('countRequests loc theo selectedSheet', () => {
+  const s = st([
+    { id: '1', enabled: true, attachMsisdn: true, sheetName: 'Sheet1' },
+    { id: '2', enabled: true, attachMsisdn: true, sheetName: 'Sheet2' }
+  ], ['0912345678'], {
+    selectedSheet: 'Sheet1'
+  });
+  assert.equal(countRequests(s), 1);
+});
+
