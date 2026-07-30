@@ -50,6 +50,63 @@ function logDiagnostic(req, { status, resHeaders, hint, redirected, finalUrl }) 
   );
 }
 
+export function evaluatePermission({ req, status, permissionFile, permissionMapping }) {
+  if (!permissionFile || !permissionFile.filename) {
+    return null;
+  }
+
+  const mapping = permissionMapping || {};
+  const uc2 = mapping.usecase2 || {};
+  const uc1 = mapping.usecase1 || [];
+
+  const targetSheet = uc2.targetSheet || 'all';
+  if (targetSheet !== 'all' && targetSheet !== req.sheetName) {
+    return 'empty';
+  }
+
+  const headers = permissionFile.headers || [];
+  const rows = permissionFile.rows || [];
+  const nameColIdx = headers.indexOf(uc2.permissionColumn);
+  const matchedRow = rows.find((row) => (
+    nameColIdx !== -1
+    && String(row[nameColIdx] ?? '').trim().toLowerCase() === String(req.endpointName ?? '').trim().toLowerCase()
+  ));
+
+  if (!matchedRow) {
+    return 'empty';
+  }
+
+  const sheetMappings = uc1.filter((m) => m.endpointSheet === req.sheetName);
+  if (sheetMappings.length === 0) {
+    return 'empty';
+  }
+
+  const reqAuthNameClean = String(req.authName ?? '').trim().toLowerCase();
+  const exactMatch = sheetMappings.find((m) => (
+    String(m.authProfileName ?? '').trim().toLowerCase() === reqAuthNameClean
+  ));
+
+  if (exactMatch) {
+    const colIdx = headers.indexOf(exactMatch.permissionColumn);
+    const cellVal = colIdx !== -1 ? String(matchedRow[colIdx] ?? '').trim().toLowerCase() : '';
+    if (cellVal === 'x') {
+      return status === 200 ? 'true' : 'false';
+    }
+    return 'empty';
+  }
+
+  const anyHasPermission = sheetMappings.some((m) => {
+    const colIdx = headers.indexOf(m.permissionColumn);
+    const cellVal = colIdx !== -1 ? String(matchedRow[colIdx] ?? '').trim().toLowerCase() : '';
+    return cellVal === 'x';
+  });
+
+  if (anyHasPermission) {
+    return status === 403 ? 'true' : 'false';
+  }
+  return 'empty';
+}
+
 function finalize({
   req, startedAt, t0,
   status = null, statusText = '', resHeaders = {},
@@ -60,60 +117,7 @@ function finalize({
   permissionFile = null,
   permissionMapping = null,
 }) {
-  let statusPermission = null;
-
-  if (permissionFile && permissionFile.filename) {
-    const mapping = permissionMapping || {};
-    const uc2 = mapping.usecase2 || {};
-    const uc1 = mapping.usecase1 || [];
-
-    const targetSheet = uc2.targetSheet || 'all';
-    if (targetSheet !== 'all' && targetSheet !== req.sheetName) {
-      statusPermission = 'empty';
-    } else {
-      const headers = permissionFile.headers || [];
-      const rows = permissionFile.rows || [];
-      const nameColIdx = headers.indexOf(uc2.permissionColumn);
-      const matchedRow = rows.find((row) => (
-        nameColIdx !== -1
-        && String(row[nameColIdx] ?? '').trim().toLowerCase() === String(req.endpointName ?? '').trim().toLowerCase()
-      ));
-
-      if (!matchedRow) {
-        statusPermission = 'empty';
-      } else {
-        let m1 = uc1.find((m) => (
-          m.endpointSheet === req.sheetName
-          && String(m.authProfileName ?? '').trim().toLowerCase() === String(req.authName ?? '').trim().toLowerCase()
-        ));
-        let isProfileMatch = false;
-
-        if (m1) {
-          isProfileMatch = true;
-        } else {
-          m1 = uc1.find((m) => m.endpointSheet === req.sheetName);
-          isProfileMatch = false;
-        }
-
-        if (!m1) {
-          statusPermission = 'empty';
-        } else {
-          const colIdx = headers.indexOf(m1.permissionColumn);
-          const cellVal = colIdx !== -1 ? String(matchedRow[colIdx] ?? '').trim().toLowerCase() : '';
-
-          if (cellVal === 'x') {
-            if (isProfileMatch) {
-              statusPermission = status === 200 ? 'true' : 'false';
-            } else {
-              statusPermission = status === 403 ? 'true' : 'false';
-            }
-          } else {
-            statusPermission = 'empty';
-          }
-        }
-      }
-    }
-  }
+  const statusPermission = evaluatePermission({ req, status, permissionFile, permissionMapping });
 
   return {
     index: req.index,

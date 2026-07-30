@@ -404,4 +404,51 @@ test('statusPermission tra ve "false" khi status NOT 403 (200 hoac 500) va profi
   } finally { await mock500.close(); }
 });
 
+test('statusPermission unauthorized profile kiem tra tat ca profiles duoc map tren sheet (Profile A: empty, Profile B: x) tra ve true khi 403 va false khi 200', async () => {
+  const multiProfilePermFile = {
+    filename: 'permissions.xlsx',
+    headers: ['API Name', 'Sheet 1 - Col A', 'Sheet 1 - Col B'],
+    rows: [
+      ['API_A', 'x', ''],
+      ['API_B', '', 'x'],
+    ],
+  };
+
+  const multiProfileMapping = {
+    usecase1: [
+      { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - Col A', authProfileName: 'Profile A' },
+      { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - Col B', authProfileName: 'Profile B' },
+    ],
+    usecase2: {
+      permissionColumn: 'API Name',
+      targetSheet: 'all',
+    },
+  };
+
+  const mock403 = await startMockServer((_, res) => {
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec403 = await sendRequest(
+      req({ url: `${mock403.base}/x`, endpointName: 'API_B', sheetName: 'Sheet 1', authName: 'Profile C' }),
+      { permissionFile: multiProfilePermFile, permissionMapping: multiProfileMapping },
+    );
+    assert.equal(rec403.statusPermission, 'true');
+  } finally { await mock403.close(); }
+
+  const mock200 = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec200 = await sendRequest(
+      req({ url: `${mock200.base}/x`, endpointName: 'API_B', sheetName: 'Sheet 1', authName: 'Profile C' }),
+      { permissionFile: multiProfilePermFile, permissionMapping: multiProfileMapping },
+    );
+    assert.equal(rec200.statusPermission, 'false');
+  } finally { await mock200.close(); }
+});
+
+
 
