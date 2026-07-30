@@ -188,9 +188,9 @@ function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
     path = `${path.replace(/\/+$/, '')}/${msisdn}`;
   }
 
-  // Uu tien: cau hinh rieng endpoint > query dinh sau {*} trong path > cau hinh chung (chi khi co {*}).
+  // Uu tien: cau hinh rieng endpoint > query dinh sau {*} trong path > cau hinh chung (chi khi co {*} va attachCommonQuery !== false).
   const queryParams = {};
-  const globalQueries = hasStar ? activeOnly(config.globalQueryParams) : [];
+  const globalQueries = (hasStar && endpoint.attachCommonQuery !== false) ? activeOnly(config.globalQueryParams) : [];
   for (const [k, v] of mergePairs(
     effectiveQueryPairs(endpoint), parseInlineQuery(inlineQuery), globalQueries,
   )) {

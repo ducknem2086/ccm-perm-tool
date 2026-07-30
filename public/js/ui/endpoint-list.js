@@ -4,6 +4,7 @@ import { mapRows } from '../shared/endpoint-mapping.js';
 import { importGrid } from '../api.js';
 import { matchesEndpointSearch } from '../shared/endpoint-search.js';
 import { createMethodFilterGroup } from './method-filter.js';
+import { dedupeEndpoints } from '../shared/endpoint-dedupe.js';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const MAX_SHOWN_ERRORS = 10;
@@ -16,6 +17,7 @@ const CONFIG_DEFAULTS = {
   queryMode: 'kv', queryRaw: '',
   headerMode: 'kv', headerRaw: '',
   bodyMode: 'none', bodyRaw: '', bodyParams: [],
+  attachCommonQuery: true,
 };
 
 export function getUniqueSheets(endpoints) {
@@ -24,8 +26,10 @@ export function getUniqueSheets(endpoints) {
   return Array.from(set);
 }
 
-function filterBySheet(endpoints, selectedSheet) {
-  if (!selectedSheet || selectedSheet === 'all') return endpoints;
+export function filterBySheet(endpoints, selectedSheet) {
+  if (!selectedSheet || selectedSheet === 'all') {
+    return dedupeEndpoints(endpoints).unique;
+  }
   return endpoints.filter((e) => (e?.sheetName ?? 'Sheet 1') === selectedSheet);
 }
 
@@ -199,7 +203,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     try {
       const grid = await importGrid(file);
       const { records, errors, skipped } = mapRows(
-        grid, state.importTemplate, { dedupe: state.advanced.dedupeOnImport },
+        grid, state.importTemplate, { dedupe: false },
       );
 
       showErrors(errors);
@@ -337,6 +341,26 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
         msisdnBox.append(wrap);
       }
 
+      const commonQueryBox = document.createElement('span');
+      commonQueryBox.className = 'el-common-query-toggle';
+      commonQueryBox.title = 'Gắn query params chung vào URL của endpoint này';
+
+      const commonQueryGroupName = `attach_cq_${ep.id}`;
+      for (const opt of [{ v: true, label: 'Q.Chung' }, { v: false, label: 'Ko Q.Chung' }]) {
+        const wrap = document.createElement('label');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = commonQueryGroupName;
+        radio.checked = (ep.attachCommonQuery !== false) === opt.v;
+        radio.addEventListener('change', () => {
+          state.endpoints[targetIdx] = { ...state.endpoints[targetIdx], attachCommonQuery: opt.v };
+          persist();
+          notify();
+        });
+        wrap.append(radio, document.createTextNode(opt.label));
+        commonQueryBox.append(wrap);
+      }
+
       const gearBtn = document.createElement('button');
       gearBtn.type = 'button';
       gearBtn.className = 'btn btn-secondary btn-sm el-gear';
@@ -345,7 +369,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       gearBtn.title = 'Cấu hình riêng cho endpoint này (query, headers, body)';
       gearBtn.addEventListener('click', () => onOpenConfig?.(targetIdx));
 
-      row.append(check, method, name, msisdnBox, gearBtn);
+      row.append(check, method, name, msisdnBox, commonQueryBox, gearBtn);
     },
   });
 
@@ -389,10 +413,8 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     refreshSheetSelect();
     refreshSheetTabs();
     list.render();
-    methodFilter.render();
     refreshCheckAllBtn();
   });
 
   return list;
 }
-

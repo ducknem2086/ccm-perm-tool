@@ -227,6 +227,14 @@ test('validateConfig chi kiem tra phan path, bo qua query rieng', () => {
 
 /* ---------- cau hinh rieng endpoint: query ---------- */
 
+test('buildRequests bo qua queryParams chung khi ep.attachCommonQuery la false', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].attachCommonQuery = false;
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].url, 'https://abc.vn/query/abc-information/0912345678');
+  assert.deepEqual(reqs[0].queryParams, {});
+});
+
 test('buildRequests query endpoint (kv) de len query dinh trong path', () => {
   const cfg = baseConfig();
   cfg.endpoints[0].pathTemplate = '/query/abc-information/{*}?page=1';
