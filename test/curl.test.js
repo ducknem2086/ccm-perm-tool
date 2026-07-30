@@ -65,3 +65,13 @@ test('curlFilename bo qua phan rong', () => {
 test('curlFilename xu ly chu d gach ngang', () => {
   assert.equal(curlFilename({ index: 1, endpointName: 'Đăng ký gói' }), 'curl-1-dang-ky-goi.txt');
 });
+
+test('curlFilename chen ten profile de hai profile khong trung ten file', () => {
+  const rec = { index: 3, endpointName: 'Tra cứu', msisdn: '0912345678', authName: 'PROD-A' };
+  assert.equal(curlFilename(rec), 'curl-3-tra-cuu-0912345678-prod-a.txt');
+});
+
+test('curlFilename bo qua authName rong', () => {
+  const rec = { index: 1, endpointName: 'X', msisdn: '', authName: '' };
+  assert.equal(curlFilename(rec), 'curl-1-x.txt');
+});

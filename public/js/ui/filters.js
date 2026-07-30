@@ -1,4 +1,6 @@
-import { ALL_COLUMNS, emptyFilter, collectStatuses, collectErrorCodes } from '../shared/filter-logic.js';
+import {
+  ALL_COLUMNS, emptyFilter, collectStatuses, collectErrorCodes, collectAuthNames,
+} from '../shared/filter-logic.js';
 
 const COLUMNS_KEY = 'ccm-tool-columns';
 const ANY = '';
@@ -58,8 +60,10 @@ export function initFilters({ onChange } = {}) {
 
   const statusSelect = makeSelect('Lọc theo status code');
   const errorSelect = makeSelect('Lọc theo error code');
+  const authSelect = makeSelect('Lọc theo auth profile');
   fillSelect(statusSelect, [], '(tất cả)');
   fillSelect(errorSelect, [], '(tất cả)');
+  fillSelect(authSelect, [], '(tất cả)');
 
   const statusPair = document.createElement('div');
   statusPair.className = 'filter-pair';
@@ -70,10 +74,11 @@ export function initFilters({ onChange } = {}) {
     filter.name = nameInput.value.trim();
     filter.status = statusSelect.value;
     filter.errorCode = errorSelect.value;
+    filter.auth = authSelect.value;
     onChange?.();
   }
 
-  for (const el of [msisdnInput, nameInput, statusSelect, errorSelect]) {
+  for (const el of [msisdnInput, nameInput, statusSelect, errorSelect, authSelect]) {
     el.addEventListener('change', syncFilter);
     el.addEventListener('input', syncFilter);
   }
@@ -101,11 +106,13 @@ export function initFilters({ onChange } = {}) {
     filterCell(key) {
       if (key === 'name') return nameInput;
       if (key === 'status') return statusPair;
+      if (key === 'auth') return authSelect;
       return null;
     },
     refreshOptions(records) {
       fillSelect(statusSelect, collectStatuses(records), '(tất cả)');
       fillSelect(errorSelect, collectErrorCodes(records), '(tất cả)');
+      fillSelect(authSelect, collectAuthNames(records), '(tất cả)');
     },
   };
 }

@@ -49,6 +49,14 @@ function prettyHtml(rec) {
 
 const rawText = (rec) => rec.response.bodyText || rec.errorMessage || '(rỗng)';
 
+// Chang cuoi khac URL goi di nghia la da qua 3xx — hay gap nhat la bi day ve
+// trang dang nhap, luc do status 200 va body HTML hoan toan gay hieu nham.
+function redirectNote(rec) {
+  if (!rec.response.redirected) return '';
+  return '<span class="label">ĐÃ CHUYỂN HƯỚNG TỚI</span>'
+    + `<pre class="status-down">${escapeHtml(rec.response.finalUrl ?? '')}</pre>`;
+}
+
 function bodyPanes(rec) {
   const active = canPretty(rec) ? 'pretty' : 'raw';
   const pane = (name, inner) => (
@@ -90,7 +98,7 @@ export function initDetailDrawer() {
     const ok = rec.response.status !== null && rec.response.status < 400;
     drawer.innerHTML = `
       <div class="el-head">
-        <h2 class="card-title">Request #${rec.index}</h2>
+        <h2 class="card-title">Request #${rec.index}${rec.authName ? ` · ${escapeHtml(rec.authName)}` : ''}</h2>
         <button type="button" class="btn btn-secondary btn-sm" data-close>Đóng</button>
       </div>
       <p class="mono ${ok ? 'status-up' : 'status-down'}">
@@ -99,11 +107,14 @@ export function initDetailDrawer() {
       </p>
       <span class="label">URL</span>
       <pre>${escapeHtml(rec.request.url)}</pre>
+      ${redirectNote(rec)}
+      ${rec.errorMessage ? `<p class="warning">${escapeHtml(rec.errorMessage)}</p>` : ''}
       <div class="kv-grid">
         <div><span class="label">REQUEST HEADERS</span>${kvTable(rec.request.headers)}</div>
         <div><span class="label">RESPONSE HEADERS</span>${kvTable(rec.response.headers)}</div>
         <div><span class="label">PATH PARAMS</span>${kvTable(rec.request.pathParams)}</div>
         <div><span class="label">QUERY PARAMS</span>${kvTable(rec.request.queryParams)}</div>
+        <div><span class="label">AUTH</span>${kvTable({ profile: rec.authName ?? '—' })}</div>
       </div>
       <span class="label">RESPONSE BODY${rec.errorMessage ? ' / lỗi' : ''}</span>
       ${tabBar(rec)}

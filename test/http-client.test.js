@@ -114,3 +114,122 @@ test('sendRequest chuyen tiep pathTemplate xuong record', async () => {
   } finally { await mock.close(); }
 });
 
+
+/* ---------- chan doan khi response khong phai JSON ---------- */
+
+test('bi day ve trang dang nhap thi bao REDIRECTED kem URL chang cuoi', async () => {
+  const mock = await startMockServer((r, res) => {
+    if (r.url.startsWith('/api/')) {
+      res.writeHead(302, { location: '/login' });
+      res.end();
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<!DOCTYPE html><html><body>login</body></html>');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/api/query` }));
+
+    // Ben ngoai van la 200 + text/html — day chinh la cho gay hieu nham.
+    assert.equal(rec.response.status, 200);
+    assert.equal(rec.response.headers['content-type'], 'text/html');
+
+    assert.equal(rec.response.redirected, true);
+    assert.match(rec.response.finalUrl, /\/login$/);
+    assert.equal(rec.errorCode, 'REDIRECTED');
+    assert.match(rec.errorMessage, /chuyển hướng/);
+    assert.match(rec.errorMessage, /đăng nhập/);
+  } finally { await mock.close(); }
+});
+
+test('server tra HTML ma khong redirect thi bao NOT_JSON', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end('<!DOCTYPE html><html><body>trang bat ky</body></html>');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x` }));
+    assert.equal(rec.response.redirected, false);
+    assert.equal(rec.errorCode, 'NOT_JSON');
+    assert.match(rec.errorMessage, /text\/html/);
+  } finally { await mock.close(); }
+});
+
+test('response JSON hop le thi khong gan ma chan doan nao', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"ok":true}');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x` }));
+    assert.equal(rec.errorCode, null);
+    assert.equal(rec.errorMessage, null);
+    assert.equal(rec.response.redirected, false);
+    assert.equal(rec.response.finalUrl, `${mock.base}/x`);
+  } finally { await mock.close(); }
+});
+
+test('status loi kem HTML thi khong de NOT_JSON che mat ma loi tu body', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(500, { 'content-type': 'text/html' });
+    res.end('<html>Internal Server Error</html>');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x` }));
+    assert.equal(rec.response.status, 500);
+    assert.equal(rec.errorCode, null, 'status 500 da du noi len van de');
+  } finally { await mock.close(); }
+});
+
+test('body rong khong bi coi la loi NOT_JSON', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(204, { 'content-type': 'text/html' });
+    res.end('');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x` }));
+    assert.equal(rec.errorCode, null);
+  } finally { await mock.close(); }
+});
+
+test('redirect toi endpoint van tra JSON thi khong bao loi', async () => {
+  const mock = await startMockServer((r, res) => {
+    if (r.url === '/old') {
+      res.writeHead(301, { location: '/new' });
+      res.end();
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"ok":true}');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/old` }));
+    assert.equal(rec.response.redirected, true);
+    assert.deepEqual(rec.response.body, { ok: true });
+    assert.equal(rec.errorCode, null, 'redirect ma van ra JSON thi khong phai loi');
+  } finally { await mock.close(); }
+});
+
+test('record mang lai authId va authName tu request', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x`, authId: 'a1', authName: 'PROD' }));
+    assert.equal(rec.authId, 'a1');
+    assert.equal(rec.authName, 'PROD');
+  } finally { await mock.close(); }
+});
+
+test('record dat authId/authName rong khi request khong co', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x` }));
+    assert.equal(rec.authId, '');
+    assert.equal(rec.authName, '');
+  } finally { await mock.close(); }
+});

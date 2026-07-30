@@ -24,6 +24,7 @@ function cellText(rec, key) {
   switch (key) {
     case 'index': return String(rec.index);
     case 'name': return rec.endpointName || '—';
+    case 'auth': return rec.authName || '—';
     case 'path': return rec.pathTemplate || '—';
     case 'request': return `${rec.request.method} ${rec.request.url}`;
     case 'responseBody': return truncate(bodyPreview(rec)) || '—';

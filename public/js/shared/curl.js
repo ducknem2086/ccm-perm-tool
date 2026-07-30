@@ -32,6 +32,11 @@ const slug = (s) => String(s ?? '')
   .toLowerCase();
 
 export function curlFilename(rec) {
-  const parts = [`curl-${rec?.index ?? 0}`, slug(rec?.endpointName), slug(rec?.msisdn)];
+  const parts = [
+    `curl-${rec?.index ?? 0}`,
+    slug(rec?.endpointName),
+    slug(rec?.msisdn),
+    slug(rec?.authName),
+  ];
   return `${parts.filter(Boolean).join('-')}.txt`;
 }

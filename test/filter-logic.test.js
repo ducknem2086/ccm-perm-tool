@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  emptyFilter, matchesFilter, applyFilter, collectStatuses, collectErrorCodes, ALL_COLUMNS, STATUS_NA,
+  emptyFilter, matchesFilter, applyFilter, collectStatuses, collectErrorCodes, collectAuthNames, ALL_COLUMNS, STATUS_NA,
 } from '../public/js/shared/filter-logic.js';
 
 function rec(over = {}) {
@@ -20,8 +20,8 @@ test('emptyFilter cho qua moi ban ghi', () => {
   assert.equal(matchesFilter(rec(), emptyFilter()), true);
 });
 
-test('emptyFilter chi co 4 truong', () => {
-  assert.deepEqual(emptyFilter(), { msisdn: '', name: '', status: '', errorCode: '' });
+test('emptyFilter chi co 5 truong', () => {
+  assert.deepEqual(emptyFilter(), { msisdn: '', name: '', status: '', errorCode: '', auth: '' });
 });
 
 test('loc theo status code', () => {
@@ -87,7 +87,26 @@ test('collectErrorCodes bo qua ban ghi khong co ma loi', () => {
 test('ALL_COLUMNS dat status ngay sau index va tach response thanh 2 cot', () => {
   assert.deepEqual(
     ALL_COLUMNS.map((c) => c.key),
-    ['index', 'status', 'name', 'path', 'request', 'responseBody', 'responseHeaders'],
+    ['index', 'status', 'name', 'auth', 'path', 'request', 'responseBody', 'responseHeaders'],
   );
   assert.ok(ALL_COLUMNS.every((c) => c.default === true));
+});
+
+test('ALL_COLUMNS co cot auth va bat mac dinh', () => {
+  const col = ALL_COLUMNS.find((c) => c.key === 'auth');
+  assert.ok(col);
+  assert.equal(col.header, 'Auth');
+  assert.equal(col.default, true);
+});
+
+test('matchesFilter loc theo authName khop chinh xac', () => {
+  const r = rec({ authName: 'PROD' });
+  assert.equal(matchesFilter(r, { ...emptyFilter(), auth: 'PROD' }), true);
+  assert.equal(matchesFilter(r, { ...emptyFilter(), auth: 'PRO' }), false);
+  assert.equal(matchesFilter(r, { ...emptyFilter(), auth: 'UAT' }), false);
+});
+
+test('collectAuthNames tra danh sach khong trung da sap xep', () => {
+  const recs = [rec({ authName: 'UAT' }), rec({ authName: 'PROD' }), rec({ authName: 'UAT' }), rec({ authName: '' })];
+  assert.deepEqual(collectAuthNames(recs), ['PROD', 'UAT']);
 });

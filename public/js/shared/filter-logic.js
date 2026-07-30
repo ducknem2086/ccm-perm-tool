@@ -2,6 +2,7 @@ export const ALL_COLUMNS = [
   { key: 'index', header: '#', default: true },
   { key: 'status', header: 'Status · Error · Time', default: true },
   { key: 'name', header: 'Name', default: true },
+  { key: 'auth', header: 'Auth', default: true },
   { key: 'path', header: 'Path', default: true },
   { key: 'request', header: 'Request', default: true },
   { key: 'responseBody', header: 'Response body', default: true },
@@ -15,7 +16,7 @@ export const ACTIONS_COLUMN = { key: 'actions', header: 'cURL' };
 export const STATUS_NA = 'N/A';
 
 export function emptyFilter() {
-  return { msisdn: '', name: '', status: '', errorCode: '' };
+  return { msisdn: '', name: '', status: '', errorCode: '', auth: '' };
 }
 
 const statusLabel = (rec) => (rec.response.status === null ? STATUS_NA : String(rec.response.status));
@@ -26,6 +27,7 @@ export function matchesFilter(rec, filter) {
   if (filter.errorCode && (rec.errorCode ?? '') !== filter.errorCode) return false;
   if (filter.name && !contains(rec.endpointName, filter.name)) return false;
   if (filter.msisdn && !contains(rec.msisdn, filter.msisdn)) return false;
+  if (filter.auth && (rec.authName ?? '') !== filter.auth) return false;
   return true;
 }
 
@@ -44,4 +46,8 @@ export function collectStatuses(records) {
 
 export function collectErrorCodes(records) {
   return [...new Set(records.map((r) => r.errorCode).filter(Boolean))].sort();
+}
+
+export function collectAuthNames(records) {
+  return [...new Set(records.map((r) => r.authName).filter(Boolean))].sort();
 }
