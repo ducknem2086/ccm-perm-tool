@@ -93,9 +93,15 @@ export function registerRoutes(app) {
     express.raw({ type: '*/*', limit: '20mb' }),
     async (req, res) => {
       try {
+        const rawSheetsHeader = req.get('X-Sheets');
+        const targetSheets = rawSheetsHeader
+          ? rawSheetsHeader.split(',').map((s) => decodeURIComponent(s.trim())).filter(Boolean)
+          : undefined;
+
         const grid = await parseGrid({
           filename: req.get('X-Filename') || 'unknown.txt',
           buffer: req.body,
+          targetSheets,
         });
         res.json(grid);
       } catch (err) {

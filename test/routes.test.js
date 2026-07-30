@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import ExcelJS from 'exceljs';
 import { createApp } from '../server.js';
 import { startMockServer } from './helpers/mock-server.js';
 
@@ -200,4 +201,35 @@ test('POST /api/import/grid tra 400 voi duoi file la', async () => {
     assert.match((await res.json()).error, /không hỗ trợ/);
   } finally { server.close(); }
 });
+
+test('POST /api/import/grid tra ve mieu ta sheets voi multi-sheet va loc theo X-Sheets', async () => {
+  const { server, base } = await listen(createApp());
+  try {
+    const wb = new ExcelJS.Workbook();
+    const ws1 = wb.addWorksheet('SheetA');
+    ws1.addRow(['name', 'method', 'endpoint']);
+    ws1.addRow(['Api A', 'GET', '/a/{*}']);
+    const ws2 = wb.addWorksheet('SheetB');
+    ws2.addRow(['name', 'method', 'endpoint']);
+    ws2.addRow(['Api B', 'POST', '/b/{*}']);
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+
+    const res = await fetch(`${base}/api/import/grid`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-filename': 'multi.xlsx',
+        'x-sheets': encodeURIComponent('SheetB'),
+      },
+      body: buffer,
+    });
+
+    const json = await res.json();
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(json.sheets));
+    assert.equal(json.sheets.length, 1);
+    assert.equal(json.sheets[0].name, 'SheetB');
+  } finally { server.close(); }
+});
+
 
