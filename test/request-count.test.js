@@ -90,4 +90,14 @@ test('countRequests loc theo selectedSheet', () => {
   });
   assert.equal(countRequests(s), 1);
 });
-
+test('countRequests loc theo selectedSheet va cong them commonEndpoints', () => {
+  const s = st([
+    { id: '1', enabled: true, attachMsisdn: false, sheetName: 'Sheet1' },
+    { id: '2', enabled: true, attachMsisdn: false, sheetName: 'Sheet2' }
+  ], ['0912345678'], {
+    selectedSheet: 'Sheet1',
+    commonEndpoints: 'POST /api/common-endpoint\n/api/another-common'
+  });
+  // 1 (Sheet1 endpoint) + 2 (common endpoints) = 3 total requests
+  assert.equal(countRequests(s), 3);
+});

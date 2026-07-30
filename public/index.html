@@ -82,11 +82,6 @@
               </label>
               <p id="date-preview" class="preview mono"></p>
             </section>
-
-            <section class="card">
-              <h2 class="card-title">QUERY PARAMS <button class="btn-icon" data-add-param="query" type="button" title="Thêm dòng">＋</button></h2>
-              <div id="tbl-query-params" class="param-table"></div>
-            </section>
           </div>
 
           <div class="col col-wide">
@@ -108,6 +103,11 @@
               </section>
 
               <section class="card">
+                <h2 class="card-title">QUERY PARAMS <button class="btn-icon" data-add-param="query" type="button" title="Thêm dòng">＋</button></h2>
+                <div id="tbl-query-params" class="param-table"></div>
+              </section>
+
+              <section class="card">
                 <h2 class="card-title">ADVANCED</h2>
                 <div class="field-row">
                   <label class="field"><span class="label">Số luồng</span><input id="inp-worker-count" class="input mono" type="number" min="1" max="16" value="4" /></label>
@@ -121,6 +121,12 @@
                 <label class="check"><input id="chk-dedupe" type="checkbox" checked /> Loại trùng khi import</label>
               </section>
             </div>
+
+            <section class="card" style="margin-bottom: var(--sp-md);">
+              <h2 class="card-title">ENDPOINTS CHUNG</h2>
+              <textarea id="inp-endpoints-common" class="input mono ed-textarea" spellcheck="false"
+                placeholder="Nhập danh sách endpoint chung (mỗi dòng 1 endpoint, có thể bắt đầu bằng METHOD).&#10;Ví dụ:&#10;/api/v1/health&#10;POST /api/v1/submit" style="height: 120px;"></textarea>
+            </section>
 
             <section class="card" id="list-endpoint"></section>
           </div>

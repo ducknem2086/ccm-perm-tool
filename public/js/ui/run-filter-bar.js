@@ -160,7 +160,7 @@ export function initRunFilterBar() {
     host.replaceChildren(msisdnGroup(), authGroup());
     if (!breakdown) return;
     const f = filter();
-    const e = filterEndpoints(state.endpoints, f, state.selectedSheet).length;
+    const e = filterEndpoints(state.endpoints, f, state.selectedSheet, state.commonEndpoints).length;
     const m = filterMsisdns(state.msisdns, f).length;
     const a = selectedAuths(state.auths, f).length;
     breakdown.textContent = `${e} endpoint × ${m} msisdn × ${a} auth`;

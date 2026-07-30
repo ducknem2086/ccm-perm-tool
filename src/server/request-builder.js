@@ -4,7 +4,7 @@ import { isEndpointPath } from '../../public/js/shared/validators.js';
 import {
   splitTemplate, parseInlineQuery, hasMsisdnPlaceholder, parseRawHeaders,
 } from '../../public/js/shared/endpoint-path.js';
-import { filterEndpoints, filterMsisdns, selectedAuths } from '../../public/js/shared/run-filter.js';
+import { filterEndpoints, filterMsisdns, selectedAuths, parseCommonEndpoints } from '../../public/js/shared/run-filter.js';
 import { authHeaderPairs, findDuplicateNames } from '../../public/js/shared/auth-utils.js';
 
 // Endpoint cu chua co field nay thi mac dinh la co gan msisdn.
@@ -22,9 +22,10 @@ export function validateConfig(config) {
   const range = validateRange(config?.dateRange?.from, config?.dateRange?.to);
   if (!range.ok) errors.push({ field: 'dateRange', message: range.error });
 
+  const common = parseCommonEndpoints(config?.commonEndpoints);
   const enabled = (config?.endpoints ?? []).filter((e) => e.enabled);
-  if (enabled.length === 0) {
-    errors.push({ field: 'endpoints', message: 'Cần bật ít nhất 1 endpoint' });
+  if (enabled.length === 0 && common.length === 0) {
+    errors.push({ field: 'endpoints', message: 'Cần bật ít nhất 1 endpoint hoặc có endpoint chung' });
   }
 
   const auths = config?.auths ?? [];
@@ -43,7 +44,7 @@ export function validateConfig(config) {
   });
 
   const msisdns = config?.msisdns ?? [];
-  for (const ep of enabled) {
+  for (const ep of [...enabled, ...common]) {
     // Chi kiem tra phan path, query rieng sau {*} duoc phep chua dau cach.
     const { path } = splitTemplate(ep.pathTemplate);
     if (!isEndpointPath(path)) {
@@ -74,12 +75,13 @@ export function validateConfig(config) {
   // roi bao "xong".
   const runFilter = config?.runFilter ?? {};
   const selectedSheet = config?.selectedSheet;
+  const commonEndpointsText = config?.commonEndpoints;
   const hasRows = selectedAuths(auths, runFilter).length > 0
-    && filterEndpoints(config?.endpoints, runFilter, selectedSheet).length > 0
+    && filterEndpoints(config?.endpoints, runFilter, selectedSheet, commonEndpointsText).length > 0
     && (filterMsisdns(msisdns, runFilter).length > 0
-      || filterEndpoints(config?.endpoints, runFilter, selectedSheet).every((e) => !wantsMsisdn(e)));
+      || filterEndpoints(config?.endpoints, runFilter, selectedSheet, commonEndpointsText).every((e) => !wantsMsisdn(e)));
 
-  if (enabled.length > 0 && auths.length > 0 && !hasRows) {
+  if ((enabled.length > 0 || common.length > 0) && auths.length > 0 && !hasRows) {
     errors.push({ field: 'runFilter', message: 'Filter không khớp dòng nào — không có request để chạy' });
   }
 
@@ -261,7 +263,7 @@ export function buildRequests(config) {
   // Loc mot lan roi dung lai — de trong vong lap thi filterMsisdns chay lai
   // auths.length x endpoints.length lan vo ich.
   const auths = selectedAuths(config.auths, runFilter);
-  const eps = filterEndpoints(config.endpoints, runFilter, config.selectedSheet);
+  const eps = filterEndpoints(config.endpoints, runFilter, config.selectedSheet, config.commonEndpoints);
   const msisdns = filterMsisdns(config.msisdns, runFilter);
 
   const requests = [];

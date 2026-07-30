@@ -1,7 +1,7 @@
 import { state, load, persist, notify, subscribe, results, resetResults, getRunId, setRunId, applyConfig } from './state.js';
 import { startRun, openStream, cancelRun, exportExcel } from './api.js';
 import { countRequests } from './shared/request-count.js';
-import { selectedAuths } from './shared/run-filter.js';
+import { filterEndpoints, selectedAuths } from './shared/run-filter.js';
 import { toCurl, curlFilename } from './shared/curl.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
@@ -54,6 +54,16 @@ initMsisdnDrawer();
 
 const authsPanel = initAuthsPanel();
 const runFilterBar = initRunFilterBar();
+const endpointsCommon = document.getElementById('inp-endpoints-common');
+
+if (endpointsCommon) {
+  endpointsCommon.value = state.commonEndpoints ?? '';
+  endpointsCommon.addEventListener('input', () => {
+    state.commonEndpoints = endpointsCommon.value;
+    persist();
+    notify();
+  });
+}
 
 // Sua token/them-bot auth o tab AUTHS lam indicator tren topbar va so lieu
 // filter bar cu di — ve lai ca ba moi lan state doi tu bat ky dau.
@@ -61,6 +71,9 @@ subscribe(() => {
   connectionPanel.refresh();
   authsPanel.render();
   runFilterBar.render();
+  if (endpointsCommon && endpointsCommon.value !== (state.commonEndpoints ?? '')) {
+    endpointsCommon.value = state.commonEndpoints ?? '';
+  }
 });
 
 const templateDrawer = initTemplateDrawer();
@@ -150,7 +163,7 @@ const seenIndexes = new Set();
 
 btnRun.addEventListener('click', async () => {
   try {
-    const enabledEndpoints = state.endpoints.filter((e) => e.enabled !== false);
+    const enabledEndpoints = filterEndpoints(state.endpoints, state.runFilter, state.selectedSheet, state.commonEndpoints);
     const { skipped } = dedupeEndpoints(enabledEndpoints);
     if (skipped > 0) {
       window.ccmToast?.(`Đã loại bỏ ${skipped} endpoint trùng lặp trước khi chạy`, 'ok');

@@ -1,9 +1,43 @@
 // Ba truc loc dung chung cho ca nut dem o client lan buildRequests o server.
 // Quy uoc xuyen suot: danh sach dieu kien rong nghia la lay tat ca.
 
-export function filterEndpoints(endpoints, runFilter, selectedSheet) {
+export function parseCommonEndpoints(text) {
+  return String(text ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, idx) => {
+      const parts = line.split(/\s+/);
+      let method = 'GET';
+      let pathTemplate = line;
+      if (parts.length > 1 && ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(parts[0].toUpperCase())) {
+        method = parts[0].toUpperCase();
+        pathTemplate = parts.slice(1).join(' ');
+      }
+      return {
+        id: `common_${idx}`,
+        enabled: true,
+        name: `Common ${idx + 1}`,
+        method,
+        pathTemplate,
+        attachMsisdn: true,
+        sheetName: 'Common',
+        queryParams: [],
+        headers: [],
+        queryMode: 'kv',
+        queryRaw: '',
+        headerMode: 'kv',
+        headerRaw: '',
+        bodyMode: 'none',
+        bodyRaw: '',
+        bodyParams: [],
+      };
+    });
+}
+
+export function filterEndpoints(endpoints, runFilter, selectedSheet, commonEndpointsText) {
   const wanted = new Set((runFilter?.methods ?? []).map((m) => String(m).toUpperCase()));
-  return (endpoints ?? []).filter(
+  const filteredTab = (endpoints ?? []).filter(
     (e) => {
       if (!e.enabled) return false;
       if (wanted.size > 0 && !wanted.has(String(e.method || 'GET').toUpperCase())) return false;
@@ -11,6 +45,13 @@ export function filterEndpoints(endpoints, runFilter, selectedSheet) {
       return true;
     }
   );
+
+  const common = parseCommonEndpoints(commonEndpointsText);
+  const filteredCommon = common.filter(
+    (e) => wanted.size === 0 || wanted.has(e.method)
+  );
+
+  return [...filteredTab, ...filteredCommon];
 }
 
 export function filterMsisdns(msisdns, runFilter) {

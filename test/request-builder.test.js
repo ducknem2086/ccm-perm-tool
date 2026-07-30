@@ -830,14 +830,36 @@ test('buildRequests loc theo selectedSheet', () => {
   assert.ok(reqs.every((r) => r.endpointId === 'ep_1'));
 });
 
-test('validateConfig bat filter selectedSheet khong khop endpoint nao', () => {
+test('buildRequests loc theo selectedSheet va cong them commonEndpoints', () => {
   const cfg = baseConfig({
-    selectedSheet: 'Sheet2',
+    selectedSheet: 'Sheet1',
     endpoints: [
-      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: true, pathTemplate: '/q1', sheetName: 'Sheet1' }
-    ]
+      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q1', sheetName: 'Sheet1' },
+      { id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q2', sheetName: 'Sheet2' },
+    ],
+    commonEndpoints: 'POST /common-post\n/common-get'
+  });
+  const reqs = buildRequests(cfg);
+  // ep_1 (1 request) + common-post (2 requests) + common-get (2 requests) = 5 total requests
+  assert.equal(reqs.length, 5);
+  assert.equal(reqs[0].url, 'https://abc.vn/q1?fromDate=25032026&toDate=01042026');
+  assert.equal(reqs[1].method, 'POST');
+  assert.equal(reqs[1].url, 'https://abc.vn/common-post/0912345678?fromDate=25032026&toDate=01042026');
+  assert.equal(reqs[2].method, 'POST');
+  assert.equal(reqs[2].url, 'https://abc.vn/common-post/0913000111?fromDate=25032026&toDate=01042026');
+  assert.equal(reqs[3].method, 'GET');
+  assert.equal(reqs[3].url, 'https://abc.vn/common-get/0912345678?fromDate=25032026&toDate=01042026');
+  assert.equal(reqs[4].method, 'GET');
+  assert.equal(reqs[4].url, 'https://abc.vn/common-get/0913000111?fromDate=25032026&toDate=01042026');
+});
+
+test('validateConfig cho phep chi co commonEndpoints duoc nhap', () => {
+  const cfg = baseConfig({
+    endpoints: [],
+    commonEndpoints: '/common-get'
   });
   const errs = validateConfig(cfg);
-  assert.ok(errs.some((e) => e.field === 'runFilter'));
+  // endpoints list is empty but commonEndpoints has valid path, so it should be valid
+  assert.deepEqual(errs, []);
 });
 

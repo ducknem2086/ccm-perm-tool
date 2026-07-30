@@ -40,7 +40,17 @@ test('filterEndpoints loc theo selectedSheet khi khac all', () => {
   ];
   assert.deepEqual(filterEndpoints(eps, {}, 'Sheet1').map(e => e.id), ['1']);
 });
-
+test('filterEndpoints ghep endpoints chung va tu parse', () => {
+  const eps = [
+    { id: '1', method: 'GET', sheetName: 'Sheet1', enabled: true },
+  ];
+  const res = filterEndpoints(eps, {}, 'Sheet1', 'POST /api/test\n/api/health');
+  assert.equal(res.length, 3);
+  assert.equal(res[1].method, 'POST');
+  assert.equal(res[1].pathTemplate, '/api/test');
+  assert.equal(res[2].method, 'GET');
+  assert.equal(res[2].pathTemplate, '/api/health');
+});
 test('filterMsisdns patterns rong tra tat ca', () => {
   assert.deepEqual(filterMsisdns(msisdns, { msisdnPatterns: [] }), msisdns);
 });
