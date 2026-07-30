@@ -5,7 +5,7 @@ import {
   splitTemplate, parseInlineQuery, hasMsisdnPlaceholder, parseRawHeaders,
 } from '../../public/js/shared/endpoint-path.js';
 import { filterEndpoints, filterMsisdns, selectedAuths } from '../../public/js/shared/run-filter.js';
-import { authHeaderPairs } from '../../public/js/shared/auth-utils.js';
+import { authHeaderPairs, findDuplicateNames } from '../../public/js/shared/auth-utils.js';
 
 // Endpoint cu chua co field nay thi mac dinh la co gan msisdn.
 const wantsMsisdn = (ep) => ep?.attachMsisdn !== false;
@@ -26,6 +26,21 @@ export function validateConfig(config) {
   if (enabled.length === 0) {
     errors.push({ field: 'endpoints', message: 'Cần bật ít nhất 1 endpoint' });
   }
+
+  const auths = config?.auths ?? [];
+  if (auths.length === 0) {
+    errors.push({ field: 'auths', message: 'Cần ít nhất 1 auth profile' });
+  }
+
+  const dupNames = findDuplicateNames(auths);
+  auths.forEach((a, i) => {
+    const name = String(a?.name ?? '').trim();
+    if (name === '') {
+      errors.push({ field: `auth:${a?.id ?? i}`, message: `Auth profile thứ ${i + 1} chưa có tên` });
+    } else if (dupNames.has(name)) {
+      errors.push({ field: `auth:${a?.id ?? i}`, message: `Tên auth profile "${name}" bị trùng` });
+    }
+  });
 
   const msisdns = config?.msisdns ?? [];
   for (const ep of enabled) {
@@ -53,6 +68,18 @@ export function validateConfig(config) {
         message: `Method ${(ep.method || 'GET').toUpperCase()} không gửi được body. Đổi method hoặc đặt Body về None.`,
       });
     }
+  }
+
+  // Filter loc sach thi khong co gi de chay — bao ngay chu khong chay 0 request
+  // roi bao "xong".
+  const runFilter = config?.runFilter ?? {};
+  const hasRows = selectedAuths(auths, runFilter).length > 0
+    && filterEndpoints(config?.endpoints, runFilter).length > 0
+    && (filterMsisdns(msisdns, runFilter).length > 0
+      || filterEndpoints(config?.endpoints, runFilter).every((e) => !wantsMsisdn(e)));
+
+  if (enabled.length > 0 && auths.length > 0 && !hasRows) {
+    errors.push({ field: 'runFilter', message: 'Filter không khớp dòng nào — không có request để chạy' });
   }
 
   return errors;

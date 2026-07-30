@@ -690,3 +690,69 @@ test('mot profile va filter rong cho ket qua y het truoc spec', () => {
   assert.equal(reqs.length, 2);
   assert.equal(reqs[0].headers.Authorization, 'Bearer TOKEN123');
 });
+
+/* ---------- validateConfig: auth profile ---------- */
+
+test('validateConfig bat khi khong co auth profile nao', () => {
+  const errs = validateConfig(baseConfig({ auths: [] }));
+  assert.ok(errs.some((e) => e.field === 'auths'));
+});
+
+test('validateConfig bat auth profile thieu ten', () => {
+  const errs = validateConfig(baseConfig({
+    auths: [{ id: 'a1', name: '', mode: 'fields', token: 'T', cookie: '', refreshToken: '', curlRaw: '' }],
+  }));
+  assert.ok(errs.some((e) => e.field === 'auth:a1'));
+});
+
+test('validateConfig coi ten chi co khoang trang la rong', () => {
+  const errs = validateConfig(baseConfig({
+    auths: [{ id: 'a1', name: '   ', mode: 'fields', token: 'T', cookie: '', refreshToken: '', curlRaw: '' }],
+  }));
+  assert.ok(errs.some((e) => e.field === 'auth:a1'));
+});
+
+test('validateConfig bat ten auth trung nhau', () => {
+  const errs = validateConfig(baseConfig({ auths: [
+    { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: '', refreshToken: '', curlRaw: '' },
+    { id: 'a2', name: 'PROD', mode: 'fields', token: 'T2', cookie: '', refreshToken: '', curlRaw: '' },
+  ] }));
+  const dup = errs.filter((e) => e.message.includes('trùng'));
+  assert.equal(dup.length, 2);
+});
+
+test('validateConfig khong coi PROD va prod la trung', () => {
+  const errs = validateConfig(baseConfig({ auths: [
+    { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: '', refreshToken: '', curlRaw: '' },
+    { id: 'a2', name: 'prod', mode: 'fields', token: 'T2', cookie: '', refreshToken: '', curlRaw: '' },
+  ] }));
+  assert.deepEqual(errs, []);
+});
+
+test('validateConfig bat filter khong khop endpoint nao', () => {
+  const errs = validateConfig(baseConfig({
+    runFilter: { methods: ['DELETE'], msisdnPatterns: [], authIds: [] },
+  }));
+  assert.ok(errs.some((e) => e.field === 'runFilter'));
+});
+
+test('validateConfig bat filter khong khop msisdn nao', () => {
+  const errs = validateConfig(baseConfig({
+    runFilter: { methods: [], msisdnPatterns: ['0777'], authIds: [] },
+  }));
+  assert.ok(errs.some((e) => e.field === 'runFilter'));
+});
+
+test('validateConfig bat filter khong khop auth nao', () => {
+  const errs = validateConfig(baseConfig({
+    runFilter: { methods: [], msisdnPatterns: [], authIds: ['khong-ton-tai'] },
+  }));
+  assert.ok(errs.some((e) => e.field === 'runFilter'));
+});
+
+test('validateConfig khong bao loi khi authIds con it nhat mot id hop le', () => {
+  const errs = validateConfig(baseConfig({
+    runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'da-xoa'] },
+  }));
+  assert.deepEqual(errs, []);
+});
