@@ -11,19 +11,28 @@
     <header class="topbar">
       <span class="wordmark">CCM TOOL</span>
       <div class="topbar-right">
+        <button id="btn-run" class="btn btn-primary" type="button">▶ RUN ALL (0)</button>
+        <span id="run-breakdown" class="hint mono"></span>
+        <button id="btn-export-config" class="btn btn-secondary btn-sm" type="button">⤒ Export config</button>
+        <button id="btn-import-config" class="btn btn-secondary btn-sm" type="button">⤓ Import config</button>
         <span id="token-indicator" class="token-indicator is-off">○ chưa có token</span>
-        <button id="btn-reload-token" type="button" class="btn btn-secondary">⟳ Reload Token</button>
+        <button id="btn-reload-token" type="button" class="btn btn-secondary btn-sm">⟳ Reload Token</button>
       </div>
     </header>
 
     <div class="tabs" role="tablist" aria-label="Khu vực làm việc">
-      <button id="tab-input" class="tab is-active" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">INPUT</button>
-      <button id="tab-auths" class="tab" role="tab" aria-controls="panel-auths" aria-selected="false" tabindex="-1">
-        AUTHS <span id="tab-auths-badge" class="tab-badge">1</span>
-      </button>
-      <button id="tab-output" class="tab" role="tab" aria-controls="panel-output" aria-selected="false" tabindex="-1">
-        OUTPUT <span id="tab-output-badge" class="tab-badge" hidden>0</span>
-      </button>
+      <div class="tabs-left">
+        <button id="tab-input" class="tab is-active" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">INPUT</button>
+        <button id="tab-auths" class="tab" role="tab" aria-controls="panel-auths" aria-selected="false" tabindex="-1">
+          AUTHS <span id="tab-auths-badge" class="tab-badge">1</span>
+        </button>
+        <button id="tab-output" class="tab" role="tab" aria-controls="panel-output" aria-selected="false" tabindex="-1">
+          OUTPUT <span id="tab-output-badge" class="tab-badge" hidden>0</span>
+        </button>
+      </div>
+      <div class="tabs-right">
+        <div id="run-filter-bar" class="run-filter-bar"></div>
+      </div>
     </div>
 
     <main class="main">
@@ -117,14 +126,6 @@
           </div>
         </div>
 
-        <div id="run-filter-bar" class="run-filter-bar"></div>
-
-        <div class="actionbar">
-          <button id="btn-run" class="btn btn-primary" type="button">▶ RUN ALL (0)</button>
-          <span id="run-breakdown" class="hint mono"></span>
-          <button id="btn-export-config" class="btn btn-secondary" type="button">⤒ Export config</button>
-          <button id="btn-import-config" class="btn btn-secondary" type="button">⤓ Import config</button>
-        </div>
       </section>
 
       <section id="panel-auths" class="panel" role="tabpanel" aria-labelledby="tab-auths" tabindex="0" hidden>
