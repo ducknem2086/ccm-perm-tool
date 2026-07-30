@@ -399,3 +399,66 @@ table.kv tr:last-child td { border-bottom: none; }
   flex-direction: column;
   gap: 8px;
 }
+
+/* ---------- filter truoc RUN ALL ---------- */
+.run-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.rf-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.rf-method { display: inline-flex; align-items: center; gap: 3px; }
+
+.rf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--surface-2, #2b3139);
+  font-size: 12px;
+}
+
+.rf-auth-all { opacity: 0.6; }
+
+.rf-chip-del {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.rf-msisdn-input { width: 160px; }
+
+.rf-suggest {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  min-width: 180px;
+  background: var(--surface, #1e2329);
+  border: 1px solid var(--border, #2b3139);
+  border-radius: 6px;
+}
+
+.rf-suggest-item { padding: 4px 10px; cursor: pointer; font-family: monospace; }
+.rf-suggest-item:hover { background: var(--surface-2, #2b3139); }
+.rf-suggest-more { padding: 4px 10px; opacity: 0.6; font-size: 12px; }
+
+.rf-auth.is-active { border-color: var(--info, #4a90d9); }
