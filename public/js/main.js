@@ -55,6 +55,16 @@ initMsisdnDrawer();
 const authsPanel = initAuthsPanel();
 const runFilterBar = initRunFilterBar();
 const endpointsCommon = document.getElementById('inp-endpoints-common');
+const chkCommonEnabled = document.getElementById('chk-common-enabled');
+
+if (chkCommonEnabled) {
+  chkCommonEnabled.checked = state.commonEndpointsEnabled !== false;
+  chkCommonEnabled.addEventListener('change', () => {
+    state.commonEndpointsEnabled = chkCommonEnabled.checked;
+    persist();
+    notify();
+  });
+}
 
 if (endpointsCommon) {
   endpointsCommon.value = state.commonEndpoints ?? '';
@@ -73,6 +83,9 @@ subscribe(() => {
   runFilterBar.render();
   if (endpointsCommon && endpointsCommon.value !== (state.commonEndpoints ?? '')) {
     endpointsCommon.value = state.commonEndpoints ?? '';
+  }
+  if (chkCommonEnabled && chkCommonEnabled.checked !== (state.commonEndpointsEnabled !== false)) {
+    chkCommonEnabled.checked = state.commonEndpointsEnabled !== false;
   }
 });
 
@@ -163,7 +176,7 @@ const seenIndexes = new Set();
 
 btnRun.addEventListener('click', async () => {
   try {
-    const enabledEndpoints = filterEndpoints(state.endpoints, state.runFilter, state.selectedSheet, state.commonEndpoints);
+    const enabledEndpoints = filterEndpoints(state.endpoints, state.runFilter, state.selectedSheet, state.commonEndpoints, state.commonEndpointsEnabled);
     const { skipped } = dedupeEndpoints(enabledEndpoints);
     if (skipped > 0) {
       window.ccmToast?.(`Đã loại bỏ ${skipped} endpoint trùng lặp trước khi chạy`, 'ok');

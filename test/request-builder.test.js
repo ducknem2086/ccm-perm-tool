@@ -865,3 +865,19 @@ test('validateConfig cho phep chi co commonEndpoints duoc nhap', () => {
   assert.deepEqual(errs, []);
 });
 
+test('buildRequests bo qua commonEndpoints khi commonEndpointsEnabled la false', () => {
+  const cfg = baseConfig({
+    selectedSheet: 'Sheet1',
+    endpoints: [
+      { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q1/{*}', sheetName: 'Sheet1' },
+      { id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q2/{*}', sheetName: 'Sheet2' },
+    ],
+    commonEndpoints: 'POST /common-post/{*}\n/common-get/{*}',
+    commonEndpointsEnabled: false,
+  });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].url, 'https://abc.vn/q1?fromDate=25032026&toDate=01042026');
+});
+
+

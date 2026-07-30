@@ -5,7 +5,7 @@ export function countRequests(state) {
   const auths = selectedAuths(state?.auths, runFilter);
   const msisdnCount = filterMsisdns(state?.msisdns, runFilter).length;
 
-  const perAuth = filterEndpoints(state?.endpoints, runFilter, state?.selectedSheet, state?.commonEndpoints)
+  const perAuth = filterEndpoints(state?.endpoints, runFilter, state?.selectedSheet, state?.commonEndpoints, state?.commonEndpointsEnabled)
     .reduce((sum, ep) => sum + (ep.attachMsisdn !== false ? msisdnCount : 1), 0);
 
   return auths.length * perAuth;

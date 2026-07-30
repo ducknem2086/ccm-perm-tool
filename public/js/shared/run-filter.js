@@ -35,7 +35,7 @@ export function parseCommonEndpoints(text) {
     });
 }
 
-export function filterEndpoints(endpoints, runFilter, selectedSheet, commonEndpointsText) {
+export function filterEndpoints(endpoints, runFilter, selectedSheet, commonEndpointsText, commonEndpointsEnabled) {
   const wanted = new Set((runFilter?.methods ?? []).map((m) => String(m).toUpperCase()));
   const filteredTab = (endpoints ?? []).filter(
     (e) => {
@@ -45,6 +45,10 @@ export function filterEndpoints(endpoints, runFilter, selectedSheet, commonEndpo
       return true;
     }
   );
+
+  if (commonEndpointsEnabled === false) {
+    return filteredTab;
+  }
 
   const common = parseCommonEndpoints(commonEndpointsText);
   const filteredCommon = common.filter(

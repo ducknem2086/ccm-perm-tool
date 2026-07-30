@@ -22,7 +22,8 @@ export function validateConfig(config) {
   const range = validateRange(config?.dateRange?.from, config?.dateRange?.to);
   if (!range.ok) errors.push({ field: 'dateRange', message: range.error });
 
-  const common = parseCommonEndpoints(config?.commonEndpoints);
+  const commonEndpointsEnabled = config?.commonEndpointsEnabled;
+  const common = commonEndpointsEnabled !== false ? parseCommonEndpoints(config?.commonEndpoints) : [];
   const enabled = (config?.endpoints ?? []).filter((e) => e.enabled);
   if (enabled.length === 0 && common.length === 0) {
     errors.push({ field: 'endpoints', message: 'Cần bật ít nhất 1 endpoint hoặc có endpoint chung' });
@@ -77,9 +78,9 @@ export function validateConfig(config) {
   const selectedSheet = config?.selectedSheet;
   const commonEndpointsText = config?.commonEndpoints;
   const hasRows = selectedAuths(auths, runFilter).length > 0
-    && filterEndpoints(config?.endpoints, runFilter, selectedSheet, commonEndpointsText).length > 0
+    && filterEndpoints(config?.endpoints, runFilter, selectedSheet, commonEndpointsText, commonEndpointsEnabled).length > 0
     && (filterMsisdns(msisdns, runFilter).length > 0
-      || filterEndpoints(config?.endpoints, runFilter, selectedSheet, commonEndpointsText).every((e) => !wantsMsisdn(e)));
+      || filterEndpoints(config?.endpoints, runFilter, selectedSheet, commonEndpointsText, commonEndpointsEnabled).every((e) => !wantsMsisdn(e)));
 
   if ((enabled.length > 0 || common.length > 0) && auths.length > 0 && !hasRows) {
     errors.push({ field: 'runFilter', message: 'Filter không khớp dòng nào — không có request để chạy' });
@@ -265,7 +266,7 @@ export function buildRequests(config) {
   // Loc mot lan roi dung lai — de trong vong lap thi filterMsisdns chay lai
   // auths.length x endpoints.length lan vo ich.
   const auths = selectedAuths(config.auths, runFilter);
-  const eps = filterEndpoints(config.endpoints, runFilter, config.selectedSheet, config.commonEndpoints);
+  const eps = filterEndpoints(config.endpoints, runFilter, config.selectedSheet, config.commonEndpoints, config.commonEndpointsEnabled);
   const msisdns = filterMsisdns(config.msisdns, runFilter);
 
   const requests = [];

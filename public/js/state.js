@@ -21,6 +21,7 @@ export function defaultConfig() {
     domain: '',
     selectedSheet: 'all',
     commonEndpoints: '',
+    commonEndpointsEnabled: true,
     auths: [makeAuth({ name: 'Default' })],
     runFilter: { methods: [], msisdnPatterns: [], authIds: [] },
     dateRange: { from: '', to: '' },
