@@ -104,6 +104,12 @@ test('panel-perm chia split-pane voi bang phan quyen va 2 checkbox loc', () => {
   assert.ok(html.includes('id="perm-col-popup"'), 'phai co popup perm-col-popup');
 });
 
+test('mac dinh mo tab chi tich Khong quyen, bo tich Co quyen', () => {
+  const html = readHtml();
+  assert.match(html, /id="chk-perm-granted"\s+type="checkbox"\s*\/>/, 'chk-perm-granted phai KHONG co checked mac dinh');
+  assert.match(html, /id="chk-perm-denied"\s+type="checkbox"\s+checked\s*\/>/, 'chk-perm-denied phai co checked mac dinh');
+});
+
 test('UC2 co du 4 select: cot Name, sheet tham chieu, cot dich, cot khu trung', () => {
   const html = readHtml();
   assert.ok(html.includes('id="sel-permissions-name-col"'), 'phai co sel-permissions-name-col');

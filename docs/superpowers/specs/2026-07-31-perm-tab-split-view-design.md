@@ -74,7 +74,7 @@ export function initPermissionSheetFilterBar({ getRoleColumns, onChange })
 // -> { getFilter, getSelectedColumns, refreshCount }
 ```
 
-- Hai `<input type="checkbox">` `#chk-perm-granted`, `#chk-perm-denied`, cả hai **mặc định tích** — lọc dòng có/không quyền như cũ.
+- Hai `<input type="checkbox">` `#chk-perm-granted`, `#chk-perm-denied`. Mặc định mở tab: **chỉ tích "Không quyền"**, bỏ tích "Có quyền" — trọng tâm là soát dòng chưa được cấp quyền.
 - **Multi-select cột role**: nút `#btn-perm-col-filter` mở popup `#perm-col-popup` (danh sách checkbox, một dòng một cột role lấy từ `getRoleColumns()`). Bấm ra ngoài popup thì đóng lại (giống pattern popup gợi ý msisdn ở `run-filter-bar.js`).
 - Trạng thái chọn cột giữ trong `Set<string>` nội bộ (`selectedCols`), khởi tạo **mặc định tick hết** cột role hiện có. Cột role mới xuất hiện sau này (thêm mapping UC1) cũng mặc định tick — theo dõi bằng `knownNames`, chỉ set trạng thái tick lần đầu thấy tên cột, không ghi đè lựa chọn cột đã biết.
 - Đổi tích (checkbox có/không quyền hoặc checkbox cột) → gọi `onChange()` (main.js render lại bảng raw). Không ghi vào `state`, không `persist()` — toàn bộ bộ lọc là trạng thái xem tạm, mất khi F5 (giống filter cột của bảng kết quả).
@@ -124,7 +124,7 @@ ui: { permSplitPct: 60 },
   <div class="split-side">
     <div class="split-head">
       <span class="label">BẢNG PHÂN QUYỀN</span>
-      <label><input id="chk-perm-granted" type="checkbox" checked /> Có quyền</label>
+      <label><input id="chk-perm-granted" type="checkbox" /> Có quyền</label>
       <label><input id="chk-perm-denied" type="checkbox" checked /> Không quyền</label>
       <div class="col-filter">
         <button id="btn-perm-col-filter" type="button" class="btn btn-secondary btn-sm">Cột hiển thị ▾</button>
