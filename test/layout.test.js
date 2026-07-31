@@ -20,47 +20,94 @@ test('CSS dinh nghia grid 300px 1fr cho input-grid', () => {
   assert.match(readCss(), /grid-template-columns:\s*300px\s+1fr/);
 });
 
-test('cot hep chua CONNECTION, MSISDN, DATE RANGE theo dung thu tu', () => {
+test('cot hep chua MSISDN, DATE RANGE, QUERY PARAMS theo dung thu tu', () => {
   const html = readHtml();
   const col = html.match(/<div class="col col-narrow">([\s\S]*?)<div class="col col-wide">/);
   assert.ok(col, 'phai tim thay cot hep');
-  const order = [...col[1].matchAll(/>(CONNECTION|MSISDN|DATE RANGE)/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['CONNECTION', 'MSISDN', 'DATE RANGE']);
+  const order = [...col[1].matchAll(/>(MSISDN|DATE RANGE|QUERY PARAMS)/g)].map((m) => m[1]);
+  assert.deepEqual(order, ['MSISDN', 'DATE RANGE', 'QUERY PARAMS']);
 });
 
-test('cot rong co col-row chua BODY CHUNG, QUERY PARAMS va ADVANCED, roi den ENDPOINTS', () => {
+test('cot rong co card CONNECTION/BODY CHUNG gop lam mot, roi den ADVANCED+ENDPOINTS CHUNG+PERMISSIONS, roi den ENDPOINTS', () => {
   const html = readHtml();
   const col = html.match(/<div class="col col-wide">([\s\S]*?)<section id="panel-auths"/);
   assert.ok(col, 'phai tim thay cot rong');
-  assert.ok(col[1].includes('class="col-row"'), 'phai co div col-row');
-  assert.ok(!col[1].includes('>HEADERS'), 'khong co card HEADERS');
-  assert.ok(col[1].includes('BODY CHUNG'), 'phai co card BODY CHUNG');
-  assert.ok(col[1].includes('QUERY PARAMS'), 'phai co card QUERY PARAMS');
+  assert.ok(col[1].includes('id="card-connection"'), 'phai co card CONNECTION gop voi BODY CHUNG');
+  assert.ok(col[1].includes('id="inp-domain"'), 'card gop phai chua Domain (goc tu CONNECTION)');
+  assert.ok(col[1].includes('id="sel-body-mode"'), 'card gop phai chua BODY CHUNG config');
+  assert.ok(col[1].includes('class="cfg-row"'), 'phai co div cfg-row');
+  assert.ok(col[1].includes('class="cfg-stack"'), 'phai co div cfg-stack (ADVANCED + ENDPOINTS CHUNG)');
   assert.ok(col[1].includes('>ADVANCED'), 'phai co card ADVANCED');
-  assert.ok(col[1].includes('id="list-endpoint"'), 'phai co card ENDPOINTS');
-  assert.ok(col[1].indexOf('class="col-row"') < col[1].indexOf('id="list-endpoint"'));
+  assert.ok(col[1].includes('>ENDPOINTS CHUNG'), 'phai co card ENDPOINTS CHUNG');
+  assert.ok(col[1].includes('id="card-permissions"'), 'phai co card PERMISSIONS');
+  assert.ok(col[1].includes('id="list-endpoint"'), 'phai co card ENDPOINTS (danh sach)');
+
+  assert.ok(
+    col[1].indexOf('id="card-connection"') < col[1].indexOf('class="cfg-row"'),
+    'CONNECTION/BODY CHUNG phai truoc cfg-row (ADVANCED nam duoi BODY CHUNG)',
+  );
+  assert.ok(
+    col[1].indexOf('class="cfg-stack"') < col[1].indexOf('id="card-permissions"'),
+    'ADVANCED/ENDPOINTS CHUNG (cfg-stack) phai nam ben trai PERMISSIONS',
+  );
+  assert.ok(
+    col[1].indexOf('class="cfg-row"') < col[1].indexOf('id="list-endpoint"'),
+    'cfg-row phai truoc card ENDPOINTS list',
+  );
 });
 
-test('CSS dinh nghia col-row ba cot', () => {
-  assert.match(readCss(), /\.col-row\s*\{[^}]*grid-template-columns:\s*1fr\s+1fr\s+1fr/);
+test('ENDPOINTS CHUNG va PERMISSIONS luon hien thi (khong bi boc trong <details>)', () => {
+  const html = readHtml();
+  const endpointsChungBlock = html.match(/<section class="card">\s*<h2 class="card-title">ENDPOINTS CHUNG<\/h2>[\s\S]*?<\/section>/);
+  assert.ok(endpointsChungBlock, 'ENDPOINTS CHUNG phai la section (luon mo), khong phai details');
+
+  const permissionsBlock = html.match(/<section class="card" id="card-permissions">[\s\S]*?<\/section>/);
+  assert.ok(permissionsBlock, 'PERMISSIONS phai la section (luon mo), khong phai details');
 });
 
-test('topbar chua topbar-right voi btn-run, run-breakdown, btn-export-config va btn-import-config', () => {
+test('CSS dinh nghia cfg-row hai cot 1fr 2fr', () => {
+  assert.match(readCss(), /\.cfg-row\s*\{[^}]*grid-template-columns:\s*1fr\s+2fr/);
+});
+
+test('topbar gom ca tabs-left, tabs-right (run-filter-bar) va topbar-right (btn-run, run-breakdown, btn-export-config, btn-import-config)', () => {
   const html = readHtml();
   const topbar = html.match(/<header class="topbar">([\s\S]*?)<\/header>/);
   assert.ok(topbar, 'phai co topbar');
+  assert.ok(topbar[1].includes('class="tabs-left"'), 'phai co tabs-left');
+  assert.ok(topbar[1].includes('class="tabs-right"'), 'phai co tabs-right');
+  assert.ok(topbar[1].includes('id="run-filter-bar"'), 'phai co run-filter-bar');
   assert.ok(topbar[1].includes('id="btn-run"'), 'phai co btn-run');
   assert.ok(topbar[1].includes('id="run-breakdown"'), 'phai co run-breakdown');
   assert.ok(topbar[1].includes('id="btn-export-config"'), 'phai co btn-export-config');
   assert.ok(topbar[1].includes('id="btn-import-config"'), 'phai co btn-import-config');
+  assert.ok(!topbar[1].includes('id="token-indicator"'), 'khong duoc co token-indicator');
+  assert.ok(!topbar[1].includes('id="btn-reload-token"'), 'khong duoc co btn-reload-token');
 });
 
-test('tabs header chua tabs-left va tabs-right voi run-filter-bar', () => {
+test('co tab CHECK PERMISSION, panel-perm, nut btn-check-perm va btn-perm-export', () => {
   const html = readHtml();
-  const tabs = html.match(/<div class="tabs"[\s\S]*?<\/div>\s*<\/div>/);
-  assert.ok(tabs, 'phai co tabs header');
-  assert.ok(tabs[0].includes('class="tabs-left"'), 'phai co tabs-left');
-  assert.ok(tabs[0].includes('class="tabs-right"'), 'phai co tabs-right');
-  assert.ok(tabs[0].includes('id="run-filter-bar"'), 'phai co run-filter-bar');
+  assert.ok(html.includes('id="tab-perm"'), 'phai co tab-perm');
+  assert.ok(html.includes('id="panel-perm"'), 'phai co panel-perm');
+  assert.ok(html.includes('id="btn-check-perm"'), 'phai co nut btn-check-perm');
+  assert.ok(html.includes('id="btn-perm-export"'), 'phai co nut btn-perm-export');
+  assert.ok(html.includes('id="perm-table"'), 'phai co bang perm-table');
 });
 
+test('panel-perm chia split-pane voi bang phan quyen va 2 checkbox loc', () => {
+  const html = readHtml();
+  assert.ok(html.includes('id="perm-split"'), 'phai co perm-split');
+  assert.ok(html.includes('id="perm-split-handle"'), 'phai co perm-split-handle');
+  assert.ok(html.includes('id="perm-sheet-table"'), 'phai co bang perm-sheet-table');
+  assert.ok(html.includes('id="chk-perm-granted"'), 'phai co checkbox chk-perm-granted');
+  assert.ok(html.includes('id="chk-perm-denied"'), 'phai co checkbox chk-perm-denied');
+  assert.ok(html.includes('id="btn-perm-col-filter"'), 'phai co nut btn-perm-col-filter');
+  assert.ok(html.includes('id="perm-col-popup"'), 'phai co popup perm-col-popup');
+});
+
+test('UC2 co du 4 select: cot Name, sheet tham chieu, cot dich, cot khu trung', () => {
+  const html = readHtml();
+  assert.ok(html.includes('id="sel-permissions-name-col"'), 'phai co sel-permissions-name-col');
+  assert.ok(html.includes('id="sel-permissions-endpoint-sheet"'), 'phai co sel-permissions-endpoint-sheet');
+  assert.ok(html.includes('id="sel-permissions-endpoint-col"'), 'phai co sel-permissions-endpoint-col');
+  assert.ok(html.includes('id="sel-permissions-dedupe-col"'), 'phai co sel-permissions-dedupe-col');
+});

@@ -10,43 +10,53 @@
   <body>
     <header class="topbar">
       <span class="wordmark">CCM TOOL</span>
-      <div class="topbar-right">
-        <button id="btn-run" class="btn btn-primary" type="button">▶ RUN ALL (0)</button>
-        <span id="run-breakdown" class="hint mono"></span>
-        <button id="btn-export-config" class="btn btn-secondary btn-sm" type="button">⤒ Export config</button>
-        <button id="btn-import-config" class="btn btn-secondary btn-sm" type="button">⤓ Import config</button>
-        <span id="token-indicator" class="token-indicator is-off">○ chưa có token</span>
-        <button id="btn-reload-token" type="button" class="btn btn-secondary btn-sm">⟳ Reload Token</button>
-      </div>
-    </header>
-
-    <div class="tabs" role="tablist" aria-label="Khu vực làm việc">
-      <div class="tabs-left">
+      <div class="tabs-left" role="tablist" aria-label="Khu vực làm việc">
         <button id="tab-input" class="tab is-active" role="tab" aria-controls="panel-input" aria-selected="true" tabindex="0">INPUT</button>
         <button id="tab-auths" class="tab" role="tab" aria-controls="panel-auths" aria-selected="false" tabindex="-1">
           AUTHS <span id="tab-auths-badge" class="tab-badge">1</span>
         </button>
         <button id="tab-output" class="tab" role="tab" aria-controls="panel-output" aria-selected="false" tabindex="-1">
-          OUTPUT <span id="tab-output-badge" class="tab-badge" hidden>0</span>
+          OUTPUT <span id="tab-output-badge" class="tab-badge">0</span>
+        </button>
+        <button id="tab-perm" class="tab" role="tab" aria-controls="panel-perm" aria-selected="false" tabindex="-1">
+          CHECK PERMISSION <span id="tab-perm-badge" class="tab-badge">0</span>
         </button>
       </div>
       <div class="tabs-right">
         <div id="run-filter-bar" class="run-filter-bar"></div>
       </div>
-    </div>
+      <div class="topbar-right">
+        <button id="btn-run" class="btn btn-primary" type="button">▶ RUN ALL (0)</button>
+        <button id="btn-check-perm" class="btn btn-primary" type="button">🔐 CHECK PERM </button>
+        <button id="btn-export-config" class="btn btn-secondary btn-sm" type="button">⤒ Export config</button>
+        <button id="btn-import-config" class="btn btn-secondary btn-sm" type="button">⤓ Import config</button>
+      </div>
+    </header>
 
     <main class="main">
       <section id="panel-input" class="panel" role="tabpanel" aria-labelledby="tab-input" tabindex="0">
         <div class="input-grid">
           <div class="col col-narrow">
-            <section class="card">
-              <h2 class="card-title">CONNECTION</h2>
+                        <section class="card" id="card-connection">
+              <h2 class="card-title">CONNECTION / BODY CHUNG</h2>
               <label class="field">
                 <span class="label">Domain</span>
                 <input id="inp-domain" class="input" type="text" placeholder="https://api-abc.vn" spellcheck="false" />
               </label>
               <p class="hint">Phải là host của <b>API</b>, thường có tiền tố <code>api-</code>. Domain của trang web (không có <code>api-</code>) trả về HTML cho mọi path — gây lỗi NOT_JSON.</p>
-              <p class="hint">Bearer token, Cookie và Refresh token nằm ở tab <b>AUTHS</b> — mỗi profile một bộ.</p>
+
+              <div class="cfg-divider">
+                <span class="label">BODY CHUNG</span>
+                <select id="sel-body-mode" class="input input-sm" title="Cách nhập body chung">
+                  <option value="none">None</option>
+                  <option value="kv">Key-value</option>
+                  <option value="raw">Chuỗi thô (JSON/text)</option>
+                </select>
+                <button class="btn-icon" data-add-param="body" type="button" title="Thêm dòng">＋</button>
+              </div>
+              <div id="tbl-body-common" class="param-table"></div>
+              <textarea id="inp-body-raw" class="input mono ed-textarea" spellcheck="false" hidden
+                placeholder='{&#10;  "msisdn": "{{msisdn}}"&#10;}'></textarea>
             </section>
 
             <section class="card" id="card-msisdn">
@@ -82,80 +92,79 @@
               </label>
               <p id="date-preview" class="preview mono"></p>
             </section>
+
+            <section class="card">
+              <h2 class="card-title">QUERY PARAMS <button class="btn-icon" data-add-param="query" type="button" title="Thêm dòng">＋</button></h2>
+              <div id="tbl-query-params" class="param-table"></div>
+            </section>
           </div>
 
           <div class="col col-wide">
-            <div class="col-row">
 
-              <section class="card">
-                <h2 class="card-title">
-                  <span>BODY CHUNG <button class="btn-icon" data-add-param="body" type="button" title="Thêm dòng">＋</button></span>
-                  <select id="sel-body-mode" class="input input-sm" title="Cách nhập body chung">
-                    <option value="none">None</option>
-                    <option value="kv">Key-value</option>
-                    <option value="raw">Chuỗi thô (JSON/text)</option>
-                  </select>
-                </h2>
-                <div id="tbl-body-common" class="param-table"></div>
-                <textarea id="inp-body-raw" class="input mono ed-textarea" spellcheck="false" hidden
-                  placeholder='{&#10;  "msisdn": "{{msisdn}}"&#10;}'></textarea>
-                <p class="hint">Áp dụng cho endpoint đang để Body = None. Endpoint tự khai Body riêng thì dùng cấu hình riêng, không cộng dồn với body chung.</p>
-              </section>
 
-              <section class="card">
-                <h2 class="card-title">QUERY PARAMS <button class="btn-icon" data-add-param="query" type="button" title="Thêm dòng">＋</button></h2>
-                <div id="tbl-query-params" class="param-table"></div>
-              </section>
+            <div class="cfg-row">
+              <div class="cfg-stack">
+                <details class="card cfg-card">
+                  <summary class="card-title">ADVANCED</summary>
+                  <div class="field-row">
+                    <label class="field"><span class="label">Số luồng</span><input id="inp-worker-count" class="input mono" type="number" min="1" max="16" value="4" /></label>
+                    <label class="field"><span class="label">Timeout (ms)</span><input id="inp-timeout" class="input mono" type="number" min="1000" step="1000" value="30000" /></label>
+                  </div>
+                  <p class="hint">Mỗi luồng chạy tối đa 5 request cùng lúc.</p>
+                  <label class="field">
+                    <span class="label">Đường dẫn tìm error code (cách nhau bởi dấu phẩy)</span>
+                    <input id="inp-error-paths" class="input mono" type="text" value="errorCode, error_code, code, error.code" spellcheck="false" />
+                  </label>
+                  <label class="check"><input id="chk-dedupe" type="checkbox" checked /> Loại trùng khi import</label>
+                </details>
 
-              <section class="card">
-                <h2 class="card-title">ADVANCED</h2>
-                <div class="field-row">
-                  <label class="field"><span class="label">Số luồng</span><input id="inp-worker-count" class="input mono" type="number" min="1" max="16" value="4" /></label>
-                  <label class="field"><span class="label">Timeout (ms)</span><input id="inp-timeout" class="input mono" type="number" min="1000" step="1000" value="30000" /></label>
+                <section class="card">
+                  <h2 class="card-title">ENDPOINTS CHUNG</h2>
+                  <label class="check"><input id="chk-common-enabled" type="checkbox" checked /> Bật Endpoints chung</label>
+                  <textarea id="inp-endpoints-common" class="input mono ed-textarea" spellcheck="false"
+                    placeholder="Nhập danh sách endpoint chung (mỗi dòng 1 endpoint, có thể bắt đầu bằng METHOD).&#10;Ví dụ:&#10;/api/v1/health&#10;POST /api/v1/submit"></textarea>
+                </section>
+              </div>
+
+              <section class="card" id="card-permissions">
+                <h2 class="card-title">PHÂN QUYỀN (PERMISSIONS)</h2>
+                <div class="perm-file-row">
+                  <button id="btn-import-permissions" type="button" class="btn btn-secondary btn-sm">📁 Import file</button>
+                  <span id="permissions-file-info" class="hint mono">chưa nạp file</span>
+                  <label id="wrap-permissions-file-sheet" class="perm-file-sheet-wrap" hidden>
+                    <span class="label">Sheet file phân quyền</span>
+                    <select id="sel-permissions-file-sheet" class="input input-sm"></select>
+                  </label>
                 </div>
-                <p class="hint">Mỗi luồng chạy tối đa 5 request cùng lúc.</p>
-                <label class="field">
-                  <span class="label">Đường dẫn tìm error code (cách nhau bởi dấu phẩy)</span>
-                  <input id="inp-error-paths" class="input mono" type="text" value="errorCode, error_code, code, error.code" spellcheck="false" />
-                </label>
-                <label class="check"><input id="chk-dedupe" type="checkbox" checked /> Loại trùng khi import</label>
+                <div id="permissions-mapping-area" hidden>
+                  <div class="perm-grid">
+                    <label class="field">
+                      <span class="label">UC2: Cột Name phân quyền</span>
+                      <select id="sel-permissions-name-col" class="input input-sm"></select>
+                    </label>
+                    <label class="field">
+                      <span class="label">UC2: Sheet endpoints (chọn cột)</span>
+                      <select id="sel-permissions-endpoint-sheet" class="input input-sm"></select>
+                    </label>
+                    <label class="field">
+                      <span class="label">UC2: Cột đích (endpoints)</span>
+                      <select id="sel-permissions-endpoint-col" class="input input-sm"></select>
+                    </label>
+                    <label class="field">
+                      <span class="label">UC2: Cột khử trùng (endpoints)</span>
+                      <select id="sel-permissions-dedupe-col" class="input input-sm"></select>
+                    </label>
+                  </div>
+                  <div class="field perm-uc1">
+                    <div class="perm-uc1-head">
+                      <span class="label">UC1: Mappings Cột ↔ Sheet ↔ Auth Profile (quyết định sheet nào được kiểm tra)</span>
+                      <button id="btn-permissions-add-usecase1" type="button" class="btn btn-secondary btn-sm">＋ Thêm mapping</button>
+                    </div>
+                    <div id="permissions-usecase1-table"></div>
+                  </div>
+                </div>
               </section>
             </div>
-
-            <section class="card" style="margin-bottom: var(--sp-md);">
-              <h2 class="card-title">ENDPOINTS CHUNG</h2>
-              <label class="check" style="margin-bottom: var(--sp-xs); display: block;"><input id="chk-common-enabled" type="checkbox" checked /> Bật Endpoints chung</label>
-              <textarea id="inp-endpoints-common" class="input mono ed-textarea" spellcheck="false"
-                placeholder="Nhập danh sách endpoint chung (mỗi dòng 1 endpoint, có thể bắt đầu bằng METHOD).&#10;Ví dụ:&#10;/api/v1/health&#10;POST /api/v1/submit" style="height: 120px;"></textarea>
-            </section>
-
-            <section class="card" id="card-permissions" style="margin-bottom: var(--sp-md);">
-              <h2 class="card-title">PHÂN QUYỀN (PERMISSIONS)</h2>
-              <div class="field">
-                <span class="label">File Phân Quyền</span>
-                <div style="display: flex; gap: var(--sp-xs); align-items: center;">
-                  <button id="btn-import-permissions" type="button" class="btn btn-secondary btn-sm">📁 Import file</button>
-                  <span id="permissions-file-info" class="hint mono" style="margin: 0; word-break: break-all;">chưa nạp file</span>
-                </div>
-              </div>
-              <div id="permissions-mapping-area" hidden>
-                <div class="field" style="margin-top: var(--sp-sm);">
-                  <span class="label">Usecase 2: Cột Name phân quyền</span>
-                  <select id="sel-permissions-name-col" class="input"></select>
-                </div>
-                <div class="field">
-                  <span class="label">Usecase 2: Sheet endpoints đích</span>
-                  <select id="sel-permissions-target-sheet" class="input">
-                    <option value="all">Tất cả sheet (All)</option>
-                  </select>
-                </div>
-                <div class="field" style="margin-top: var(--sp-sm);">
-                  <span class="label">Usecase 1: Mappings Cột ↔ Sheet ↔ Auth Profile</span>
-                  <div id="permissions-usecase1-table" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-xs);"></div >
-                  <button id="btn-permissions-add-usecase1" type="button" class="btn btn-secondary btn-sm" style="width: 100%; margin-top: var(--sp-xs);">＋ Thêm mapping</button>
-                </div>
-              </div>
-            </section>
 
             <section class="card" id="list-endpoint"></section>
           </div>
@@ -197,6 +206,46 @@
 
         <div id="result-viewport" class="result-viewport">
           <table id="result-table" class="result-table"></table>
+        </div>
+      </section>
+
+      <section id="panel-perm" class="panel" role="tabpanel" aria-labelledby="tab-perm" tabindex="0" hidden>
+        <div class="runbar">
+          <div class="runbar-left">
+            <span id="perm-progress" class="mono">0/0</span>
+            <span id="perm-stats" class="mono muted"></span>
+          </div>
+          <div class="runbar-right">
+            <button id="btn-perm-cancel" class="btn btn-secondary" type="button" disabled>■ Dừng</button>
+            <button id="btn-perm-export" class="btn btn-secondary" type="button" disabled>⬇ Export Excel</button>
+          </div>
+        </div>
+
+        <div id="perm-split" class="split-pane">
+          <div class="split-side">
+            <div id="perm-viewport" class="result-viewport">
+              <table id="perm-table" class="result-table"></table>
+            </div>
+          </div>
+
+          <div id="perm-split-handle" class="split-handle" role="separator"
+               aria-orientation="vertical" tabindex="0" aria-label="Kéo để chỉnh tỉ lệ hai panel"></div>
+
+          <div class="split-side">
+            <div class="split-head">
+              <span class="label">BẢNG PHÂN QUYỀN</span>
+              <label><input id="chk-perm-granted" type="checkbox" checked /> Có quyền</label>
+              <label><input id="chk-perm-denied" type="checkbox" checked /> Không quyền</label>
+              <div class="col-filter">
+                <button id="btn-perm-col-filter" type="button" class="btn btn-secondary btn-sm">Cột hiển thị ▾</button>
+                <ul id="perm-col-popup" class="col-filter-popup" hidden></ul>
+              </div>
+              <span id="perm-sheet-count" class="muted mono"></span>
+            </div>
+            <div id="perm-sheet-viewport" class="result-viewport">
+              <table id="perm-sheet-table" class="result-table"></table>
+            </div>
+          </div>
         </div>
       </section>
     </main>

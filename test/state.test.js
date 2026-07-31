@@ -62,10 +62,32 @@ test('defaultConfig tra ve cau hinh mac dinh dung chuuan', () => {
   assert.equal(cfg.advanced.dedupeOnImport, true);
 });
 
+test('defaultConfig co ui.permSplitPct mac dinh 60', () => {
+  assert.equal(defaultConfig().ui.permSplitPct, 60);
+});
+
+test('load config cu khong co ui van ra permSplitPct 60', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({ domain: 'https://x.vn' }));
+  Object.assign(state, defaultConfig());
+  load();
+  assert.equal(state.ui.permSplitPct, 60);
+});
+
+test('load giu permSplitPct da luu', () => {
+  setupMockLocalStorage();
+  applyConfig({ ui: { permSplitPct: 40 } });
+  Object.assign(state, defaultConfig());
+  load();
+  assert.equal(state.ui.permSplitPct, 40);
+});
+
 test('defaultConfig has permission configs', () => {
   const config = defaultConfig();
-  assert.deepEqual(config.permissionFile, { filename: '', headers: [], rows: [] });
-  assert.deepEqual(config.permissionMapping, { usecase1: [], usecase2: { permissionColumn: '', targetSheet: 'all' } });
+  assert.deepEqual(config.permissionFile, { filename: '', sheets: [], selectedSheet: '', headers: [], rows: [] });
+  assert.deepEqual(config.permissionMapping, {
+    usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '', dedupeColumn: '' },
+  });
 });
 
 test('runId getter va setter hoat dong', () => {
@@ -274,7 +296,7 @@ test('load va applyConfig merge safe permissionFile va permissionMapping', () =>
     permissionFile: { filename: 'test.xlsx', headers: ['a'], rows: [['1']] },
     permissionMapping: {
       usecase1: ['colA'],
-      usecase2: { permissionColumn: 'colB', targetSheet: 'Sheet1' }
+      usecase2: { permissionColumn: 'colB' }
     }
   });
 
@@ -282,7 +304,6 @@ test('load va applyConfig merge safe permissionFile va permissionMapping', () =>
   assert.deepEqual(state.permissionFile.headers, ['a']);
   assert.deepEqual(state.permissionMapping.usecase1, ['colA']);
   assert.equal(state.permissionMapping.usecase2.permissionColumn, 'colB');
-  assert.equal(state.permissionMapping.usecase2.targetSheet, 'Sheet1');
 
   // Test load with partial config
   localStorage.setItem('ccm-tool-config', JSON.stringify({
@@ -295,5 +316,4 @@ test('load va applyConfig merge safe permissionFile va permissionMapping', () =>
 
   assert.equal(state.permissionFile.filename, '');
   assert.equal(state.permissionMapping.usecase2.permissionColumn, 'colC');
-  assert.equal(state.permissionMapping.usecase2.targetSheet, 'all');
 });

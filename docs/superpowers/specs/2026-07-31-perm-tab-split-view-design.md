@@ -34,17 +34,20 @@ Yêu cầu nâng cấp:
 Không đụng DOM, test không cần mock. Cùng họ với `permission-filter-logic.js` đang có.
 
 ```js
-export function roleColumnIndexes(headers, uc1)   // -> number[]
-export function rowHasPermission(row, roleIdxs)   // -> boolean
-export function emptySheetFilter()                // -> { granted: true, denied: true }
+export function roleColumns(headers, uc1)          // -> { index, name }[], thu tu header, khu trung
+export function roleColumnIndexes(headers, uc1)    // -> number[] (derive tu roleColumns)
+export function identifierColumnIndex(headers, uc2) // -> number, cot Name cua UC2 (-1 neu chua chon/da mat)
+export function rowHasPermission(row, roleIdxs)    // -> boolean
+export function emptySheetFilter()                 // -> { granted: true, denied: true }
 export function applySheetFilter(rows, roleIdxs, filter) // -> { row, index, granted }[]
 ```
 
 Quy tắc:
 
-- `roleColumnIndexes`: với mỗi `m` trong `uc1`, lấy `headers.indexOf(m.permissionColumn)`; bỏ `-1`; khử trùng lặp; giữ thứ tự cột trong `headers`.
+- `roleColumns`: với mỗi `m` trong `uc1`, lấy `headers.indexOf(m.permissionColumn)`; bỏ `-1`; khử trùng lặp; giữ thứ tự cột trong `headers`. `roleColumnIndexes` chỉ là `.map(c => c.index)` của hàm này — vẫn dùng cho `applySheetFilter` như cũ.
+- `identifierColumnIndex`: vị trí cột `permissionMapping.usecase2.permissionColumn` trong `headers` — đây là cột định danh dòng (vd "BE Name"), luôn hiển thị, không nằm trong bộ lọc cột role.
 - `rowHasPermission`: `true` khi tồn tại `i` trong `roleIdxs` mà `String(row[i] ?? '').trim().toLowerCase() === 'x'`. Dùng đúng quy ước `'x'` mà `evaluateUc2Permission` (`src/server/http-client.js`) đang chấm — một nguồn sự thật, không được lệch.
-- `applySheetFilter`: giữ lại dòng khi (`granted` và có quyền) hoặc (`denied` và không có quyền). Trả kèm `index` gốc trong `rows` để bảng hiển thị được số dòng thật.
+- `applySheetFilter`: giữ lại dòng khi (`granted` và có quyền) hoặc (`denied` và không có quyền). Chấm trên **toàn bộ** cột role (`roleColumnIndexes`), không phụ thuộc cột nào đang được chọn hiển thị — bộ lọc "có/không quyền" và bộ lọc "cột nào hiện" là hai khái niệm độc lập. Trả kèm `index` gốc trong `rows` để bảng hiển thị được số dòng thật.
 - Cả hai checkbox bỏ tích → mảng rỗng (bảng hiện dòng "không khớp bộ lọc"), **không** đảo thành hiện tất cả.
 - `roleIdxs` rỗng (chưa khai UC1 nào) → mọi dòng tính là **không có quyền**, nên chỉ hiện khi `denied` được tích.
 
@@ -53,24 +56,28 @@ Quy tắc:
 Theo đúng pattern `initPermissionTable`: nhận callback getter, trả `{ render }`.
 
 ```js
-export function initPermissionSheetTable({ getSheet, getUc1, getFilter })
+export function initPermissionSheetTable({ getSheet, getUc1, getUc2, getFilter, getSelectedColumns })
 ```
 
 - `getSheet()` → `state.permissionFile` (đọc `headers`, `rows`, `filename`, `selectedSheet`).
-- Vẽ vào `#perm-sheet-table`; `thead` là `headers` của sheet, thêm cột đầu `#` là số dòng gốc (`index + 2` — khớp số dòng Excel khi hàng 1 là header).
-- Ô thuộc cột role có giá trị `x` tô class `status-up`; dòng không có quyền nào để mặc định.
+- **Không hiển thị toàn bộ cột của sheet.** Cột hiển thị (`displayCols`) = cột định danh (`identifierColumnIndex`, nếu tìm thấy) + các cột role có tên nằm trong `getSelectedColumns()` (một `Set<string>` do `permission-sheet-filter-bar.js` quản lý). Cột không map UC1/UC2 nào (vd "Action BE") không bao giờ hiện.
+- Vẽ vào `#perm-sheet-table`; `thead` = `#` + tên từng cột trong `displayCols`, theo đúng thứ tự đó.
+- Ô thuộc cột role (trong `displayCols`) có giá trị `x` tô class `status-up`. Cột định danh không tô, dù giá trị là gì.
 - Header dùng lại `.result-table` (sticky header có sẵn) — không viết CSS bảng mới.
 - Chưa nạp file (`filename` rỗng) → hiện dòng gợi ý "Chưa nạp file phân quyền — vào tab INPUT → PHÂN QUYỀN để import".
 - Bảng **chỉ đọc**: không click row, không mở drawer. (YAGNI — chưa có nhu cầu liên kết 2 bảng.)
 
-### 3.3 Bộ lọc checkbox — `public/js/ui/permission-sheet-filter-bar.js` (file mới)
+### 3.3 Bộ lọc — `public/js/ui/permission-sheet-filter-bar.js` (file mới)
 
 ```js
-export function initPermissionSheetFilterBar({ onChange })  // -> { getFilter, refreshCount }
+export function initPermissionSheetFilterBar({ getRoleColumns, onChange })
+// -> { getFilter, getSelectedColumns, refreshCount }
 ```
 
-- Hai `<input type="checkbox">` `#chk-perm-granted`, `#chk-perm-denied`, cả hai **mặc định tích**.
-- Đổi tích → gọi `onChange()` (main.js render lại bảng raw). Không ghi vào `state`, không `persist()` — bộ lọc là trạng thái xem tạm, giống filter cột của bảng kết quả.
+- Hai `<input type="checkbox">` `#chk-perm-granted`, `#chk-perm-denied`, cả hai **mặc định tích** — lọc dòng có/không quyền như cũ.
+- **Multi-select cột role**: nút `#btn-perm-col-filter` mở popup `#perm-col-popup` (danh sách checkbox, một dòng một cột role lấy từ `getRoleColumns()`). Bấm ra ngoài popup thì đóng lại (giống pattern popup gợi ý msisdn ở `run-filter-bar.js`).
+- Trạng thái chọn cột giữ trong `Set<string>` nội bộ (`selectedCols`), khởi tạo **mặc định tick hết** cột role hiện có. Cột role mới xuất hiện sau này (thêm mapping UC1) cũng mặc định tick — theo dõi bằng `knownNames`, chỉ set trạng thái tick lần đầu thấy tên cột, không ghi đè lựa chọn cột đã biết.
+- Đổi tích (checkbox có/không quyền hoặc checkbox cột) → gọi `onChange()` (main.js render lại bảng raw). Không ghi vào `state`, không `persist()` — toàn bộ bộ lọc là trạng thái xem tạm, mất khi F5 (giống filter cột của bảng kết quả).
 - `refreshCount(shown, total)` cập nhật nhãn `#perm-sheet-count` dạng `hiện 12/142 dòng`.
 
 ### 3.4 Thanh chia — `public/js/ui/split-pane.js` (file mới)
@@ -119,6 +126,10 @@ ui: { permSplitPct: 60 },
       <span class="label">BẢNG PHÂN QUYỀN</span>
       <label><input id="chk-perm-granted" type="checkbox" checked /> Có quyền</label>
       <label><input id="chk-perm-denied" type="checkbox" checked /> Không quyền</label>
+      <div class="col-filter">
+        <button id="btn-perm-col-filter" type="button" class="btn btn-secondary btn-sm">Cột hiển thị ▾</button>
+        <ul id="perm-col-popup" class="col-filter-popup" hidden></ul>
+      </div>
       <span id="perm-sheet-count" class="muted mono"></span>
     </div>
     <div id="perm-sheet-viewport" class="result-viewport">
@@ -145,6 +156,14 @@ ui: { permSplitPct: 60 },
   display: flex; align-items: center; gap: var(--sp-sm);
   padding: var(--sp-xs) var(--sp-sm); border-bottom: 1px solid var(--hairline);
 }
+.col-filter { position: relative; }
+.col-filter-popup {
+  position: absolute; top: 100%; left: 0; z-index: 5;
+  min-width: 180px; max-height: 320px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.col-filter-popup[hidden] { display: none; }
 ```
 
 `min-width: 0` trên `.split-side` là bắt buộc — thiếu nó grid item chứa bảng rộng sẽ tự nong ra và thanh kéo mất tác dụng.
@@ -152,9 +171,14 @@ ui: { permSplitPct: 60 },
 ### 3.8 Nối dây — `public/js/main.js`
 
 ```js
-const permSheetFilterBar = initPermissionSheetFilterBar({ onChange: () => renderPermSheet() });
+const permSheetFilterBar = initPermissionSheetFilterBar({
+  getRoleColumns: () => roleColumns(state.permissionFile.headers, state.permissionMapping.usecase1),
+  onChange: () => renderPermSheet(),
+});
 const permSheetTable = initPermissionSheetTable({
   getSheet: () => state.permissionFile,
+  getUc2: () => state.permissionMapping.usecase2,
+  getSelectedColumns: () => permSheetFilterBar.getSelectedColumns(),
   getUc1: () => state.permissionMapping.usecase1,
   getFilter: () => permSheetFilterBar.getFilter(),
 });
@@ -205,9 +229,19 @@ Gọi `renderPermSheet()` tại hai chỗ:
 
 **`test/permission-sheet-table.test.js`** (MockElement như `test/permission-table.test.js`):
 
-- Vẽ đủ số cột theo `headers` + cột `#`.
-- Ô `x` ở cột role có class `status-up`; ô `x` ở cột **không phải** role thì không.
+- Header chỉ gồm `#` + cột định danh UC2 + cột role đang được tick — cột không map (vd "Action BE") không xuất hiện.
+- Bỏ tick hết cột role → chỉ còn `#` + cột định danh.
+- Ô `x` ở cột role có class `status-up`; cột định danh thì không, dù giá trị là gì.
+- Bộ lọc có/không quyền vẫn chấm trên toàn bộ cột role, không phụ thuộc cột nào đang hiển thị.
 - `filename` rỗng → hiện dòng gợi ý import.
+
+**`test/permission-sheet-filter-bar.test.js`** (MockElement):
+
+- `getFilter()` phản ánh đúng trạng thái 2 checkbox có/không quyền.
+- `getSelectedColumns()` mặc định trả về mọi tên cột role hiện có.
+- Mở popup vẽ đủ checkbox theo `getRoleColumns()`, mỗi ô mặc định tích.
+- Bỏ tích một checkbox cột → tên đó biến mất khỏi `getSelectedColumns()`, gọi `onChange` đúng một lần.
+- Cột role mới xuất hiện sau (thêm mapping UC1) → mặc định tích, không đụng tới lựa chọn của cột đã biết.
 - `render()` trả `{ shown, total }` đúng.
 
 **`test/split-pane.test.js`** (MockElement + pointer event giả):

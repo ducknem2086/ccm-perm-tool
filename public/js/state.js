@@ -43,10 +43,10 @@ export function defaultConfig() {
     globalBodyMode: 'none',
     globalBodyParams: [],
     globalBodyRaw: '',
-    permissionFile: { filename: '', headers: [], rows: [] },
+    permissionFile: { filename: '', sheets: [], selectedSheet: '', headers: [], rows: [] },
     permissionMapping: {
       usecase1: [],
-      usecase2: { permissionColumn: '', targetSheet: 'all' }
+      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '', dedupeColumn: '' }
     },
     advanced: {
       workerCount: 4,
@@ -54,6 +54,7 @@ export function defaultConfig() {
       errorCodePaths: ['errorCode', 'error_code', 'code', 'error.code'],
       dedupeOnImport: true,
     },
+    ui: { permSplitPct: 60 },
   };
 }
 
@@ -67,6 +68,18 @@ export const setRunId = (v) => { runId = v; };
 
 export function resetResults() {
   results.length = 0;
+}
+
+// Run rieng cua nut CHECK PERM, doc lap voi RUN ALL — chay cai nay khong
+// xoa ket qua dang co o tab OUTPUT va nguoc lai.
+export const permResults = [];
+
+let permRunId = null;
+export const getPermRunId = () => permRunId;
+export const setPermRunId = (v) => { permRunId = v; };
+
+export function resetPermResults() {
+  permResults.length = 0;
 }
 
 const listeners = new Set();
@@ -115,6 +128,7 @@ export function load() {
   Object.assign(state, base, saved, {
     dateRange: { ...base.dateRange, ...(saved.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(saved.advanced ?? {}) },
+    ui: { ...base.ui, ...(saved.ui ?? {}) },
     runFilter: { ...base.runFilter, ...(saved.runFilter ?? {}) },
     permissionFile: { ...base.permissionFile, ...(saved.permissionFile ?? {}) },
     permissionMapping: {
@@ -140,6 +154,7 @@ export function applyConfig(incoming) {
   Object.assign(state, base, incoming, {
     dateRange: { ...base.dateRange, ...(incoming.dateRange ?? {}) },
     advanced: { ...base.advanced, ...(incoming.advanced ?? {}) },
+    ui: { ...base.ui, ...(incoming.ui ?? {}) },
     runFilter: { ...base.runFilter, ...(incoming.runFilter ?? {}) },
     permissionFile: { ...base.permissionFile, ...(incoming.permissionFile ?? {}) },
     permissionMapping: {

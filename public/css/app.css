@@ -17,34 +17,25 @@ body { display: flex; flex-direction: column; }
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- topbar ---------- */
+/* ---------- topbar (gom ca tabs, wrap xuong hang khi hep) ---------- */
 .topbar {
-  height: var(--topbar-h);
+  min-height: var(--topbar-h);
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--sp-lg);
+  padding: var(--sp-xs) var(--sp-lg);
   background: var(--canvas);
   border-bottom: 1px solid var(--hairline);
   gap: var(--sp-md);
+  row-gap: var(--sp-xs);
 }
 .wordmark { color: var(--primary); font-weight: 700; letter-spacing: .5px; font-size: 18px; }
-.topbar-right { display: flex; align-items: center; gap: var(--sp-sm); overflow-x: auto; }
+.topbar-right { display: flex; align-items: center; gap: var(--sp-sm); overflow-x: auto; margin-left: auto; }
 .token-indicator { font-size: var(--fs-caption); color: var(--up); }
 .token-indicator.is-off { color: var(--muted); }
 
-/* ---------- tabs ---------- */
-.tabs {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-md);
-  padding: 0 var(--sp-lg);
-  background: var(--canvas);
-  border-bottom: 1px solid var(--hairline);
-}
+/* ---------- tabs (trong topbar) ---------- */
 .tabs-left {
   display: flex;
   align-items: center;
@@ -80,18 +71,87 @@ body { display: flex; flex-direction: column; }
 .panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .panel[hidden] { display: none; }
 
+/* Tab INPUT: hai cot cao het panel, moi cot tu scroll. Card ENDPOINTS an het
+   chieu cao con lai o cot phai nen danh sach endpoint khong bi day xuong duoi
+   cac card cau hinh (1920x1080: ~600px cho vung endpoint khi config dong). */
 .input-grid {
-  flex: 1 1 auto; min-height: 0; overflow: auto;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
   display: grid; grid-template-columns: 300px 1fr;
-  gap: var(--sp-md); padding: var(--sp-md);
-  align-items: start;
-  max-height: calc(100vh - var(--topbar-h) - 48px);
+  gap: var(--sp-sm); padding: var(--sp-sm);
+  align-items: stretch;
 }
-.col { display: flex; flex-direction: column; gap: var(--sp-md); min-width: 0; }
-.col-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sp-md); align-items: start; }
+.col { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; min-height: 0; }
+/* Cot tu scroll chi khi viewport qua thap de chua het config — o 1920x1080
+   khong bao gio kich hoat vi config + 200px endpoint < chieu cao cot. */
+.col-narrow, .col-wide { overflow-y: auto; overflow-x: hidden; }
+/* ENDPOINTS CHUNG va PHAN QUYEN phai luon hien (khong an sau details) — nam
+   trong .cfg-row: cot trai la .cfg-stack (ADVANCED co the dong + ENDPOINTS
+   CHUNG luon mo), cot phai la PHAN QUYEN, luon mo. Cac dai nay giu chieu cao
+   vua du nhap, phan con lai thuoc card ENDPOINTS list. */
+.cfg-row {
+  display: grid; grid-template-columns: 1fr 2fr; gap: var(--sp-xs);
+  align-items: start; flex: 0 0 auto;
+}
+.cfg-stack { display: flex; flex-direction: column; gap: var(--sp-xs); min-width: 0; }
 @media (max-width: 1280px) {
-  .input-grid { grid-template-columns: 1fr; max-height: none; }
-  .col-row { grid-template-columns: 1fr; }
+  .input-grid { grid-template-columns: 1fr; overflow: auto; }
+  .col-narrow, .col-wide { overflow: visible; }
+  .cfg-row { grid-template-columns: 1fr; }
+  #list-endpoint { min-height: 420px; }
+}
+
+/* ---------- tab INPUT: nen card cau hinh ---------- */
+#panel-input .card { padding: var(--sp-sm); gap: var(--sp-xs); border-radius: var(--radius-lg); }
+#panel-input .input { height: 32px; }
+#panel-input .input-sm { height: 26px; }
+#panel-input .btn-sm { height: 26px; }
+#panel-input .hint { line-height: 1.4; }
+#panel-input .ed-textarea { min-height: 0; height: 96px; }
+
+/* details.card: summary la card-title (flex) nen mat marker mac dinh — ve lai */
+details.cfg-card > summary.card-title { list-style: none; }
+details.cfg-card > summary.card-title::-webkit-details-marker { display: none; }
+details.cfg-card > summary.card-title::after {
+  content: '▾'; margin-left: auto; padding-left: var(--sp-xs);
+  color: var(--muted); font-size: 10px; flex: 0 0 auto;
+}
+details.cfg-card:not([open]) > summary.card-title::after { content: '▸'; }
+details.cfg-card:not([open]) { gap: 0; }
+
+/* CONNECTION/BODY CHUNG merged card: vach ngan truoc phan BODY CHUNG */
+.cfg-divider {
+  display: flex; align-items: center; gap: var(--sp-xs);
+  margin-top: var(--sp-xs); padding-top: var(--sp-sm);
+  border-top: 1px solid var(--hairline);
+}
+.cfg-divider .label { text-transform: uppercase; letter-spacing: .8px; font-weight: 600; color: var(--muted); }
+.cfg-divider select { flex: 1 1 auto; }
+
+/* PERMISSIONS: cac select xep ngang thay vi doc — tiet kiem chieu cao */
+.perm-file-row { display: flex; gap: var(--sp-xs); align-items: center; flex-wrap: wrap; }
+.perm-file-row .hint { margin: 0; word-break: break-all; }
+.perm-file-sheet-wrap { display: inline-flex; align-items: center; gap: var(--sp-xs); margin-left: auto; }
+.perm-file-sheet-wrap[hidden] { display: none; }
+.perm-file-sheet-wrap .label { white-space: nowrap; }
+.perm-file-sheet-wrap select { min-width: 140px; }
+.perm-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-xs); }
+.perm-uc1 { margin-top: var(--sp-xs); }
+.perm-uc1-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-xs); }
+#permissions-usecase1-table {
+  max-height: 132px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--sp-xxs);
+}
+
+/* Card ENDPOINTS an het chieu cao con lai cua cot; chi el-body scroll. */
+#list-endpoint { flex: 1 1 auto; min-height: 200px; }
+#list-endpoint .el-body { max-height: none; min-height: 0; }
+.el-sheet-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-xxs); flex: 0 0 auto; }
+.el-sheet-tabs[hidden] { display: none; }
+.el-sheet-select {
+  height: 26px; flex: 0 0 auto; max-width: 180px;
+  background: var(--canvas); color: var(--body);
+  border: 1px solid var(--hairline); border-radius: var(--radius-md);
+  font-family: inherit; font-size: var(--fs-sm); padding: 0 var(--sp-xxs);
 }
 
 /* ---------- card ---------- */
@@ -137,7 +197,7 @@ select.input { padding: 0 var(--sp-xs); }
 .el-search { flex: 0 0 auto; width: 200px; text-transform: none; letter-spacing: normal; font-weight: 400; }
 
 .el-search-row {
-  display: flex; align-items: center; gap: var(--sp-sm);
+  display: flex; align-items: center; gap: var(--sp-sm); flex-wrap: wrap;
   text-transform: none; letter-spacing: normal; font-weight: 400;
 }
 .el-method-filter { display: flex; align-items: center; gap: 6px; }
@@ -218,7 +278,7 @@ select.input { padding: 0 var(--sp-xs); }
   line-height: 1.6;
 }
 .el-errors .el-del { position: absolute; top: 2px; right: 2px; }
-.el-actions { display: flex; gap: var(--sp-xs); }
+.el-actions { display: flex; gap: var(--sp-xs); flex-wrap: wrap; flex: 0 0 auto; }
 
 .el-empty { color: var(--muted); font-size: var(--fs-caption); padding: var(--sp-xs); }
 .el-msisdn-toggle {
@@ -242,6 +302,8 @@ select.input { padding: 0 var(--sp-xs); }
 
 /* ---------- param table ---------- */
 .param-table { display: flex; flex-direction: column; gap: var(--sp-xxs); }
+/* display:flex thang thuoc tinh hidden — phai tat tuong minh */
+.param-table[hidden] { display: none; }
 .pt-row { display: flex; align-items: center; gap: var(--sp-xxs); }
 .pt-row .input { height: 28px; font-size: var(--fs-sm); }
 .pt-key { flex: 0 0 34%; }
@@ -278,6 +340,35 @@ select.input { padding: 0 var(--sp-xs); }
 .filter .input { width: 120px; }
 .filter.grow { flex: 1 1 200px; }
 .filter.grow .input { width: 100%; }
+
+/* ---------- split pane (tab CHECK PERMISSION) ---------- */
+.split-pane {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 60% 6px 1fr;
+}
+.split-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.split-handle {
+  cursor: col-resize; background: var(--hairline);
+  transition: background .12s;
+}
+.split-handle:hover, .split-handle:focus-visible { background: var(--primary); }
+.split-head {
+  display: flex; align-items: center; gap: var(--sp-sm);
+  padding: var(--sp-xs) var(--sp-sm); border-bottom: 1px solid var(--hairline);
+}
+.col-filter { position: relative; }
+.col-filter-popup {
+  position: absolute; top: 100%; left: 0; z-index: 5; margin: var(--sp-xxs) 0 0;
+  list-style: none; padding: var(--sp-xs); min-width: 180px; max-height: 320px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.col-filter-popup[hidden] { display: none; }
+.col-filter-popup label {
+  display: flex; align-items: center; gap: var(--sp-xxs);
+  font-size: var(--fs-sm); padding: var(--sp-xxs) var(--sp-xs); white-space: nowrap;
+}
 
 .result-viewport { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .result-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }

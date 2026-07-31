@@ -144,9 +144,16 @@ export function initDetailDrawer() {
     if (e.key === 'Escape' && !drawer.hidden) close();
   });
 
+  // Row cua ca hai bang ket qua deu mo drawer nay, nen click vao chung khong
+  // duoc tinh la click ra ngoai — neu khong drawer vua mo se bi dong ngay.
+  const isResultRow = (target) => (
+    target.closest('#result-table tbody tr') !== null
+    || target.closest('#perm-table tbody tr') !== null
+  );
+
   document.addEventListener('click', (e) => {
     if (drawer.hidden) return;
-    if (!drawer.contains(e.target) && e.target.closest('#result-table tbody tr') === null) close();
+    if (!drawer.contains(e.target) && !isResultRow(e.target)) close();
   });
 
   return { open, close };

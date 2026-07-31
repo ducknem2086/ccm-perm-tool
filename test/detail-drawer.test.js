@@ -227,6 +227,22 @@ test('Click outside dong drawer', () => {
   assert.equal(drawer.hidden, true);
 });
 
+test('Click vao dong cua bang perm khong dong drawer vua mo', () => {
+  const { drawer } = setupMockDOM();
+  const detailDrawer = initDetailDrawer();
+
+  detailDrawer.open(makeRecord());
+  assert.equal(drawer.hidden, false);
+
+  const permRow = new MockElement('tr');
+  const permCell = new MockElement('td');
+  permCell.closest = (sel) => (sel === '#perm-table tbody tr' ? permRow : null);
+
+  globalThis.document.dispatchEvent({ type: 'click', target: permCell });
+
+  assert.equal(drawer.hidden, false);
+});
+
 test('Click bên trong drawer khong dong drawer', () => {
   const { drawer } = setupMockDOM();
   const detailDrawer = initDetailDrawer();

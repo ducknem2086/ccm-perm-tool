@@ -1,8 +1,13 @@
-import { state, load, persist, notify, subscribe, results, resetResults, getRunId, setRunId, applyConfig } from './state.js';
+import {
+  state, load, persist, notify, subscribe, results, resetResults, getRunId, setRunId, applyConfig,
+  permResults, resetPermResults, getPermRunId, setPermRunId,
+} from './state.js';
 import { startRun, openStream, cancelRun, exportExcel } from './api.js';
 import { countRequests } from './shared/request-count.js';
 import { filterEndpoints, selectedAuths } from './shared/run-filter.js';
 import { toCurl, curlFilename } from './shared/curl.js';
+import { buildPermissionRunConfig, validatePermissionScope } from './shared/permission-scope.js';
+import { roleColumns } from './shared/permission-sheet-filter.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
 import { initDateRange } from './ui/date-range.js';
@@ -13,6 +18,11 @@ import { initEndpointList } from './ui/endpoint-list.js';
 import { initParamTables } from './ui/param-table.js';
 import { initFilters } from './ui/filters.js';
 import { initResultTable } from './ui/result-table.js';
+import { initPermissionFilters } from './ui/permission-filters.js';
+import { initPermissionTable } from './ui/permission-table.js';
+import { initPermissionSheetTable } from './ui/permission-sheet-table.js';
+import { initPermissionSheetFilterBar } from './ui/permission-sheet-filter-bar.js';
+import { initSplitPane } from './ui/split-pane.js';
 import { initDetailDrawer } from './ui/detail-drawer.js';
 import { formatConfigErrors } from './shared/error-format.js';
 import { initAuthsPanel } from './ui/auths-panel.js';
@@ -47,6 +57,10 @@ load();
 // Khai bao som vi refreshRunButton() doc bien nay va co the chay ngay khi notify() dau tien ban ra.
 let running = false;
 let stream = null;
+
+// Run rieng cua CHECK PERM, doc lap hoan toan voi RUN ALL.
+let permRunning = false;
+let permStream = null;
 
 const tabs = initTabs();
 const connectionPanel = initConnectionPanel();
@@ -114,6 +128,40 @@ const resultTable = initResultTable({
   },
 });
 
+const permFilters = initPermissionFilters({ onChange: () => renderPermResults() });
+const permTable = initPermissionTable({
+  getRecords: () => permResults,
+  getFilter: () => permFilters.getFilter(),
+  filterCell: (key) => permFilters.filterCell(key),
+  onRowClick: (rec) => drawer.open(rec),
+});
+
+const permSheetFilterBar = initPermissionSheetFilterBar({
+  getRoleColumns: () => roleColumns(state.permissionFile.headers, state.permissionMapping.usecase1),
+  onChange: () => renderPermSheet(),
+});
+const permSheetTable = initPermissionSheetTable({
+  getSheet: () => state.permissionFile,
+  getUc1: () => state.permissionMapping.usecase1,
+  getUc2: () => state.permissionMapping.usecase2,
+  getFilter: () => permSheetFilterBar.getFilter(),
+  getSelectedColumns: () => permSheetFilterBar.getSelectedColumns(),
+});
+
+function renderPermSheet() {
+  const { shown, total } = permSheetTable.render();
+  permSheetFilterBar.refreshCount(shown, total);
+}
+
+subscribe(renderPermSheet);
+
+initSplitPane({
+  container: document.getElementById('perm-split'),
+  handle: document.getElementById('perm-split-handle'),
+  initialPct: state.ui.permSplitPct,
+  onChange: (pct) => { state.ui.permSplitPct = pct; persist(); },
+});
+
 /* ---------- advanced ---------- */
 const workerCount = document.getElementById('inp-worker-count');
 const timeout = document.getElementById('inp-timeout');
@@ -138,6 +186,7 @@ dedupe.addEventListener('change', () => { state.advanced.dedupeOnImport = dedupe
 
 /* ---------- dem so request ---------- */
 const btnRun = document.getElementById('btn-run');
+const btnCheckPerm = document.getElementById('btn-check-perm');
 
 function refreshRunButton() {
   const activeAuthCount = selectedAuths(state.auths, state.runFilter).length;
@@ -155,7 +204,22 @@ function refreshRunButton() {
   btnRun.disabled = n === 0 || running;
 }
 
+function refreshCheckPermButton() {
+  if (!state.permissionFile?.filename) {
+    btnCheckPerm.textContent = '🔐 CHECK PERM (cần file phân quyền)';
+    btnCheckPerm.disabled = true;
+    btnCheckPerm.title = 'Nạp file phân quyền và khai mapping UC1/UC2 ở tab INPUT trước';
+    return;
+  }
+
+  const { total } = buildPermissionRunConfig(state);
+  btnCheckPerm.title = '';
+  btnCheckPerm.textContent = `🔐 CHECK PERM (${total})`;
+  btnCheckPerm.disabled = total === 0 || permRunning;
+}
+
 subscribe(refreshRunButton);
+subscribe(refreshCheckPermButton);
 
 /* ---------- chay ---------- */
 const progressEl = document.getElementById('run-progress');
@@ -164,12 +228,26 @@ const badge = document.getElementById('tab-output-badge');
 const btnCancel = document.getElementById('btn-cancel');
 const btnExport = document.getElementById('btn-export-excel');
 
+const permProgressEl = document.getElementById('perm-progress');
+const permStatsEl = document.getElementById('perm-stats');
+const permBadge = document.getElementById('tab-perm-badge');
+const btnPermCancel = document.getElementById('btn-perm-cancel');
+const btnPermExport = document.getElementById('btn-perm-export');
+
 function renderResults() {
   filters.refreshOptions(results);
   resultTable.render();
   badge.hidden = results.length === 0;
   badge.textContent = String(results.length);
   btnExport.disabled = results.length === 0;
+}
+
+function renderPermResults() {
+  permFilters.refreshOptions(permResults);
+  permTable.render();
+  permBadge.hidden = permResults.length === 0;
+  permBadge.textContent = String(permResults.length);
+  btnPermExport.disabled = permResults.length === 0;
 }
 
 // EventSource tu dong ket noi lai khi mang chap chon, va route SSE phat lai toan bo
@@ -236,6 +314,74 @@ btnCancel.addEventListener('click', async () => {
   btnCancel.disabled = true;
 });
 
+// EventSource cho CHECK PERM cung phat lai toan bo khi reconnect — loc trung
+// giong het co che cua seenIndexes o RUN ALL, nhung tach rieng vi hai run
+// doc lap co the dang chay dong thoi.
+const permSeenIndexes = new Set();
+
+btnCheckPerm.addEventListener('click', async () => {
+  const errors = validatePermissionScope(state);
+  if (errors.length > 0) {
+    window.ccmToast(`Cấu hình phân quyền chưa hợp lệ:\n${errors.join('\n')}`, 'error');
+    tabs.select('input');
+    return;
+  }
+
+  try {
+    const { config, total } = buildPermissionRunConfig(state);
+
+    permStream?.close();
+    permSeenIndexes.clear();
+    resetPermResults();
+    renderPermResults();
+    permProgressEl.textContent = '0/0';
+    permStatsEl.textContent = '';
+
+    const { runId } = await startRun(config);
+    setPermRunId(runId);
+    permRunning = true;
+    btnPermCancel.disabled = false;
+    refreshCheckPermButton();
+    tabs.select('perm');
+    permProgressEl.textContent = `0/${total}`;
+
+    permStream = openStream(runId, {
+      onResult: (rec) => {
+        if (permSeenIndexes.has(rec.index)) return;
+        permSeenIndexes.add(rec.index);
+        permResults.push(rec);
+        renderPermResults();
+      },
+      onProgress: ({ done, total: t }) => { permProgressEl.textContent = `${done}/${t}`; },
+      onDone: (summary) => {
+        permRunning = false;
+        btnPermCancel.disabled = true;
+        refreshCheckPermButton();
+        permStatsEl.textContent = `⏱ ${(summary.elapsedMs / 1000).toFixed(1)}s · ✓ ${summary.ok} · ✕ ${summary.failed}`;
+        window.ccmToast(
+          summary.status === 'cancelled'
+            ? `Đã dừng sau ${summary.done}/${summary.total} request`
+            : `Xong ${summary.total} request trong ${(summary.elapsedMs / 1000).toFixed(1)}s`,
+          summary.failed > 0 ? 'error' : 'ok',
+        );
+      },
+    });
+  } catch (err) {
+    permRunning = false;
+    refreshCheckPermButton();
+    const detail = formatConfigErrors(err.errors, state.endpoints);
+    window.ccmToast(detail ? `Cấu hình chưa hợp lệ:\n${detail}` : err.message, 'error');
+    tabs.select('input');
+  }
+});
+
+btnPermCancel.addEventListener('click', async () => {
+  const runId = getPermRunId();
+  if (!runId) return;
+  await cancelRun(runId);
+  btnPermCancel.disabled = true;
+});
+
 /* ---------- export excel ---------- */
 const radioInclude = document.getElementById('radio-token-include');
 const radioMask = document.getElementById('radio-token-mask');
@@ -251,6 +397,17 @@ btnExport.addEventListener('click', async () => {
   if (!runId) return;
   try {
     await exportExcel(runId, resultTable.getVisibleIndexes(), radioInclude.checked);
+    window.ccmToast('Đã tải file Excel', 'ok');
+  } catch (err) {
+    window.ccmToast(`Export thất bại: ${err.message}`, 'error');
+  }
+});
+
+btnPermExport.addEventListener('click', async () => {
+  const runId = getPermRunId();
+  if (!runId) return;
+  try {
+    await exportExcel(runId, permTable.getVisibleIndexes(), false, 'permission');
     window.ccmToast('Đã tải file Excel', 'ok');
   } catch (err) {
     window.ccmToast(`Export thất bại: ${err.message}`, 'error');
@@ -281,3 +438,6 @@ document.getElementById('btn-import-config').addEventListener('click', () => {
 
 refreshRunButton();
 renderResults();
+refreshCheckPermButton();
+renderPermResults();
+renderPermSheet();
