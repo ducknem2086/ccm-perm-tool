@@ -93,8 +93,14 @@ export function initPermissionsPanel() {
   });
 
   btnAddMapping.addEventListener('click', () => {
+    // Header dau tien cua file phan quyen gan nhu luon la cot TEN — cung cot da
+    // chon lam khoa ghep UC2. Lay thang no lam mac dinh la moi dong UC1 moi sinh
+    // ra da invalid (validatePermissionScope chan ngay), va nguoi dung khong
+    // doi thi cham diem doc o chua TEN thay vi 'x' -> moi endpoint deu "khong co
+    // quyen". Bo qua cot do; het cot thi de rong cho validate bao.
+    const joinCol = state.permissionMapping.usecase2.permissionColumn;
     state.permissionMapping.usecase1.push({
-      permissionColumn: draftHeaders()[0] ?? '',
+      permissionColumn: draftHeaders().find((h) => h !== joinCol) ?? '',
       endpointSheet: getUniqueSheets(state.endpoints)[0] ?? 'Sheet 1',
       authProfileName: state.auths[0]?.name ?? ''
     });

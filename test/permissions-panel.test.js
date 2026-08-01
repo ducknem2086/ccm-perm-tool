@@ -355,6 +355,39 @@ test('doi sheet roi doi ve sheet cu: cau hinh cot khop lai nguyen ven', () => {
   assert.ok(!colSel.children.some((c) => c.textContent.includes('không có trong sheet này')));
 });
 
+// Header dau tien cua file phan quyen gan nhu luon la cot TEN (khoa ghep UC2),
+// nen lay no lam mac dinh la sinh ra dong UC1 invalid ngay luc them.
+test('them mapping UC1: mac dinh cot ROLE bo qua cot dang lam khoa ghep UC2', () => {
+  const { btnAddMapping } = setup({
+    filename: 'perm.xlsx', headers: ['BE Name', 'Truong ca', 'DTV doi tac'], rows: [],
+  });
+  state.permissionMapping.usecase2.permissionColumn = 'BE Name';
+
+  btnAddMapping.click();
+
+  assert.equal(state.permissionMapping.usecase1[0].permissionColumn, 'Truong ca');
+});
+
+test('them mapping UC1: khoa ghep UC2 chua chon thi van lay header dau tien', () => {
+  const { btnAddMapping } = setup({
+    filename: 'perm.xlsx', headers: ['BE Name', 'Truong ca'], rows: [],
+  });
+  btnAddMapping.click();
+
+  assert.equal(state.permissionMapping.usecase1[0].permissionColumn, 'BE Name');
+});
+
+test('them mapping UC1: sheet chi co dung mot cot va no la khoa ghep thi de rong', () => {
+  const { btnAddMapping } = setup({
+    filename: 'perm.xlsx', headers: ['BE Name'], rows: [],
+  });
+  state.permissionMapping.usecase2.permissionColumn = 'BE Name';
+
+  btnAddMapping.click();
+
+  assert.equal(state.permissionMapping.usecase1[0].permissionColumn, '');
+});
+
 test('doi cot quyen UC1 tren select ghi thang vao state', () => {
   const { usecase1Table } = setupTwoSheets();
 
