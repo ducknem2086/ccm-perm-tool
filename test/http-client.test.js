@@ -252,7 +252,6 @@ const samplePermissionMapping = {
   ],
   usecase2: {
     permissionColumn: 'API Name',
-    targetSheet: 'all',
   },
 };
 
@@ -421,7 +420,6 @@ test('statusPermission unauthorized profile kiem tra tat ca profiles duoc map tr
     ],
     usecase2: {
       permissionColumn: 'API Name',
-      targetSheet: 'all',
     },
   };
 
@@ -450,5 +448,260 @@ test('statusPermission unauthorized profile kiem tra tat ca profiles duoc map tr
   } finally { await mock200.close(); }
 });
 
+test('statusPermission tra ve "empty" khi sheet cua request khong co mapping UC1, du ten API co trong file quyen', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet Khong Co UC1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.statusPermission, 'empty');
+  } finally { await mock.close(); }
+});
+
+test('statusPermission ap dung dong thoi cho nhieu sheet duoc cau hinh o UC1, khong bi khoa vao mot sheet', async () => {
+  const multiSheetPermFile = {
+    filename: 'permissions.xlsx',
+    headers: ['API Name', 'Sheet 1 - User', 'Sheet 2 - User'],
+    rows: [
+      ['Tra cuu TB', 'x', ''],
+      ['Xem Goi Cuoc', '', 'x'],
+    ],
+  };
+
+  const multiSheetMapping = {
+    usecase1: [
+      { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+      { endpointSheet: 'Sheet 2', permissionColumn: 'Sheet 2 - User', authProfileName: 'User Profile' },
+    ],
+    usecase2: {
+      permissionColumn: 'API Name',
+    },
+  };
+
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const recSheet1 = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: multiSheetPermFile, permissionMapping: multiSheetMapping },
+    );
+    assert.equal(recSheet1.statusPermission, 'true');
+
+    const recSheet2 = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'Xem Goi Cuoc', sheetName: 'Sheet 2', authName: 'User Profile' }),
+      { permissionFile: multiSheetPermFile, permissionMapping: multiSheetMapping },
+    );
+    assert.equal(recSheet2.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('permissionMatchedName tra ve gia tri goc trong file phan quyen khi khop', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: '  tra cuu tb  ', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.permissionMatchedName, 'Tra cuu TB');
+  } finally { await mock.close(); }
+});
+
+test('permissionMatchedName tra ve null khi ten khong khop cot Name', async () => {
+  const mock = await startMockServer((_, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, endpointName: 'API Khong Ton Tai', sheetName: 'Sheet 1', authName: 'User Profile' }),
+      { permissionFile: samplePermissionFile, permissionMapping: samplePermissionMapping },
+    );
+    assert.equal(rec.permissionMatchedName, null);
+  } finally { await mock.close(); }
+});
+
+test('permissionMatchedName tra ve null khi khong bat permission check', async () => {
+  const mock = await startMockServer((_, res) => res.end('{}'));
+  try {
+    const rec = await sendRequest(req({ url: `${mock.base}/x`, endpointName: 'Tra cuu TB' }));
+    assert.equal(rec.permissionMatchedName, null);
+  } finally { await mock.close(); }
+});
+
+/* ---------- CHECK PERM: evaluateUc2Permission (req.permRowIndex da bake san) ---------- */
+
+const uc2PermissionFile = {
+  filename: 'permissions.xlsx',
+  headers: ['Ten Chuc Nang', 'CSKH Col', 'GDV Col'],
+  rows: [
+    ['Tra cuu whitelist', 'x', ''],   // row 0: CSKH co quyen, GDV khong
+    ['Doi SIM', '', 'x'],              // row 1: GDV co quyen, CSKH khong
+  ],
+};
+
+const uc2Mapping = {
+  usecase1: [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'CSKH Col', authProfileName: 'CSKH Profile' },
+    { endpointSheet: 'Sheet 2', permissionColumn: 'GDV Col', authProfileName: 'GDV Profile' },
+  ],
+  usecase2: { permissionColumn: 'Ten Chuc Nang', endpointColumn: 'Ten API' },
+};
+
+test('evaluateUc2Permission: cell === x va status khac 403 → true', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, permRowIndex: 0, authName: 'CSKH Profile' }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('evaluateUc2Permission: cell === x nhung status === 403 → false', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(403, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, permRowIndex: 0, authName: 'CSKH Profile' }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'false');
+  } finally { await mock.close(); }
+});
+
+test('evaluateUc2Permission: cell khac x va status === 403 → true', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(403, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    // GDV Col cua row 0 rong — GDV Profile khong co quyen tren dong nay.
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, permRowIndex: 0, authName: 'GDV Profile' }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('evaluateUc2Permission: cell khac x va status khac 403 → false', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, permRowIndex: 0, authName: 'GDV Profile' }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'false');
+  } finally { await mock.close(); }
+});
+
+test('evaluateUc2Permission: khong sheet-gating — auth khac sheet endpointSheet cua UC1 van cham dung', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    // GDV Profile duoc khai o endpointSheet 'Sheet 2', nhung request nay
+    // gan sheetName 'Sheet 1' — luat moi khong loc theo sheet nen van cham
+    // dung theo cot GDV Col cua row 1 (co 'x').
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, permRowIndex: 1, sheetName: 'Sheet 1', authName: 'GDV Profile' }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('evaluateUc2Permission: status null (khong ket noi duoc) → empty bat ke cell', async () => {
+  const rec = await sendRequest(
+    req({ url: 'http://127.0.0.1:1/x', permRowIndex: 0, authName: 'CSKH Profile' }),
+    { timeoutMs: 2000, permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+  );
+  assert.equal(rec.response.status, null);
+  assert.equal(rec.statusPermission, 'empty');
+});
+
+test('evaluateUc2Permission: auth khong co dong UC1 nao → empty', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, permRowIndex: 0, authName: 'Nguoi La' }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'empty');
+  } finally { await mock.close(); }
+});
+
+test('CHECK PERM: khong ghep duoc dong nao (permRowIndex null) → empty, khong roi xuong nhanh RUN ALL', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    const rec = await sendRequest(
+      // endpointName + sheetName nay se KHOP nhanh RUN ALL neu khong co permRun.
+      req({
+        url: `${mock.base}/x`, permRun: true, permRowIndex: null,
+        endpointName: 'Tra cuu whitelist', sheetName: 'Sheet 1', authName: 'CSKH Profile',
+      }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'empty');
+  } finally { await mock.close(); }
+});
+
+test('CHECK PERM: ghep duoc dong thi van cham theo luat UC2 nhu thuong', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    const rec = await sendRequest(
+      req({ url: `${mock.base}/x`, permRun: true, permRowIndex: 0, authName: 'CSKH Profile' }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('RUN ALL (permRun false, permRowIndex null) van di nhanh cu, khong bi ep empty', async () => {
+  const mock = await startMockServer((_, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  try {
+    const rec = await sendRequest(
+      req({
+        url: `${mock.base}/x`, endpointName: 'Tra cuu whitelist', sheetName: 'Sheet 1', authName: 'CSKH Profile',
+      }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.notEqual(rec.statusPermission, null);
+    assert.equal(rec.statusPermission, 'true');
+  } finally { await mock.close(); }
+});
+
+test('finalize: permissionMatchedName uu tien req.permName da bake san, khong quet lai file', async () => {
+  const mock = await startMockServer((_, res) => res.end('{}'));
+  try {
+    const rec = await sendRequest(
+      req({
+        url: `${mock.base}/x`, permRowIndex: 0, permName: 'Ten UC2 da bake', endpointName: 'Khong Khop Gi Ca', authName: 'CSKH Profile',
+      }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.permissionMatchedName, 'Ten UC2 da bake');
+  } finally { await mock.close(); }
+});
+
+test('finalize: CHECK PERM khong ghep duoc dong nao thi permissionMatchedName la null, khong roi ve khop exact', async () => {
+  const mock = await startMockServer((_, res) => res.end('{}'));
+  try {
+    const rec = await sendRequest(
+      // endpointName nay KHOP exact mot dong trong file — nhung CHECK PERM da
+      // co tinh khong keo dong nao ve (permName null), nen khong duoc hien ten.
+      req({
+        url: `${mock.base}/x`, permRun: true, permRowIndex: null, permName: null,
+        endpointName: 'Tra cuu whitelist', sheetName: 'Sheet 1', authName: 'CSKH Profile',
+      }),
+      { permissionFile: uc2PermissionFile, permissionMapping: uc2Mapping },
+    );
+    assert.equal(rec.permissionMatchedName, null);
+  } finally { await mock.close(); }
+});
 
 

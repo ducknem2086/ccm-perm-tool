@@ -16,6 +16,26 @@ export function makeAuth(over = {}) {
   };
 }
 
+// Ban DA LUU cua cau hinh phan quyen. Bang phan quyen raw, CHECK PERM va
+// RUN ALL doc rieng ban nay — sua dropdown o panel PHAN QUYEN chi dong vao
+// ban nhap (state.permissionMapping / runFilter / permissionFile.selectedSheet)
+// cho toi khi bam Luu. Khong tach ra thi bang ve lai tren trang thai nua voi
+// giua chung mot thao tac ba buoc (cot <-> sheet <-> auth).
+export function emptySavedConfig() {
+  return {
+    permissionMapping: {
+      usecase1: [],
+      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' }
+    },
+    // Chi 'methods'. authIds/msisdnPatterns khong vao gate: auths-panel sua
+    // authIds khi xoa profile (bat badge oan), va Huy se xoa mat lua chon auth
+    // cua nguoi dung. matchPermissionEndpoints chi doc methods, con
+    // buildPermissionRunConfig tu dung lai authIds.
+    methods: [],
+    permissionSheet: ''
+  };
+}
+
 export function defaultConfig() {
   return {
     domain: '',
@@ -43,11 +63,17 @@ export function defaultConfig() {
     globalBodyMode: 'none',
     globalBodyParams: [],
     globalBodyRaw: '',
-    permissionFile: { filename: '', sheets: [], selectedSheet: '', headers: [], rows: [] },
+    // headers/rows la ban sao cua sheets[i] — giu lai thi moi lan doi sheet phai
+    // dong bo ba cho, va khong cach nao doi sheet o ban nhap ma khong dung ban
+    // da luu. Doc qua sheetByName() thay vi.
+    permissionFile: { filename: '', sheets: [], selectedSheet: '' },
     permissionMapping: {
+      // CHECK PERM chi mot duong: endpoint thuoc sheet khai o usecase1[].endpointSheet,
+      // khu trung METHOD:pathTemplate. Endpoint khong dong UC2 nao keo ve van chay, cham 'empty'.
       usecase1: [],
-      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '', dedupeColumn: '' }
+      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' }
     },
+    savedConfig: emptySavedConfig(),
     advanced: {
       workerCount: 4,
       timeoutMs: 30000,
@@ -99,6 +125,103 @@ export function persist() {
   } catch { /* localStorage full or disabled — ignore safely */ }
 }
 
+/* ---------- sheet cua file phan quyen ---------- */
+
+export function sheetByName(name) {
+  const sheets = state.permissionFile?.sheets ?? [];
+  return sheets.find((s) => s.name === name) ?? null;
+}
+
+// null khi sheet da luu khong con trong file (nguoi dung import file khac) —
+// trang thai hop le, bang raw bao rieng thay vi bao "khong co cot nao".
+export const savedSheet = () => sheetByName(state.savedConfig?.permissionSheet);
+export const savedMapping = () => state.savedConfig?.permissionMapping ?? emptySavedConfig().permissionMapping;
+
+// Sheet dang do o panel PHAN QUYEN — chi panel do duoc doc, vi no LA giao dien
+// sua ban nhap. Moi noi khac doc savedSheet().
+export const draftSheet = () => sheetByName(state.permissionFile?.selectedSheet);
+
+/* ---------- commit / revert cau hinh phan quyen ---------- */
+
+function snapshot() {
+  return structuredClone({
+    permissionMapping: state.permissionMapping,
+    methods: state.runFilter?.methods ?? [],
+    permissionSheet: state.permissionFile?.selectedSheet ?? ''
+  });
+}
+
+export function saveConfig() {
+  state.savedConfig = snapshot();
+  persist();
+  notify();
+}
+
+export function revertConfig() {
+  const s = structuredClone(state.savedConfig ?? emptySavedConfig());
+  state.permissionMapping = s.permissionMapping;
+  // Gan rieng 'methods' thay vi thay ca runFilter — authIds/msisdnPatterns
+  // khong thuoc gate, Huy khong duoc dung toi.
+  if (state.runFilter) state.runFilter.methods = s.methods;
+  if (state.permissionFile) state.permissionFile.selectedSheet = s.permissionSheet;
+  persist();
+  notify();
+}
+
+export function isConfigDirty() {
+  return JSON.stringify(snapshot()) !== JSON.stringify(state.savedConfig ?? emptySavedConfig());
+}
+
+// Nhan cho badge — nguoi dung biet dang treo cai gi thay vi chi thay "chua luu".
+export function dirtyParts() {
+  const cur = snapshot();
+  const sav = state.savedConfig ?? emptySavedConfig();
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = [];
+  if (!same(cur.permissionMapping, sav.permissionMapping)) out.push('mapping UC1/UC2');
+  if (!same(cur.methods, sav.methods)) out.push('filter method');
+  if (cur.permissionSheet !== sav.permissionSheet) out.push('sheet phân quyền');
+  return out;
+}
+
+function normalizeSavedConfig(incoming) {
+  if (!incoming) return null;
+  const base = emptySavedConfig();
+  return {
+    permissionMapping: {
+      usecase1: incoming.permissionMapping?.usecase1 ?? [],
+      usecase2: {
+        ...base.permissionMapping.usecase2,
+        ...(incoming.permissionMapping?.usecase2 ?? {})
+      }
+    },
+    methods: incoming.methods ?? [],
+    permissionSheet: incoming.permissionSheet ?? ''
+  };
+}
+
+// Ban cu luu permissionFile.headers/rows thay vi sheets. Dung lai mot sheet
+// 'Default' de cau hinh cu mo len van xem duoc bang, roi bo hai khoa phai sinh.
+function migratePermissionFile(target, incoming) {
+  const pf = target.permissionFile;
+  if (!pf) return;
+
+  const oldHeaders = incoming?.permissionFile?.headers;
+  if ((pf.sheets ?? []).length === 0 && Array.isArray(oldHeaders) && oldHeaders.length > 0) {
+    pf.sheets = [{ name: 'Default', headers: oldHeaders, rows: incoming.permissionFile.rows ?? [] }];
+    pf.selectedSheet = 'Default';
+  }
+
+  delete pf.headers;
+  delete pf.rows;
+}
+
+// Cau hinh cu chua co savedConfig — snapshot tu gia tri dang co, coi nhu da
+// Luu. Nguoi dung cu mo len khong thay khac gi.
+function migrateSavedConfig(incoming) {
+  state.savedConfig = normalizeSavedConfig(incoming?.savedConfig) ?? snapshot();
+}
+
 // Ban cu luu credential o ba khoa phang cua state. Goi chung lai thanh mot
 // profile ten 'Default' de cau hinh cu mo len chay y het truoc.
 function migrateAuths(target, incoming) {
@@ -141,6 +264,8 @@ export function load() {
     }
   });
   migrateAuths(state, saved);
+  migratePermissionFile(state, saved);
+  migrateSavedConfig(saved);
 
   // Cau hinh cu dung khoa concurrency, doc sang workerCount.
   if (saved.advanced?.workerCount === undefined && saved.advanced?.concurrency !== undefined) {
@@ -167,6 +292,8 @@ export function applyConfig(incoming) {
     }
   });
   migrateAuths(state, incoming);
+  migratePermissionFile(state, incoming);
+  migrateSavedConfig(incoming);
 
   // Cau hinh cu dung khoa concurrency, doc sang workerCount.
   if (incoming.advanced?.workerCount === undefined && incoming.advanced?.concurrency !== undefined) {

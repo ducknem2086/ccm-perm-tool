@@ -134,9 +134,15 @@ details.cfg-card:not([open]) { gap: 0; }
 .perm-file-sheet-wrap[hidden] { display: none; }
 .perm-file-sheet-wrap .label { white-space: nowrap; }
 .perm-file-sheet-wrap select { min-width: 140px; }
-.perm-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-xs); }
+.perm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-xs); }
 .perm-uc1 { margin-top: var(--sp-xs); }
 .perm-uc1-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-xs); }
+.perm-save-row { display: flex; align-items: center; gap: var(--sp-xs); margin-top: var(--sp-sm); }
+.perm-save-row .btn { flex: 0 0 auto; }
+.perm-dirty { margin: 0 auto 0 0; color: var(--warn, #b45309); font-weight: 600; }
+.perm-dirty[hidden] { display: none; }
+.perm-save-errors { margin: var(--sp-xs) 0 0; color: var(--danger, #b91c1c); white-space: pre-wrap; }
+.perm-save-errors[hidden] { display: none; }
 #permissions-usecase1-table {
   max-height: 132px; overflow-y: auto;
   display: flex; flex-direction: column; gap: var(--sp-xxs);
@@ -356,20 +362,6 @@ select.input { padding: 0 var(--sp-xs); }
   display: flex; align-items: center; gap: var(--sp-sm);
   padding: var(--sp-xs) var(--sp-sm); border-bottom: 1px solid var(--hairline);
 }
-.col-filter { position: relative; }
-.col-filter-popup {
-  position: absolute; top: 100%; left: 0; z-index: 5; margin: var(--sp-xxs) 0 0;
-  list-style: none; padding: var(--sp-xs); min-width: 180px; max-height: 320px; overflow: auto;
-  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-lg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
-  display: flex; flex-direction: column; gap: 2px;
-}
-.col-filter-popup[hidden] { display: none; }
-.col-filter-popup label {
-  display: flex; align-items: center; gap: var(--sp-xxs);
-  font-size: var(--fs-sm); padding: var(--sp-xxs) var(--sp-xs); white-space: nowrap;
-}
-
 .result-viewport { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .result-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .result-table thead th {

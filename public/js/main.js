@@ -1,12 +1,14 @@
 import {
   state, load, persist, notify, subscribe, results, resetResults, getRunId, setRunId, applyConfig,
-  permResults, resetPermResults, getPermRunId, setPermRunId,
+  permResults, resetPermResults, getPermRunId, setPermRunId, savedSheet, savedMapping,
 } from './state.js';
 import { startRun, openStream, cancelRun, exportExcel } from './api.js';
 import { countRequests } from './shared/request-count.js';
 import { filterEndpoints, selectedAuths } from './shared/run-filter.js';
 import { toCurl, curlFilename } from './shared/curl.js';
-import { buildPermissionRunConfig, validatePermissionScope } from './shared/permission-scope.js';
+import {
+  buildPermissionRunConfig, validatePermissionScope, savedPermissionPayload,
+} from './shared/permission-scope.js';
 import { roleColumns } from './shared/permission-sheet-filter.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
@@ -137,15 +139,19 @@ const permTable = initPermissionTable({
 });
 
 const permSheetFilterBar = initPermissionSheetFilterBar({
-  getRoleColumns: () => roleColumns(state.permissionFile.headers, state.permissionMapping.usecase1),
   onChange: () => renderPermSheet(),
 });
+// Bang raw doc ban DA LUU, khong doc ban nhap: sua dropdown o panel PHAN QUYEN
+// khong lam bang nhay theo tung buoc cua mot thao tac ba buoc.
 const permSheetTable = initPermissionSheetTable({
-  getSheet: () => state.permissionFile,
-  getUc1: () => state.permissionMapping.usecase1,
-  getUc2: () => state.permissionMapping.usecase2,
+  getSheet: () => ({
+    filename: state.permissionFile.filename,
+    missing: Boolean(state.permissionFile.filename) && savedSheet() === null,
+    ...(savedSheet() ?? {}),
+  }),
+  getRoleColumns: () => roleColumns(savedSheet()?.headers, savedMapping().usecase1),
+  getUc2: () => savedMapping().usecase2,
   getFilter: () => permSheetFilterBar.getFilter(),
-  getSelectedColumns: () => permSheetFilterBar.getSelectedColumns(),
 });
 
 function renderPermSheet() {
@@ -154,6 +160,10 @@ function renderPermSheet() {
 }
 
 subscribe(renderPermSheet);
+// Bang phan quyen RAW doc lap voi run: khong co notify() nao ban ra trong
+// duong chay CHECK PERM, nen khong ve mot lan o day thi bang trong tron cho
+// toi khi nguoi dung cham vao mot o input bat ky.
+renderPermSheet();
 
 initSplitPane({
   container: document.getElementById('perm-split'),
@@ -269,7 +279,9 @@ btnRun.addEventListener('click', async () => {
     progressEl.textContent = '0/0';
     statsEl.textContent = '';
 
-    const { runId, total } = await startRun(state);
+    // Cham diem permission cua RUN ALL cung doc ban DA LUU — server nhan
+    // permissionFile phang (headers/rows), state khong con hai khoa do.
+    const { runId, total } = await startRun({ ...state, ...savedPermissionPayload(state) });
     setRunId(runId);
     running = true;
     btnCancel.disabled = false;

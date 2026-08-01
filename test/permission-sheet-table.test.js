@@ -112,17 +112,15 @@ function sheet(over = {}) {
   };
 }
 
-const uc1 = [{ permissionColumn: 'ĐTV đối tác' }];
 const uc2 = { permissionColumn: 'BE Name' };
-const allRoleNames = new Set(['ĐTV đối tác']);
+const roleCols = [{ index: 2, name: 'ĐTV đối tác' }];
 
 function makeCtrl(over = {}) {
   return initPermissionSheetTable({
     getSheet: () => sheet(),
-    getUc1: () => uc1,
+    getRoleColumns: () => roleCols,
     getUc2: () => uc2,
     getFilter: () => emptySheetFilter(),
-    getSelectedColumns: () => allRoleNames,
     ...over,
   });
 }
@@ -146,9 +144,9 @@ test('header chi gom # + cot dinh danh UC2 + cot role da tick, khong co Action B
   assert.deepEqual(headRow.map((th) => th.textContent), ['#', 'BE Name', 'ĐTV đối tác']);
 });
 
-test('bo tick het cot role thi chi con # + cot dinh danh', () => {
+test('khong cot role nao duoc chon thi chi con # + cot dinh danh', () => {
   const { table } = setupMockDOM();
-  const ctrl = makeCtrl({ getSelectedColumns: () => new Set() });
+  const ctrl = makeCtrl({ getRoleColumns: () => [] });
   ctrl.render();
 
   const headRow = table.querySelector('thead').querySelectorAll('th');
@@ -172,10 +170,9 @@ test('o x trong cot role co class status-up, cot dinh danh thi khong', () => {
       headers: ['BE Name', 'ĐTV đối tác'],
       rows: [['x', 'x']],
     }),
-    getUc1: () => [{ permissionColumn: 'ĐTV đối tác' }],
+    getRoleColumns: () => [{ index: 1, name: 'ĐTV đối tác' }],
     getUc2: () => uc2,
     getFilter: () => emptySheetFilter(),
-    getSelectedColumns: () => allRoleNames,
   });
   ctrl.render();
 
@@ -186,9 +183,9 @@ test('o x trong cot role co class status-up, cot dinh danh thi khong', () => {
   assert.equal(roleCell.classList.contains('status-up'), true);
 });
 
-test('filter granted false thi chi con dong khong co quyen (khong phu thuoc cot dang hien)', () => {
+test('filter granted false thi chi con dong khong co quyen', () => {
   const { table } = setupMockDOM();
-  const ctrl = makeCtrl({ getFilter: () => ({ granted: false, denied: true }), getSelectedColumns: () => new Set() });
+  const ctrl = makeCtrl({ getFilter: () => ({ granted: false, denied: true }) });
   const result = ctrl.render();
 
   const rows = table.querySelector('tbody').querySelectorAll('tr');
@@ -197,8 +194,60 @@ test('filter granted false thi chi con dong khong co quyen (khong phu thuoc cot 
   assert.deepEqual(result, { shown: 1, total: 2 });
 });
 
+// Mot nguon su that (Option A): getRoleColumns() vua quyet dinh cot HIEN THI
+// vua quyet dinh cot CHAM DIEM granted/denied — khong con hai lop tach biet
+// nhu ban thiet ke cu (roleColumns toan cuc + getSelectedColumns rieng).
+test('getRoleColumns rong: khong cot nao duoc cham, moi dong la khong co quyen', () => {
+  const { table } = setupMockDOM();
+  const ctrl = makeCtrl({ getFilter: () => ({ granted: false, denied: true }), getRoleColumns: () => [] });
+  const result = ctrl.render();
+
+  const rows = table.querySelector('tbody').querySelectorAll('tr');
+  assert.equal(rows.length, 2, 'ca hai dong deu la khong co quyen vi khong cot role nao duoc cham');
+  assert.deepEqual(result, { shown: 2, total: 2 });
+});
+
 test('render tra ve shown/total dung', () => {
   setupMockDOM();
   const ctrl = makeCtrl();
   assert.deepEqual(ctrl.render(), { shown: 2, total: 2 });
+});
+
+test('sheet khong chua cot nao dang khai: bao dung ly do thay vi bang chi co cot #', () => {
+  const { table } = setupMockDOM();
+  const ctrl = makeCtrl({
+    getSheet: () => sheet({ headers: ['Ma', 'Mo ta'], rows: [['M1', 'abc'], ['M2', 'def']] }),
+    getRoleColumns: () => [],
+  });
+  const result = ctrl.render();
+
+  const tbody = table.querySelector('tbody');
+  const empty = tbody.querySelector('.el-empty');
+  assert.ok(empty, 'phai co empty state');
+  assert.ok(empty.textContent.includes('không có cột nào đang khai'));
+  assert.deepEqual(result, { shown: 0, total: 2 });
+});
+
+test('cot dinh danh UC2 trung cot role da chon: chi render mot lan', () => {
+  const { table } = setupMockDOM();
+  const ctrl = makeCtrl({
+    getRoleColumns: () => [{ index: 0, name: 'BE Name' }, { index: 2, name: 'ĐTV đối tác' }],
+  });
+  ctrl.render();
+
+  const headRow = table.querySelector('thead').querySelectorAll('th');
+  assert.deepEqual(headRow.map((th) => th.textContent), ['#', 'BE Name', 'ĐTV đối tác']);
+});
+
+test('sheet da luu bien mat: bao dung nguyen nhan, khong bao "khong co cot nao"', () => {
+  const { table } = setupMockDOM();
+  const ctrl = makeCtrl({
+    getSheet: () => ({ filename: 'quyen.xlsx', missing: true }),
+    getRoleColumns: () => [],
+  });
+  const result = ctrl.render();
+
+  const empty = table.querySelector('tbody').querySelector('.el-empty');
+  assert.ok(empty.textContent.includes('Sheet đã lưu không còn trong file phân quyền'));
+  assert.deepEqual(result, { shown: 0, total: 0 });
 });

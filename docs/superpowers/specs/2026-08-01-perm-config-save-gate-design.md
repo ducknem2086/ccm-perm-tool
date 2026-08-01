@@ -34,7 +34,7 @@ endpoint rơi về `permRowIndex: null` → chấm `empty` dù người đọc n
 |---|---|
 | Cơ chế | Snapshot `state.savedConfig`. Draft vẫn `persist()` mỗi lần gõ; consumer đọc snapshot |
 | Số nút Save | **Một**, đặt trong panel PHÂN QUYỀN |
-| Trong gate | `permissionMapping` (UC1 + ba select UC2), `runFilter`, sheet của file phân quyền |
+| Trong gate | `permissionMapping` (UC1 + ba select UC2), `runFilter.methods`, sheet của file phân quyền |
 | Ngoài gate | `importTemplate` (drawer TEMPLATE MAP CỘT) — giữ auto-save như cũ |
 | Checkbox method | Lọc **ngay** danh sách ENDPOINTS đang xem; phạm vi CHECK PERM chỉ đổi sau Save |
 | Phạm vi filter với CHECK PERM | Áp cho **mọi sheet** khai ở UC1, không giới hạn tab đang xem |
@@ -51,10 +51,15 @@ endpoint rơi về `permRowIndex: null` → chấm `empty` dù người đọc n
 // defaultConfig()
 savedConfig: {
   permissionMapping: { usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' } },
-  runFilter: { methods: [], msisdnPatterns: [], authIds: [] },
+  methods: [],
   permissionSheet: ''
 }
 ```
+
+Chỉ `methods`, không phải cả `runFilter`. `authIds` bị `auths-panel.js:79` sửa mỗi khi xoá một auth
+profile — để trong gate thì badge "chưa lưu" bật oan, và Huỷ sẽ xoá mất lựa chọn auth profile của
+người dùng. `matchPermissionEndpoints` chỉ đọc `methods`; `buildPermissionRunConfig` tự dựng lại
+`authIds` từ union UC1; `msisdnPatterns` chỉ dùng cho `filterMsisdns` ngoài gate.
 
 `state.permissionMapping`, `state.runFilter` và sheet đang chọn của file phân quyền giữ nguyên
 vai trò **bản nháp**. Vẫn `persist()` mỗi lần đổi, nên reload không mất công gõ dở.
@@ -120,7 +125,7 @@ này dùng bản đã lưu, nhất quán với bảng phân quyền và CHECK PE
 function snapshot() {
   return structuredClone({
     permissionMapping: state.permissionMapping,
-    runFilter: state.runFilter,
+    methods: state.runFilter?.methods ?? [],
     permissionSheet: state.permissionFile?.selectedSheet ?? ''
   });
 }
@@ -132,9 +137,10 @@ export function saveConfig() {
 }
 
 export function revertConfig() {
-  const s = structuredClone(state.savedConfig);
+  const s = structuredClone(state.savedConfig ?? emptySavedConfig());
   state.permissionMapping = s.permissionMapping;
-  state.runFilter = s.runFilter;
+  // Gan rieng 'methods' — authIds/msisdnPatterns khong thuoc gate
+  if (state.runFilter) state.runFilter.methods = s.methods;
   if (state.permissionFile) state.permissionFile.selectedSheet = s.permissionSheet;
   persist();
   notify();
@@ -150,7 +156,7 @@ export function dirtyParts() {
   const out = [];
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   if (!same(cur.permissionMapping, sav.permissionMapping)) out.push('mapping UC1/UC2');
-  if (!same(cur.runFilter, sav.runFilter)) out.push('filter method');
+  if (!same(cur.methods, sav.methods)) out.push('filter method');
   if (cur.permissionSheet !== sav.permissionSheet) out.push('sheet phân quyền');
   return out;
 }
@@ -189,7 +195,7 @@ delete pf.headers; delete pf.rows;
 | `main.js:143` | `getSheet: () => state.permissionFile` | `getSheet: () => ({ filename: state.permissionFile.filename, missing: savedSheet() === null, ...(savedSheet() ?? {}) })` |
 | `main.js:144` | `roleColumns(state.permissionFile.headers, state.permissionMapping.usecase1)` | `roleColumns(savedSheet()?.headers, savedMapping().usecase1)` |
 | `main.js:145` | `getUc2: () => state.permissionMapping.usecase2` | `getUc2: () => savedMapping().usecase2` |
-| `permission-match.js:69-76` | `state.permissionMapping`, `state.permissionFile.headers/rows`, `state.runFilter.methods` | `savedMapping()`, `savedSheet()`, `state.savedConfig.runFilter.methods` |
+| `permission-match.js:69-76` | `state.permissionMapping`, `state.permissionFile.headers/rows`, `state.runFilter.methods` | `savedMapping()`, `savedSheet()`, `state.savedConfig.methods` |
 | `permission-scope.js:57` (`validatePermissionScope`) | `state.permissionMapping`, `permissionFile.headers` | bản đã lưu |
 | `permission-scope.js:122` (`scopedEndpointsAndAuths`) | `state.permissionMapping` | `savedMapping()` |
 | `permission-scope.js:140` (`buildPermissionRunConfig`) | trải `...state` | trải `...state`, **đè** `permissionMapping: savedMapping()` và `permissionFile: { ...filename, ...savedSheet() }` |

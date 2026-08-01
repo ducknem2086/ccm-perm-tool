@@ -150,18 +150,21 @@
                       <span class="label">UC2: Cột đích (endpoints)</span>
                       <select id="sel-permissions-endpoint-col" class="input input-sm"></select>
                     </label>
-                    <label class="field">
-                      <span class="label">UC2: Cột khử trùng (endpoints)</span>
-                      <select id="sel-permissions-dedupe-col" class="input input-sm"></select>
-                    </label>
                   </div>
                   <div class="field perm-uc1">
                     <div class="perm-uc1-head">
                       <span class="label">UC1: Mappings Cột ↔ Sheet ↔ Auth Profile (quyết định sheet nào được kiểm tra)</span>
                       <button id="btn-permissions-add-usecase1" type="button" class="btn btn-secondary btn-sm">＋ Thêm mapping</button>
                     </div>
+                    <p class="hint">Cột Sheet quyết định endpoint nào được kiểm tra — chạy hết mọi endpoint của sheet đó. Endpoint trùng METHOD + path giữa nhiều sheet chỉ chạy một lần cho mỗi auth.</p>
                     <div id="permissions-usecase1-table"></div>
                   </div>
+                  <div class="perm-save-row">
+                    <span id="perm-dirty-badge" class="hint perm-dirty" hidden></span>
+                    <button id="btn-permissions-save" type="button" class="btn btn-primary btn-sm" disabled>💾 Lưu cấu hình</button>
+                    <button id="btn-permissions-revert" type="button" class="btn btn-secondary btn-sm" disabled>↩ Huỷ</button>
+                  </div>
+                  <p id="perm-save-errors" class="hint perm-save-errors" hidden></p>
                 </div>
               </section>
             </div>
@@ -233,13 +236,9 @@
 
           <div class="split-side">
             <div class="split-head">
-              <span class="label">BẢNG PHÂN QUYỀN</span>
-              <label><input id="chk-perm-granted" type="checkbox" /> Có quyền</label>
-              <label><input id="chk-perm-denied" type="checkbox" checked /> Không quyền</label>
-              <div class="col-filter">
-                <button id="btn-perm-col-filter" type="button" class="btn btn-secondary btn-sm">Cột hiển thị ▾</button>
-                <ul id="perm-col-popup" class="col-filter-popup" hidden></ul>
-              </div>
+              <span class="label">HAS PERMISSIONS</span>
+              <label><input id="chk-perm-granted" type="checkbox" checked /> YES</label>
+              <label><input id="chk-perm-denied" type="checkbox" checked /> NO</label>
               <span id="perm-sheet-count" class="muted mono"></span>
             </div>
             <div id="perm-sheet-viewport" class="result-viewport">

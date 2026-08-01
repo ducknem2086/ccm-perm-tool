@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { extractErrorCode, DEFAULT_ERROR_CODE_PATHS } from './error-code.js';
+import { matchPermissionRow, matchPermissionName } from '../../public/js/shared/permission-scope.js';
 
 const BOM_CODE = 0xfeff;
 const stripBom = (s) => {
@@ -50,34 +51,60 @@ function logDiagnostic(req, { status, resHeaders, hint, redirected, finalUrl }) 
   );
 }
 
+// Duong CHECK PERM da bake san dong UC2 khop endpoint tu client (xem
+// permission-match.js) — cham O(1) bang req.permRowIndex, khong quet rows,
+// khong loc theo sheet. Cot quyen doc theo auth dang chay, khong con theo
+// endpointSheet cua request nhu nhanh RUN ALL ben duoi.
+function evaluateUc2Permission({ req, status, permissionFile, permissionMapping }) {
+  if (status === null) return 'empty';
+
+  const row = (permissionFile?.rows ?? [])[req.permRowIndex];
+  if (!row) return 'empty';
+
+  const headers = permissionFile?.headers ?? [];
+  const uc1 = permissionMapping?.usecase1 ?? [];
+  const reqAuthNameClean = String(req.authName ?? '').trim().toLowerCase();
+  const mapping = uc1.find((m) => (
+    String(m.authProfileName ?? '').trim().toLowerCase() === reqAuthNameClean
+  ));
+  if (!mapping) return 'empty';
+
+  const colIdx = headers.indexOf(mapping.permissionColumn);
+  const cellVal = colIdx !== -1 ? String(row[colIdx] ?? '').trim().toLowerCase() : '';
+
+  if (cellVal === 'x') return status !== 403 ? 'true' : 'false';
+  return status === 403 ? 'true' : 'false';
+}
+
 export function evaluatePermission({ req, status, permissionFile, permissionMapping }) {
   if (!permissionFile || !permissionFile.filename) {
     return null;
+  }
+
+  if (req.permRowIndex != null) {
+    return evaluateUc2Permission({ req, status, permissionFile, permissionMapping });
+  }
+
+  // CHECK PERM chay ca endpoint khong ghep duoc dong phan quyen nao. Khong co
+  // dong thi khong cham duoc gi — tra 'empty', KHONG roi xuong nhanh RUN ALL
+  // ben duoi (nhanh do lock theo endpointSheet, khac ngu canh CHECK PERM).
+  if (req.permRun) {
+    return 'empty';
   }
 
   const mapping = permissionMapping || {};
   const uc2 = mapping.usecase2 || {};
   const uc1 = mapping.usecase1 || [];
 
-  const targetSheet = uc2.targetSheet || 'all';
-  if (targetSheet !== 'all' && targetSheet !== req.sheetName) {
+  const sheetMappings = uc1.filter((m) => m.endpointSheet === req.sheetName);
+  if (sheetMappings.length === 0) {
     return 'empty';
   }
 
   const headers = permissionFile.headers || [];
-  const rows = permissionFile.rows || [];
-  const nameColIdx = headers.indexOf(uc2.permissionColumn);
-  const matchedRow = rows.find((row) => (
-    nameColIdx !== -1
-    && String(row[nameColIdx] ?? '').trim().toLowerCase() === String(req.endpointName ?? '').trim().toLowerCase()
-  ));
+  const matchedRow = matchPermissionRow(req.endpointName, permissionFile, uc2);
 
   if (!matchedRow) {
-    return 'empty';
-  }
-
-  const sheetMappings = uc1.filter((m) => m.endpointSheet === req.sheetName);
-  if (sheetMappings.length === 0) {
     return 'empty';
   }
 
@@ -118,6 +145,15 @@ function finalize({
   permissionMapping = null,
 }) {
   const statusPermission = evaluatePermission({ req, status, permissionFile, permissionMapping });
+  // CHECK PERM dat permName: null cho endpoint khong dong UC2 nao keo ve. Dung
+  // '??' o day thi no roi xuong matchPermissionName — ham khop EXACT thuoc
+  // duong RUN ALL — nen endpoint ma include co tinh bo qua van hien ten, mau
+  // thuan voi statusPermission 'empty' ngay canh.
+  const permissionMatchedName = req.permRun
+    ? (req.permName ?? null)
+    : (req.permName ?? (permissionFile?.filename
+      ? matchPermissionName(req.endpointName, permissionFile, permissionMapping?.usecase2 ?? {})
+      : null));
 
   return {
     index: req.index,
@@ -147,6 +183,7 @@ function finalize({
       finalUrl: finalUrl || req.url,
     },
     statusPermission,
+    permissionMatchedName,
     errorCode: errorCode ?? extractErrorCode(body, errorCodePaths),
     errorMessage,
     durationMs: Math.round(performance.now() - t0),

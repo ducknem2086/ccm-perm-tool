@@ -1,9 +1,7 @@
-import {
-  roleColumns, roleColumnIndexes, identifierColumnIndex, applySheetFilter,
-} from '../shared/permission-sheet-filter.js';
+import { identifierColumnIndex, applySheetFilter } from '../shared/permission-sheet-filter.js';
 
 export function initPermissionSheetTable({
-  getSheet, getUc1, getUc2, getFilter, getSelectedColumns,
+  getSheet, getRoleColumns, getUc2, getFilter,
 }) {
   const table = document.getElementById('perm-sheet-table');
 
@@ -67,15 +65,22 @@ export function initPermissionSheetTable({
       const sheet = getSheet() ?? {};
       const headers = sheet.headers ?? [];
       const rows = sheet.rows ?? [];
-      const uc1 = getUc1();
-      const allRoleCols = roleColumns(headers, uc1);
-      const selected = getSelectedColumns();
+      const allRoleCols = getRoleColumns();
       const idIdx = identifierColumnIndex(headers, getUc2());
 
+      // Khu trung theo INDEX: cot dinh danh UC2 va cot role hoan toan co the
+      // tro cung mot cot cua file — khong khu thi header lap hai lan.
       displayCols = [];
-      if (idIdx !== -1) displayCols.push({ index: idIdx, name: headers[idIdx] });
+      const usedIdx = new Set();
+      if (idIdx !== -1) {
+        displayCols.push({ index: idIdx, name: headers[idIdx] });
+        usedIdx.add(idIdx);
+      }
       for (const col of allRoleCols) {
-        if (selected.has(col.name)) displayCols.push(col);
+        if (!usedIdx.has(col.index)) {
+          displayCols.push(col);
+          usedIdx.add(col.index);
+        }
       }
 
       paintHead();
@@ -85,7 +90,27 @@ export function initPermissionSheetTable({
         return { shown: 0, total: 0 };
       }
 
-      const roleIdxSet = new Set(roleColumnIndexes(headers, uc1));
+      // Sheet da luu bien mat (import file phan quyen khac) — bao dung nguyen
+      // nhan. Khong co nhanh nay thi roi xuong thong bao "khong co cot nao dang
+      // khai" ben duoi, nguoi dung di sua mapping trong khi loi nam o sheet.
+      if (sheet.missing) {
+        tbody.replaceChildren(emptyRow(
+          'Sheet đã lưu không còn trong file phân quyền — chọn sheet khác rồi bấm Lưu.',
+        ));
+        return { shown: 0, total: 0 };
+      }
+
+      // Doi sheet khong con ghi de cot dang khai (permissions-panel.js), nen
+      // sheet khong chua cot nao da khai la trang thai hop le. Khong noi ro thi
+      // bang render ra n dong chi co cot '#' — trong nhu loi.
+      if (displayCols.length === 0) {
+        tbody.replaceChildren(emptyRow(
+          'Sheet này không có cột nào đang khai ở UC1/UC2 — chọn sheet khác hoặc sửa mapping ở tab INPUT.',
+        ));
+        return { shown: 0, total: rows.length };
+      }
+
+      const roleIdxSet = new Set(allRoleCols.map((c) => c.index));
       const visible = applySheetFilter(rows, [...roleIdxSet], getFilter());
 
       if (visible.length === 0) {

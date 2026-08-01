@@ -12,7 +12,14 @@ import {
   persist,
   load,
   applyConfig,
-  makeAuth
+  makeAuth,
+  saveConfig,
+  revertConfig,
+  isConfigDirty,
+  dirtyParts,
+  savedSheet,
+  savedMapping,
+  draftSheet
 } from '../public/js/state.js';
 
 function setupMockLocalStorage() {
@@ -84,9 +91,14 @@ test('load giu permSplitPct da luu', () => {
 
 test('defaultConfig has permission configs', () => {
   const config = defaultConfig();
-  assert.deepEqual(config.permissionFile, { filename: '', sheets: [], selectedSheet: '', headers: [], rows: [] });
+  assert.deepEqual(config.permissionFile, { filename: '', sheets: [], selectedSheet: '' });
   assert.deepEqual(config.permissionMapping, {
-    usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '', dedupeColumn: '' },
+    usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' },
+  });
+  assert.deepEqual(config.savedConfig, {
+    permissionMapping: { usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' } },
+    methods: [],
+    permissionSheet: '',
   });
 });
 
@@ -301,7 +313,10 @@ test('load va applyConfig merge safe permissionFile va permissionMapping', () =>
   });
 
   assert.equal(state.permissionFile.filename, 'test.xlsx');
-  assert.deepEqual(state.permissionFile.headers, ['a']);
+  // headers/rows cua ban cu duoc dung thanh mot sheet 'Default'
+  assert.deepEqual(state.permissionFile.sheets, [{ name: 'Default', headers: ['a'], rows: [['1']] }]);
+  assert.equal(state.permissionFile.selectedSheet, 'Default');
+  assert.equal(state.permissionFile.headers, undefined);
   assert.deepEqual(state.permissionMapping.usecase1, ['colA']);
   assert.equal(state.permissionMapping.usecase2.permissionColumn, 'colB');
 
@@ -316,4 +331,133 @@ test('load va applyConfig merge safe permissionFile va permissionMapping', () =>
 
   assert.equal(state.permissionFile.filename, '');
   assert.equal(state.permissionMapping.usecase2.permissionColumn, 'colC');
+});
+
+/* ---------- savedConfig: commit / revert ---------- */
+
+function setupSaveGate() {
+  setupMockLocalStorage();
+  Object.assign(state, defaultConfig());
+  state.permissionFile = {
+    filename: 'perm.xlsx',
+    sheets: [
+      { name: 'Sheet A', headers: ['Ten API', 'User'], rows: [['Tra cuu', 'x']] },
+      { name: 'Sheet B', headers: ['Ma'], rows: [['M1']] },
+    ],
+    selectedSheet: 'Sheet A',
+  };
+  saveConfig();
+}
+
+test('saveConfig chup dung ba manh: mapping, methods, sheet phan quyen', () => {
+  setupSaveGate();
+  state.permissionMapping.usecase2.permissionColumn = 'Ten API';
+  state.runFilter.methods = ['GET'];
+  state.permissionFile.selectedSheet = 'Sheet B';
+  saveConfig();
+
+  assert.equal(savedMapping().usecase2.permissionColumn, 'Ten API');
+  assert.deepEqual(state.savedConfig.methods, ['GET']);
+  assert.equal(state.savedConfig.permissionSheet, 'Sheet B');
+});
+
+test('saveConfig deep copy — sua ban nhap sau khi Luu khong dong vao ban da luu', () => {
+  setupSaveGate();
+  state.permissionMapping.usecase1.push({ permissionColumn: 'User', endpointSheet: 'Sheet 1', authProfileName: 'A' });
+  saveConfig();
+
+  state.permissionMapping.usecase1[0].authProfileName = 'DA DOI';
+  assert.equal(savedMapping().usecase1[0].authProfileName, 'A');
+});
+
+test('isConfigDirty bat khi sua ban nhap, tat sau khi Luu', () => {
+  setupSaveGate();
+  assert.equal(isConfigDirty(), false);
+
+  state.permissionMapping.usecase2.endpointColumn = 'Ten API';
+  assert.equal(isConfigDirty(), true);
+
+  saveConfig();
+  assert.equal(isConfigDirty(), false);
+});
+
+test('dirtyParts liet ke dung phan dang treo', () => {
+  setupSaveGate();
+  assert.deepEqual(dirtyParts(), []);
+
+  state.runFilter.methods = ['POST'];
+  assert.deepEqual(dirtyParts(), ['filter method']);
+
+  state.permissionFile.selectedSheet = 'Sheet B';
+  assert.deepEqual(dirtyParts(), ['filter method', 'sheet phân quyền']);
+
+  state.permissionMapping.usecase2.permissionColumn = 'Ten API';
+  assert.deepEqual(dirtyParts(), ['mapping UC1/UC2', 'filter method', 'sheet phân quyền']);
+});
+
+test('revertConfig khoi phuc ca ba manh ve ban da luu', () => {
+  setupSaveGate();
+  state.permissionMapping.usecase2.permissionColumn = 'Ten API';
+  state.runFilter.methods = ['DELETE'];
+  state.permissionFile.selectedSheet = 'Sheet B';
+
+  revertConfig();
+
+  assert.equal(state.permissionMapping.usecase2.permissionColumn, '');
+  assert.deepEqual(state.runFilter.methods, []);
+  assert.equal(state.permissionFile.selectedSheet, 'Sheet A');
+  assert.equal(isConfigDirty(), false);
+});
+
+test('savedSheet doc sheet DA LUU, draftSheet doc sheet dang do', () => {
+  setupSaveGate();
+  state.permissionFile.selectedSheet = 'Sheet B';
+
+  assert.equal(savedSheet().name, 'Sheet A');
+  assert.equal(draftSheet().name, 'Sheet B');
+});
+
+test('savedSheet tra null khi sheet da luu bien mat khoi file', () => {
+  setupSaveGate();
+  state.permissionFile.sheets = [{ name: 'Sheet Moi', headers: [], rows: [] }];
+  assert.equal(savedSheet(), null);
+});
+
+test('load: cau hinh cu khong co savedConfig thi snapshot tu gia tri dang co', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    permissionFile: { filename: 'cu.xlsx', headers: ['A', 'B'], rows: [['1', '2']] },
+    permissionMapping: { usecase1: [], usecase2: { permissionColumn: 'A' } },
+    runFilter: { methods: ['GET'], msisdnPatterns: [], authIds: [] },
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.savedConfig.permissionMapping.usecase2.permissionColumn, 'A');
+  assert.deepEqual(state.savedConfig.methods, ['GET']);
+  assert.equal(state.savedConfig.permissionSheet, 'Default');
+  assert.equal(isConfigDirty(), false);
+});
+
+test('load: savedConfig da co thi giu nguyen, khong ghi de bang ban nhap', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    permissionFile: {
+      filename: 'p.xlsx',
+      sheets: [{ name: 'S1', headers: ['A'], rows: [] }],
+      selectedSheet: 'S1',
+    },
+    permissionMapping: { usecase1: [], usecase2: { permissionColumn: 'DANG SUA' } },
+    savedConfig: {
+      permissionMapping: { usecase1: [], usecase2: { permissionColumn: 'DA LUU' } },
+      methods: [],
+      permissionSheet: 'S1',
+    },
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.permissionMapping.usecase2.permissionColumn, 'DANG SUA');
+  assert.equal(savedMapping().usecase2.permissionColumn, 'DA LUU');
+  assert.equal(isConfigDirty(), true);
 });
