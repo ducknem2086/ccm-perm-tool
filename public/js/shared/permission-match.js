@@ -1,21 +1,5 @@
-import { dedupeEndpoints } from './endpoint-dedupe.js';
-import { normalizeName, uc1Sheets } from './permission-scope.js';
-
-// Danh sach cot dich cho UC2 chon: union raw-header cua moi endpoint thuoc
-// sheet duoc khai trong UC1, giu thu tu gap lan dau. Sheet nao thieu cot dang
-// chon thi endpoint cua sheet do don gian la khong match, khong vo.
-export function endpointColumns(endpoints, uc1) {
-  const sheets = uc1Sheets(uc1);
-  const seen = new Set();
-  const out = [];
-  for (const e of endpoints ?? []) {
-    if (!sheets.has(e.sheetName ?? 'Sheet 1')) continue;
-    for (const h of Object.keys(e.raw ?? {})) {
-      if (!seen.has(h)) { seen.add(h); out.push(h); }
-    }
-  }
-  return out;
-}
+import { normalizeName } from './permission-scope.js';
+import { filterEndpoints } from './run-filter.js';
 
 // Cot cua RIENG mot sheet — nguon option cho UC2 chon cot dich sau khi da
 // chon "sheet tham chieu". Khac endpointColumns o cho khong union nhieu
@@ -31,6 +15,48 @@ export function endpointColumnsOfSheet(endpoints, sheetName) {
     }
   }
   return out;
+}
+
+// Gia tri khoa ghep cua mot endpoint. Ba tang, KHONG phai ba lan doan:
+//   1. dung ten cot da chon o UC2
+//   2. cot cung ten sau normalize — lech hoa/thuong hoac khoang trang thua
+//   3. e.name, CHI khi sheet do khong he co cot nay
+// Can ba tang vi uc2.endpointColumn la MOT ten cot chon tu MOT sheet
+// (uc2.columnSheet), con pool CHECK PERM trai moi sheet — cac sheet dat ten cot
+// khac nhau (xem endpointColumnsOfSheet ngay tren). O rong trong sheet CO cot
+// thi tra rong, khong roi xuong tang 3: do la du lieu thieu, doan bang ten
+// endpoint se ghep nham vi hitsForRow bot dan tu dau tu khoa nen rat long.
+export function joinValueOf(endpoint, endpointColumn) {
+  const raw = endpoint?.raw ?? {};
+  const want = normalizeName(endpointColumn);
+  if (want === '') return '';
+
+  const hit = Object.entries(raw).find(([k]) => normalizeName(k) === want);
+  if (hit) return String(hit[1] ?? '');
+
+  // Cung khoa ma nhanh RUN ALL dung (matchPermissionRow doc req.endpointName),
+  // nen hai duong cham diem khong lech nguon.
+  return String(endpoint?.name ?? '');
+}
+
+// Cung khoa METHOD:pathTemplate nhu dedupeEndpoints, nhung khi hai ban dung do
+// thi giu ban CO khoa ghep. dedupeEndpoints giu ban gap dau tien — ban do co the
+// la ban de trong o ten, con ban ghep duoc o sheet sau bi vut, ket qua phu thuoc
+// thu tu mang. Map giu thu tu chen nen ban gap dau tien van thang khi ca hai
+// cung ghep duoc (hoac cung khong).
+function dedupePreferJoinable(endpoints, endpointColumn) {
+  const best = new Map();
+  for (const e of endpoints ?? []) {
+    const method = String(e.method ?? 'GET').toUpperCase();
+    const path = String(e.pathTemplate ?? e.endpoint ?? '').trim();
+    const key = `${method}:${path}`;
+    const cur = best.get(key);
+    if (!cur) { best.set(key, e); continue; }
+    const curHas = normalizeName(joinValueOf(cur, endpointColumn)) !== '';
+    const newHas = normalizeName(joinValueOf(e, endpointColumn)) !== '';
+    if (!curHas && newHas) best.set(key, e);
+  }
+  return [...best.values()];
 }
 
 // Mot vong quet cua thuat toan include: bot tu DAU tu khoa, toi da 4 vong,
@@ -54,9 +80,11 @@ function hitsForRow(rowText, pool) {
 }
 
 // Pool + ghep cua CHECK PERM — duong duy nhat.
-//   1. GOM   — MOI endpoint thuoc sheet khai o UC1, qua bo loc method topbar. Khong doc checkbox
-//      'enabled' (khong con thu hep pham vi chay o bat ky duong nao).
-//   2. KHU TRUNG — METHOD:pathTemplate, ban gap dau tien thang. Bat buoc lam TRUOC buoc ghep:
+//   1. GOM   — DUNG danh sach ma nut RUN ALL dang dem (filterEndpoints, xem request-count.js), nen
+//      doi tab sheet hay bo loc method la ca hai nut cung doi. Tab "Tat ca (All)" = quet het. Khong
+//      doc checkbox 'enabled', khong doc uc1[].endpointSheet nua. commonEndpointsEnabled: false —
+//      ban ghi common go tay khong co raw nen khong dong UC2 nao ghep duoc, chay vao chi cham 'empty'.
+//   2. KHU TRUNG — METHOD:pathTemplate, uu tien ban CO khoa ghep. Bat buoc lam TRUOC buoc ghep:
 //      ghep truoc roi khu trung thi hai ban cung API co the dinh hai dong UC2 khac nhau, ban nao
 //      song sot la ngau nhien theo thu tu mang.
 //   3. GHEP  — moi dong UC2 (dung thu tu file) keo ve tap endpoint qua hitsForRow; dong den truoc giu cho.
@@ -64,29 +92,23 @@ function hitsForRow(rowText, pool) {
 export function matchPermissionEndpoints(state) {
   const saved = state?.savedConfig ?? {};
   const mapping = saved.permissionMapping ?? {};
-  const uc1 = mapping.usecase1 ?? [];
   const uc2 = mapping.usecase2 ?? {};
   const sheet = (state?.permissionFile?.sheets ?? []).find((s) => s.name === saved.permissionSheet);
   const headers = sheet?.headers ?? [];
   const rows = sheet?.rows ?? [];
+  const endpointColumn = uc2.endpointColumn;
 
-  const sheets = uc1Sheets(uc1);
-  const wantedMethods = new Set((saved.methods ?? []).map((m) => String(m).toUpperCase()));
-  const filtered = (state?.endpoints ?? []).filter((e) => {
-    if (!sheets.has(e.sheetName ?? 'Sheet 1')) return false;
-    if (wantedMethods.size > 0 && !wantedMethods.has(String(e.method || 'GET').toUpperCase())) return false;
-    return true;
-  });
-
-  const unique = dedupeEndpoints(filtered).unique;
+  const filtered = filterEndpoints(
+    state?.endpoints, state?.runFilter, state?.selectedSheet, '', false,
+  );
+  const unique = dedupePreferJoinable(filtered, endpointColumn);
 
   const srcIdx = uc2.permissionColumn ? headers.indexOf(uc2.permissionColumn) : -1;
-  const endpointColumn = uc2.endpointColumn;
   const bare = (e) => ({ endpoint: e, permName: null, permRowIndex: null });
   if (srcIdx === -1 || !endpointColumn) return unique.map(bare);
 
   const pool = unique
-    .map((e) => ({ e, hay: normalizeName(e.raw?.[endpointColumn]) }))
+    .map((e) => ({ e, hay: normalizeName(joinValueOf(e, endpointColumn)) }))
     .filter((it) => it.hay !== '');
 
   const taken = new Map(); // khoa = ban than endpoint

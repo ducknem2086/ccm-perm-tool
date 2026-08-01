@@ -1,9 +1,10 @@
-import { filterMsisdns } from './run-filter.js';
-import { matchPermissionEndpoints, endpointColumns } from './permission-match.js';
+import { filterMsisdns, filterEndpoints } from './run-filter.js';
+import { matchPermissionEndpoints, endpointColumnsOfSheet } from './permission-match.js';
 
-// CHECK PERM — mot duong duy nhat: endpoint thuoc sheet khai o UC1
-// (usecase1[].endpointSheet), khu trung METHOD:pathTemplate. Endpoint khong
-// ghep duoc dong UC2 nao van chay, cham 'empty'. Xem permission-match.js.
+// CHECK PERM — mot duong duy nhat: DUNG danh sach endpoint ma nut RUN ALL dang
+// dem (theo tab sheet + bo loc method dang chon), khu trung METHOD:pathTemplate.
+// Endpoint khong ghep duoc dong UC2 nao van chay, cham 'empty'. Xem
+// permission-match.js.
 
 // Dung chung ca hai phia: client dung de loc endpoint truoc khi goi
 // /api/run, server dung de cham diem statusPermission — phai la mot
@@ -66,10 +67,6 @@ export function savedPermissionPayload(state) {
   };
 }
 
-export function uc1Sheets(uc1) {
-  return new Set((uc1 ?? []).map((m) => m.endpointSheet).filter(Boolean));
-}
-
 // Union ten profile cua MOI dong UC1, khong phai subset theo tung sheet —
 // profile chi duoc cap o Sheet 2 van phai chay tren Sheet 1 de roi vao
 // nhanh ky vong 403 (xem evaluatePermission trong http-client.js).
@@ -114,6 +111,12 @@ export function validatePermissionScope(state) {
     if (!headers.includes(m.permissionColumn)) {
       errors.push(`UC1: cột "${m.permissionColumn}" không có trong sheet phân quyền đang chọn`);
     }
+    // Cot ROLE trung khoa ghep UC2 khong sai kieu du lieu nen moi kiem tra khac
+    // deu qua, nhung o do chua TEN chu khong chua 'x' — evaluateUc2Permission
+    // roi thang vao nhanh "khong co quyen" cho toan bo endpoint.
+    if (m.permissionColumn && m.permissionColumn === uc2.permissionColumn) {
+      errors.push(`UC1: cột "${m.permissionColumn}" đang là khoá ghép của UC2 — chọn cột ROLE (ô đánh "x")`);
+    }
     if (!endpointSheets.has(m.endpointSheet)) {
       errors.push(`UC1: sheet "${m.endpointSheet}" không còn endpoint nào`);
     }
@@ -122,16 +125,40 @@ export function validatePermissionScope(state) {
     }
   }
 
-  const scopedRaw = (state?.endpoints ?? []).filter((e) => uc1Sheets(uc1).has(e.sheetName ?? 'Sheet 1'));
+  // Cham diem lay dong UC1 DAU TIEN khop auth (evaluateUc2Permission,
+  // http-client.js). Hai dong cung auth khac cot ROLE la cau hinh mo ho — dong
+  // thu hai khong bao gio duoc doc, nguoi dung tuong minh dang khai hai luat.
+  const roleByAuth = new Map();
+  const reported = new Set();
+  for (const m of uc1) {
+    const key = normalizeName(m.authProfileName);
+    if (!key) continue;
+    if (!roleByAuth.has(key)) { roleByAuth.set(key, m.permissionColumn); continue; }
+    const first = roleByAuth.get(key);
+    if (first !== m.permissionColumn && !reported.has(key)) {
+      reported.add(key);
+      errors.push(
+        `UC1: auth "${m.authProfileName}" khai hai cột ROLE khác nhau ("${first}" và `
+        + `"${m.permissionColumn}") — chấm điểm chỉ dùng cột đầu tiên`,
+      );
+    }
+  }
+
+  // Bam dung pool sap chay, khong phai sheet khai o UC1 nua.
+  const scopedRaw = filterEndpoints(state?.endpoints, state?.runFilter, state?.selectedSheet, '', false);
   if (scopedRaw.some((e) => !e.raw)) {
     errors.push('Endpoints import từ bản cũ — cần import lại file endpoints');
   }
 
-  if (!uc2.columnSheet || !uc1Sheets(uc1).has(uc2.columnSheet)) {
+  // columnSheet la ong nhom de chon TEN COT, khong phai pham vi chay — xet tren
+  // moi sheet co endpoint, khong theo tab dang chon.
+  const allSheets = new Set((state?.endpoints ?? []).map((e) => e.sheetName ?? 'Sheet 1'));
+  if (!uc2.columnSheet || !allSheets.has(uc2.columnSheet)) {
     errors.push('Chưa chọn sheet endpoints tham chiếu (UC2)');
   }
 
-  const cols = endpointColumns(state?.endpoints, uc1);
+  // Cung ham ma panel dung de dung option, khong thi validate qua ma dropdown rong.
+  const cols = endpointColumnsOfSheet(state?.endpoints, uc2.columnSheet);
   if (!uc2.endpointColumn || !cols.includes(uc2.endpointColumn)) {
     errors.push('Chưa chọn cột đích (UC2), hoặc cột đã biến mất');
   }
@@ -187,5 +214,10 @@ export function buildPermissionRunConfig(state) {
   const perAuth = endpoints.reduce((sum, ep) => sum + (ep.attachMsisdn !== false ? msisdns.length : 1), 0);
   const total = auths.length * perAuth;
 
-  return { config, endpointCount: endpoints.length, authCount: auths.length, total };
+  // Dem tu permRowIndex chu khong dem statusPermission === 'empty' trong ket qua:
+  // 'empty' con phat sinh khi request loi mang (status === null), tron hai nguyen
+  // nhan vao mot con so thi no het chi duoc cho nao can sua.
+  const unmatched = endpoints.filter((e) => e.permRowIndex == null).length;
+
+  return { config, endpointCount: endpoints.length, authCount: auths.length, total, unmatched };
 }

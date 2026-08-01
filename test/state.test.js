@@ -97,7 +97,6 @@ test('defaultConfig has permission configs', () => {
   });
   assert.deepEqual(config.savedConfig, {
     permissionMapping: { usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' } },
-    methods: [],
     permissionSheet: '',
   });
 });
@@ -349,16 +348,24 @@ function setupSaveGate() {
   saveConfig();
 }
 
-test('saveConfig chup dung ba manh: mapping, methods, sheet phan quyen', () => {
+test('saveConfig chup dung hai manh: mapping va sheet phan quyen', () => {
   setupSaveGate();
   state.permissionMapping.usecase2.permissionColumn = 'Ten API';
-  state.runFilter.methods = ['GET'];
   state.permissionFile.selectedSheet = 'Sheet B';
   saveConfig();
 
   assert.equal(savedMapping().usecase2.permissionColumn, 'Ten API');
-  assert.deepEqual(state.savedConfig.methods, ['GET']);
   assert.equal(state.savedConfig.permissionSheet, 'Sheet B');
+  assert.equal(state.savedConfig.methods, undefined);
+});
+
+// Bo loc method di thang qua state.runFilter nhu RUN ALL — dua no vao gate chi
+// lam badge "chua luu" bat len trong khi bam Luu khong doi ket qua gi.
+test('gate Luu KHONG bao gom bo loc method', () => {
+  setupSaveGate();
+  state.runFilter.methods = ['GET'];
+  assert.equal(isConfigDirty(), false);
+  assert.deepEqual(dirtyParts(), []);
 });
 
 test('saveConfig deep copy — sua ban nhap sau khi Luu khong dong vao ban da luu', () => {
@@ -385,28 +392,36 @@ test('dirtyParts liet ke dung phan dang treo', () => {
   setupSaveGate();
   assert.deepEqual(dirtyParts(), []);
 
-  state.runFilter.methods = ['POST'];
-  assert.deepEqual(dirtyParts(), ['filter method']);
-
   state.permissionFile.selectedSheet = 'Sheet B';
-  assert.deepEqual(dirtyParts(), ['filter method', 'sheet phân quyền']);
+  assert.deepEqual(dirtyParts(), ['sheet phân quyền']);
 
   state.permissionMapping.usecase2.permissionColumn = 'Ten API';
-  assert.deepEqual(dirtyParts(), ['mapping UC1/UC2', 'filter method', 'sheet phân quyền']);
+  assert.deepEqual(dirtyParts(), ['mapping UC1/UC2', 'sheet phân quyền']);
 });
 
-test('revertConfig khoi phuc ca ba manh ve ban da luu', () => {
+test('revertConfig khoi phuc hai manh ve ban da luu', () => {
   setupSaveGate();
   state.permissionMapping.usecase2.permissionColumn = 'Ten API';
-  state.runFilter.methods = ['DELETE'];
   state.permissionFile.selectedSheet = 'Sheet B';
 
   revertConfig();
 
   assert.equal(state.permissionMapping.usecase2.permissionColumn, '');
-  assert.deepEqual(state.runFilter.methods, []);
   assert.equal(state.permissionFile.selectedSheet, 'Sheet A');
   assert.equal(isConfigDirty(), false);
+});
+
+// Huy khong duoc dung toi state.runFilter: ca ba truc deu ngoai gate, xoa
+// chung la xoa lua chon dang dung cua nguoi dung.
+test('revertConfig KHONG dung toi state.runFilter', () => {
+  setupSaveGate();
+  state.runFilter.methods = ['DELETE'];
+  state.runFilter.authIds = ['a1'];
+
+  revertConfig();
+
+  assert.deepEqual(state.runFilter.methods, ['DELETE']);
+  assert.deepEqual(state.runFilter.authIds, ['a1']);
 });
 
 test('savedSheet doc sheet DA LUU, draftSheet doc sheet dang do', () => {
@@ -434,9 +449,25 @@ test('load: cau hinh cu khong co savedConfig thi snapshot tu gia tri dang co', (
   load();
 
   assert.equal(state.savedConfig.permissionMapping.usecase2.permissionColumn, 'A');
-  assert.deepEqual(state.savedConfig.methods, ['GET']);
   assert.equal(state.savedConfig.permissionSheet, 'Default');
   assert.equal(isConfigDirty(), false);
+});
+
+test('load: khoa methods thua trong cau hinh cu bi bo qua, khong can migration', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    permissionFile: { filename: 'p.xlsx', sheets: [{ name: 'S1', headers: ['A'], rows: [] }], selectedSheet: 'S1' },
+    savedConfig: {
+      permissionMapping: { usecase1: [], usecase2: { permissionColumn: 'A' } },
+      methods: ['GET'],
+      permissionSheet: 'S1',
+    },
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.savedConfig.methods, undefined);
+  assert.equal(state.savedConfig.permissionSheet, 'S1');
 });
 
 test('load: savedConfig da co thi giu nguyen, khong ghi de bang ban nhap', () => {

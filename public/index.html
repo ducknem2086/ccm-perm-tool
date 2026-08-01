@@ -124,6 +124,11 @@
                   <textarea id="inp-endpoints-common" class="input mono ed-textarea" spellcheck="false"
                     placeholder="Nhập danh sách endpoint chung (mỗi dòng 1 endpoint, có thể bắt đầu bằng METHOD).&#10;Ví dụ:&#10;/api/v1/health&#10;POST /api/v1/submit"></textarea>
                 </section>
+
+                <!-- Loi import endpoints do vao khoang trong cuoi cot trai (cot phai
+                     PHAN QUYEN cao hon), thay vi noi duoi card ENDPOINTS — o do no
+                     day danh sach endpoint xuong khoi tam nhin. -->
+                <div id="endpoint-import-errors" class="el-errors-host"></div>
               </div>
 
               <section class="card" id="card-permissions">
@@ -135,34 +140,46 @@
                     <span class="label">Sheet file phân quyền</span>
                     <select id="sel-permissions-file-sheet" class="input input-sm"></select>
                   </label>
+                  <span id="perm-dirty-badge" class="hint perm-dirty" hidden></span>
+                  <button id="btn-permissions-save" type="button" class="btn btn-primary btn-sm" disabled>💾 Lưu cấu hình</button>
+                  <button id="btn-permissions-delete" type="button" class="btn btn-secondary btn-sm" hidden>🗑 Xoá file</button>
                 </div>
                 <div id="permissions-mapping-area" hidden>
+                  <div class="perm-section-head">
+                    <span class="label">UC2 — GHÉP ENDPOINT ↔ DÒNG PHÂN QUYỀN</span>
+                  </div>
+                  <p class="hint">Hai cột khoá dưới đây phải chứa CÙNG giá trị (so khớp bỏ hoa/thường và khoảng trắng thừa) — đó là cách tool biết endpoint nào ứng với dòng nào của file phân quyền. Đây là cột TÊN, không phải cột đánh dấu quyền.</p>
                   <div class="perm-grid">
                     <label class="field">
-                      <span class="label">UC2: Cột Name phân quyền</span>
+                      <span class="label">Khoá ghép — cột TÊN ở FILE PHÂN QUYỀN</span>
                       <select id="sel-permissions-name-col" class="input input-sm"></select>
                     </label>
                     <label class="field">
-                      <span class="label">UC2: Sheet endpoints (chọn cột)</span>
+                      <span class="label">Sheet ENDPOINTS chứa cột khoá</span>
                       <select id="sel-permissions-endpoint-sheet" class="input input-sm"></select>
                     </label>
                     <label class="field">
-                      <span class="label">UC2: Cột đích (endpoints)</span>
+                      <span class="label">Khoá ghép — cột TÊN ở SHEET ENDPOINTS</span>
                       <select id="sel-permissions-endpoint-col" class="input input-sm"></select>
                     </label>
                   </div>
                   <div class="field perm-uc1">
                     <div class="perm-uc1-head">
-                      <span class="label">UC1: Mappings Cột ↔ Sheet ↔ Auth Profile (quyết định sheet nào được kiểm tra)</span>
+                      <span class="label">UC1 — PHẠM VI CHẠY &amp; CỘT CHẤM QUYỀN</span>
                       <button id="btn-permissions-add-usecase1" type="button" class="btn btn-secondary btn-sm">＋ Thêm mapping</button>
                     </div>
-                    <p class="hint">Cột Sheet quyết định endpoint nào được kiểm tra — chạy hết mọi endpoint của sheet đó. Endpoint trùng METHOD + path giữa nhiều sheet chỉ chạy một lần cho mỗi auth.</p>
+                    <p class="hint">Mỗi dòng: cột ROLE quyết định quyền kỳ vọng (ô <code>x</code> = phải được phép), Auth profile là danh tính gọi API. <strong>CHECK PERM chạy đúng danh sách mà nút RUN ALL đang đếm</strong> — theo tab sheet và bộ lọc method đang chọn, đã khử trùng METHOD + URL. Bấm tab "Tất cả (All)" ở bảng endpoints để quét hết. Mỗi auth profile khai một dòng là đủ; cột Sheet chỉ còn dùng cho cột chấm quyền của RUN ALL.</p>
+                    <p class="hint perm-uc1-warn">⚠ Cột ROLE phải là cột đánh dấu <code>x</code>, KHÔNG phải cột tên đã chọn làm khoá ghép ở UC2 — chọn nhầm thì mọi ô đều khác <code>x</code> nên endpoint nào cũng bị chấm là "không có quyền", và bảng HAS PERMISSIONS mất cột trạng thái.</p>
+                    <!-- Hang tieu de dung chung grid template voi tung dong mapping
+                         (.perm-uc1-row) nen thang cot. De ngoai #permissions-usecase1-table
+                         vi container do bi replaceChildren() moi lan render. -->
+                    <div class="perm-uc1-row perm-uc1-colhead">
+                      <span class="label">Cột ROLE ở file phân quyền (ô "x" = có quyền)</span>
+                      <span class="label">Sheet endpoints sẽ chạy</span>
+                      <span class="label">Auth profile dùng để gọi</span>
+                      <span></span>
+                    </div>
                     <div id="permissions-usecase1-table"></div>
-                  </div>
-                  <div class="perm-save-row">
-                    <span id="perm-dirty-badge" class="hint perm-dirty" hidden></span>
-                    <button id="btn-permissions-save" type="button" class="btn btn-primary btn-sm" disabled>💾 Lưu cấu hình</button>
-                    <button id="btn-permissions-revert" type="button" class="btn btn-secondary btn-sm" disabled>↩ Huỷ</button>
                   </div>
                   <p id="perm-save-errors" class="hint perm-save-errors" hidden></p>
                 </div>

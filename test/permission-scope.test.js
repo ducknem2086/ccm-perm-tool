@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeName, matchPermissionName, uc1AuthNames, uc1Sheets,
+  normalizeName, matchPermissionName, uc1AuthNames,
   validatePermissionScope, buildPermissionRunConfig, savedPermissionPayload,
 } from '../public/js/shared/permission-scope.js';
 
@@ -35,8 +35,9 @@ function endpoint(over = {}) {
 }
 
 // Nhan permissionFile dang phang (headers/rows) cho gon, roi dung thanh
-// sheets + savedConfig. runFilter va permissionMapping dung CHUNG tham chieu
-// voi savedConfig de test mutate state.runFilter.methods van co tac dung.
+// sheets + savedConfig. permissionMapping dung CHUNG tham chieu voi savedConfig
+// (ban nhap == ban da luu, coi nhu vua bam Luu). runFilter/selectedSheet nam
+// ngoai gate — pool CHECK PERM doc thang chung nhu nut RUN ALL.
 function baseState(over = {}) {
   const {
     permissionFile: pf = permissionFile,
@@ -70,8 +71,9 @@ function baseState(over = {}) {
       selectedSheet: 'Perm',
     },
     permissionMapping: pm,
-    savedConfig: { permissionMapping: pm, methods: rf.methods, permissionSheet: 'Perm' },
-    selectedSheet: 'Sheet 1',
+    savedConfig: { permissionMapping: pm, permissionSheet: 'Perm' },
+    // Tab ALL — pool CHECK PERM bam theo tab dang chon, giong nut RUN ALL.
+    selectedSheet: 'all',
     commonEndpoints: '',
     commonEndpointsEnabled: true,
     ...rest,
@@ -99,10 +101,6 @@ test('matchPermissionName tra ve null khi khong co dong nao khop', () => {
   assert.equal(matchPermissionName('Khong Ton Tai', permissionFile, uc2), null);
 });
 
-test('uc1Sheets gom moi sheet duoc khai o UC1', () => {
-  assert.deepEqual([...uc1Sheets(uc1)].sort(), ['Sheet 1', 'Sheet 2']);
-});
-
 test('uc1AuthNames la union moi dong UC1, ke ca profile chi xuat hien o mot sheet', () => {
   const names = uc1AuthNames(uc1);
   assert.ok(names.has('user profile'));
@@ -113,9 +111,11 @@ test('uc1AuthNames la union moi dong UC1, ke ca profile chi xuat hien o mot shee
 
 /* ---------- buildPermissionRunConfig ---------- */
 
-test('buildPermissionRunConfig loai endpoint thuoc sheet ngoai UC1', () => {
-  const { config } = buildPermissionRunConfig(baseState());
-  assert.ok(!config.endpoints.some((e) => e.sheetName === 'Common'));
+test('buildPermissionRunConfig KHONG con loc theo sheet khai o UC1 — lay het pool cua RUN ALL', () => {
+  const state = baseState();
+  // Khong dong UC1 nao khai 'Common', nhung endpoint do van thuoc tab ALL.
+  const { config } = buildPermissionRunConfig(state);
+  assert.ok(config.endpoints.some((e) => e.sheetName === 'Common'));
 });
 
 test('buildPermissionRunConfig endpoint khong duoc dong UC2 nao keo ve VAN chay, permRowIndex null', () => {
@@ -142,9 +142,12 @@ test('buildPermissionRunConfig moi endpoint deu mang permRun true', () => {
   assert.ok(config.endpoints.every((e) => e.permRun === true));
 });
 
-test('buildPermissionRunConfig loai endpoints chung (sheetName Common)', () => {
-  const { config } = buildPermissionRunConfig(baseState());
-  assert.ok(!config.endpoints.some((e) => e.id === 'common1'));
+test('buildPermissionRunConfig loai common endpoints go tay o o nhap', () => {
+  const state = baseState();
+  state.commonEndpoints = 'GET /api/common/health';
+  state.commonEndpointsEnabled = true;
+  const { config } = buildPermissionRunConfig(state);
+  assert.ok(!config.endpoints.some((e) => String(e.id).startsWith('common_')));
 });
 
 test('buildPermissionRunConfig KHONG loc theo checkbox enabled — CHECK PERM chay het endpoint thuoc sheet UC1', () => {
@@ -161,21 +164,46 @@ test('buildPermissionRunConfig giu nguyen gia tri enabled goc — khong con ai d
   assert.equal(config.endpoints.find((e) => e.id === 'e1').enabled, false);
 });
 
-test('buildPermissionRunConfig giu dung bo loc method', () => {
+test('buildPermissionRunConfig doc bo loc method tu BAN NHAP state.runFilter', () => {
   const state = baseState();
   state.endpoints[0].method = 'POST';
-  state.savedConfig.methods = ['GET'];
+  state.runFilter.methods = ['GET'];
   const { config } = buildPermissionRunConfig(state);
   assert.ok(!config.endpoints.some((e) => e.id === 'e1'));
   assert.ok(config.endpoints.some((e) => e.id === 'e2'));
 });
 
-test('buildPermissionRunConfig bo qua selectedSheet — mot tab nhung UC1 khai nhieu sheet van ra du', () => {
-  const state = baseState({ selectedSheet: 'Sheet 1' });
-  const { config } = buildPermissionRunConfig(state);
+test('buildPermissionRunConfig tab ALL lay het moi sheet', () => {
+  const { config } = buildPermissionRunConfig(baseState());
   assert.ok(config.endpoints.some((e) => e.sheetName === 'Sheet 1'));
   assert.ok(config.endpoints.some((e) => e.sheetName === 'Sheet 2'));
+});
+
+test('buildPermissionRunConfig tab mot sheet cu the thu hep pool theo tab do', () => {
+  const { config } = buildPermissionRunConfig(baseState({ selectedSheet: 'Sheet 2' }));
+  assert.ok(config.endpoints.every((e) => e.sheetName === 'Sheet 2'));
+  assert.ok(config.endpoints.length > 0);
+});
+
+// Config gui server phai la 'all': client da nuong san danh sach cuoi vao
+// config.endpoints, de server loc lai lan nua la loc hai lan tren hai state.
+test('buildPermissionRunConfig gui selectedSheet all cho server du tab dang hep', () => {
+  const { config } = buildPermissionRunConfig(baseState({ selectedSheet: 'Sheet 2' }));
   assert.equal(config.selectedSheet, 'all');
+  assert.deepEqual(config.runFilter.methods, []);
+});
+
+test('buildPermissionRunConfig tra unmatched = so endpoint khong ghep duoc dong nao', () => {
+  const { unmatched } = buildPermissionRunConfig(baseState());
+  // e4 'Khong Trong File Quyen' + common1 'Common 1' khong dong UC2 nao keo ve.
+  assert.equal(unmatched, 2);
+});
+
+test('buildPermissionRunConfig unmatched = 0 khi moi endpoint deu ghep duoc', () => {
+  const state = baseState({
+    endpoints: [endpoint({ id: 'e1', sheetName: 'Sheet 1', raw: { 'Ten API': 'Tra cuu TB' } })],
+  });
+  assert.equal(buildPermissionRunConfig(state).unmatched, 0);
 });
 
 test('buildPermissionRunConfig msisdns con dung 1 phan tu', () => {
@@ -350,11 +378,63 @@ test('validatePermissionScope bao loi khi chua chon sheet tham chieu (UC2)', () 
   assert.ok(errors.some((e) => e.includes('Chưa chọn sheet endpoints tham chiếu')));
 });
 
-test('validatePermissionScope bao loi khi sheet tham chieu (UC2) khong nam trong UC1', () => {
+test('validatePermissionScope bao loi khi sheet tham chieu (UC2) khong co endpoint nao', () => {
   const errors = validatePermissionScope(baseState({
-    permissionMapping: { usecase1: uc1, usecase2: { ...uc2, columnSheet: 'Sheet Khong Khai UC1' } },
+    permissionMapping: { usecase1: uc1, usecase2: { ...uc2, columnSheet: 'Sheet Khong Ton Tai' } },
   }));
   assert.ok(errors.some((e) => e.includes('Chưa chọn sheet endpoints tham chiếu')));
+});
+
+test('validatePermissionScope CHAP NHAN columnSheet la sheet khong dong UC1 nao khai', () => {
+  const errors = validatePermissionScope(baseState({
+    permissionMapping: { usecase1: uc1, usecase2: { ...uc2, columnSheet: 'Common' } },
+  }));
+  assert.ok(!errors.some((e) => e.includes('sheet endpoints tham chiếu')));
+});
+
+test('validatePermissionScope bao loi khi hai dong UC1 cung auth khai cot ROLE khac nhau', () => {
+  const moHo = [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+    { endpointSheet: 'Sheet 2', permissionColumn: 'Sheet 1 - Admin', authProfileName: 'User Profile' },
+  ];
+  const errors = validatePermissionScope(baseState({
+    permissionMapping: { usecase1: moHo, usecase2: uc2 },
+  }));
+  assert.ok(errors.some((e) => e.includes('khai hai cột ROLE khác nhau')));
+});
+
+test('validatePermissionScope chi bao mot lan cho moi auth du co ba dong tro len', () => {
+  const moHo = [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+    { endpointSheet: 'Sheet 2', permissionColumn: 'Sheet 1 - Admin', authProfileName: 'User Profile' },
+    { endpointSheet: 'Sheet 2', permissionColumn: 'Sheet 2 - Cskh', authProfileName: 'User Profile' },
+  ];
+  const errors = validatePermissionScope(baseState({
+    permissionMapping: { usecase1: moHo, usecase2: uc2 },
+  }));
+  assert.equal(errors.filter((e) => e.includes('khai hai cột ROLE khác nhau')).length, 1);
+});
+
+test('validatePermissionScope khong bao loi khi hai dong UC1 cung auth CUNG cot ROLE', () => {
+  const lap = [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+    { endpointSheet: 'Sheet 2', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+  ];
+  const errors = validatePermissionScope(baseState({
+    permissionMapping: { usecase1: lap, usecase2: uc2 },
+  }));
+  assert.ok(!errors.some((e) => e.includes('khai hai cột ROLE khác nhau')));
+});
+
+test('validatePermissionScope so khop auth bo hoa/thuong va khoang trang thua', () => {
+  const moHo = [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+    { endpointSheet: 'Sheet 2', permissionColumn: 'Sheet 1 - Admin', authProfileName: '  user PROFILE ' },
+  ];
+  const errors = validatePermissionScope(baseState({
+    permissionMapping: { usecase1: moHo, usecase2: uc2 },
+  }));
+  assert.ok(errors.some((e) => e.includes('khai hai cột ROLE khác nhau')));
 });
 
 test('validatePermissionScope khong bao loi khi columnSheet la Sheet 2 nhung cot dich chi co o Sheet 1', () => {

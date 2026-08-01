@@ -27,11 +27,9 @@ export function emptySavedConfig() {
       usecase1: [],
       usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' }
     },
-    // Chi 'methods'. authIds/msisdnPatterns khong vao gate: auths-panel sua
-    // authIds khi xoa profile (bat badge oan), va Huy se xoa mat lua chon auth
-    // cua nguoi dung. matchPermissionEndpoints chi doc methods, con
-    // buildPermissionRunConfig tu dung lai authIds.
-    methods: [],
+    // KHONG co 'methods'. Bo loc method di thang qua state.runFilter nhu RUN ALL
+    // (matchPermissionEndpoints goi filterEndpoints), nen dua no vao gate chi lam
+    // badge "chua luu" bat len trong khi bam Luu khong doi ket qua gi.
     permissionSheet: ''
   };
 }
@@ -146,7 +144,6 @@ export const draftSheet = () => sheetByName(state.permissionFile?.selectedSheet)
 function snapshot() {
   return structuredClone({
     permissionMapping: state.permissionMapping,
-    methods: state.runFilter?.methods ?? [],
     permissionSheet: state.permissionFile?.selectedSheet ?? ''
   });
 }
@@ -160,9 +157,8 @@ export function saveConfig() {
 export function revertConfig() {
   const s = structuredClone(state.savedConfig ?? emptySavedConfig());
   state.permissionMapping = s.permissionMapping;
-  // Gan rieng 'methods' thay vi thay ca runFilter — authIds/msisdnPatterns
-  // khong thuoc gate, Huy khong duoc dung toi.
-  if (state.runFilter) state.runFilter.methods = s.methods;
+  // KHONG dung toi state.runFilter — ca ba truc (methods/authIds/msisdnPatterns)
+  // deu ngoai gate, Huy ma xoa chung la xoa lua chon dang dung cua nguoi dung.
   if (state.permissionFile) state.permissionFile.selectedSheet = s.permissionSheet;
   persist();
   notify();
@@ -179,7 +175,6 @@ export function dirtyParts() {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const out = [];
   if (!same(cur.permissionMapping, sav.permissionMapping)) out.push('mapping UC1/UC2');
-  if (!same(cur.methods, sav.methods)) out.push('filter method');
   if (cur.permissionSheet !== sav.permissionSheet) out.push('sheet phân quyền');
   return out;
 }
@@ -195,7 +190,7 @@ function normalizeSavedConfig(incoming) {
         ...(incoming.permissionMapping?.usecase2 ?? {})
       }
     },
-    methods: incoming.methods ?? [],
+    // 'methods' cua cau hinh cu bi bo qua o day — khong con thuoc gate.
     permissionSheet: incoming.permissionSheet ?? ''
   };
 }

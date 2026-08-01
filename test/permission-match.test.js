@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchPermissionEndpoints, endpointColumns, endpointColumnsOfSheet } from '../public/js/shared/permission-match.js';
+import { matchPermissionEndpoints, joinValueOf, endpointColumnsOfSheet } from '../public/js/shared/permission-match.js';
 
 // pathTemplate mac dinh khac nhau tung endpoint (Math.random) de fixture
 // khong vo tinh dinh khu trung METHOD:pathTemplate khi test chi muon xet
@@ -38,6 +38,12 @@ function state(over = {}) {
 
   return {
     endpoints,
+    // runFilter + selectedSheet la BAN NHAP — pool CHECK PERM doc thang chung,
+    // giong nut RUN ALL. Chi mapping UC1/UC2 va sheet phan quyen qua gate Luu.
+    runFilter,
+    selectedSheet: 'all',
+    commonEndpoints: '',
+    commonEndpointsEnabled: true,
     permissionFile: {
       filename: permissionFile.filename,
       sheets: [{
@@ -47,7 +53,7 @@ function state(over = {}) {
       }],
       selectedSheet: 'Perm',
     },
-    savedConfig: { permissionMapping, methods: runFilter.methods ?? [], permissionSheet: 'Perm' },
+    savedConfig: { permissionMapping, permissionSheet: 'Perm' },
     ...rest,
   };
 }
@@ -57,15 +63,37 @@ function find(matches, id) {
   return matches.find((m) => m.endpoint.id === id);
 }
 
-/* ---------- endpointColumns ---------- */
+/* ---------- joinValueOf ---------- */
 
-test('endpointColumns tra ve union header cua endpoint thuoc sheet UC1, giu thu tu gap lan dau', () => {
-  const cols = endpointColumns([
-    endpoint({ sheetName: 'Sheet 1', raw: { A: '1', B: '2' } }),
-    endpoint({ sheetName: 'Sheet 1', raw: { B: '2', C: '3' } }),
-    endpoint({ sheetName: 'Sheet 2', raw: { D: '4' } }),
-  ], uc1);
-  assert.deepEqual(cols, ['A', 'B', 'C']);
+test('joinValueOf tang 1: tra dung gia tri cua cot da chon', () => {
+  const e = endpoint({ raw: { 'Ten API': 'Tra cuu TB' }, name: 'khac han' });
+  assert.equal(joinValueOf(e, 'Ten API'), 'Tra cuu TB');
+});
+
+test('joinValueOf tang 2: cot lech hoa/thuong hoac thua khoang trang van khop', () => {
+  const e = endpoint({ raw: { '  TEN api ': 'Tra cuu TB' }, name: 'khac han' });
+  assert.equal(joinValueOf(e, 'Ten API'), 'Tra cuu TB');
+});
+
+test('joinValueOf tang 3: sheet khong he co cot do thi tra e.name', () => {
+  const e = endpoint({ raw: { 'Cot Khac': 'gi do' }, name: 'Ten Endpoint' });
+  assert.equal(joinValueOf(e, 'Ten API'), 'Ten Endpoint');
+});
+
+test('joinValueOf KHONG roi xuong tang 3 khi sheet co cot ma o rong', () => {
+  const e = endpoint({ raw: { 'Ten API': '' }, name: 'Ten Endpoint' });
+  assert.equal(joinValueOf(e, 'Ten API'), '');
+});
+
+test('joinValueOf voi endpointColumn rong tra rong, khong roi ve e.name', () => {
+  const e = endpoint({ raw: { 'Ten API': 'x' }, name: 'Ten Endpoint' });
+  assert.equal(joinValueOf(e, ''), '');
+  assert.equal(joinValueOf(e, undefined), '');
+});
+
+test('joinValueOf voi endpoint thieu raw khong nem loi', () => {
+  assert.equal(joinValueOf({ name: 'Ten Endpoint' }, 'Ten API'), 'Ten Endpoint');
+  assert.equal(joinValueOf(undefined, 'Ten API'), '');
 });
 
 /* ---------- endpointColumnsOfSheet ---------- */
@@ -148,18 +176,106 @@ test('chieu include mot phia: ten phan quyen CHUA endpoint thi KHONG khop', () =
   assert.equal(matches[0].permRowIndex, null);
 });
 
-test('doc ban DA LUU, khong doc ban nhap dang sua', () => {
+test('mapping doc ban DA LUU, khong doc ban nhap dang sua', () => {
   const s = state({ endpoints: [endpoint({ id: 'e1', raw: { 'Ten API': 'Tra cuu whitelist' } })] });
   // Ban nhap tro vao cot khong ton tai — neu bi doc nham, ghep se hong.
   s.permissionMapping = {
     usecase1: [],
     usecase2: { permissionColumn: 'Cot Ma', endpointColumn: 'Cot Ma' },
   };
-  s.runFilter = { methods: ['DELETE'] };
 
   const matches = matchPermissionEndpoints(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permRowIndex, 0);
+});
+
+test('bo loc method doc BAN NHAP (state.runFilter), giong nut RUN ALL', () => {
+  const s = state({ endpoints: [endpoint({ id: 'e1', method: 'GET' })] });
+  s.runFilter = { methods: ['DELETE'] };
+  assert.equal(matchPermissionEndpoints(s).length, 0);
+
+  s.runFilter = { methods: ['GET'] };
+  assert.equal(matchPermissionEndpoints(s).length, 1);
+});
+
+test('tab sheet dang chon thu hep pool, tab all lay het', () => {
+  const s = state({
+    endpoints: [
+      endpoint({ id: 'e1', sheetName: 'Sheet 1' }),
+      endpoint({ id: 'e2', sheetName: 'Sheet 2' }),
+    ],
+  });
+  assert.equal(matchPermissionEndpoints(s).length, 2);
+
+  s.selectedSheet = 'Sheet 2';
+  const narrowed = matchPermissionEndpoints(s);
+  assert.equal(narrowed.length, 1);
+  assert.equal(narrowed[0].endpoint.id, 'e2');
+});
+
+test('dong UC1 khai endpointSheet khac KHONG con thu hep pool', () => {
+  const s = state({ endpoints: [endpoint({ id: 'e1', sheetName: 'Sheet 9' })] });
+  s.savedConfig.permissionMapping.usecase1 = [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
+  ];
+  assert.equal(matchPermissionEndpoints(s).length, 1);
+});
+
+test('common endpoints khong lot vao pool du commonEndpointsEnabled bat', () => {
+  const s = state({ endpoints: [endpoint({ id: 'e1' })] });
+  s.commonEndpoints = 'GET /api/common/health';
+  s.commonEndpointsEnabled = true;
+  const matches = matchPermissionEndpoints(s);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].endpoint.id, 'e1');
+});
+
+test('endpoint o sheet dat ten cot khac van ghep duoc qua tang 3 cua joinValueOf', () => {
+  const s = state({
+    endpoints: [
+      endpoint({ id: 'e1', sheetName: 'Sheet 2', raw: { 'API Name': 'gi do' }, name: 'Tra cuu whitelist' }),
+    ],
+  });
+  const matches = matchPermissionEndpoints(s);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].permRowIndex, 0);
+});
+
+test('khu trung giu ban CO khoa ghep khi ban gap truoc de trong o ten', () => {
+  const s = state({
+    endpoints: [
+      endpoint({ id: 'trong', sheetName: 'Sheet 1', pathTemplate: '/api/x', raw: { 'Ten API': '' }, name: '' }),
+      endpoint({ id: 'day', sheetName: 'Sheet 2', pathTemplate: '/api/x', raw: { 'Ten API': 'Tra cuu whitelist' } }),
+    ],
+  });
+  const matches = matchPermissionEndpoints(s);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].endpoint.id, 'day');
+  assert.equal(matches[0].permRowIndex, 0);
+});
+
+test('khu trung giu ban gap dau tien khi ca hai cung ghep duoc', () => {
+  const s = state({
+    endpoints: [
+      endpoint({ id: 'truoc', pathTemplate: '/api/x', raw: { 'Ten API': 'Tra cuu whitelist' } }),
+      endpoint({ id: 'sau', pathTemplate: '/api/x', raw: { 'Ten API': 'Tra cuu whitelist' } }),
+    ],
+  });
+  const matches = matchPermissionEndpoints(s);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].endpoint.id, 'truoc');
+});
+
+test('khu trung giu ban gap dau tien khi ca hai cung khong ghep duoc', () => {
+  const s = state({
+    endpoints: [
+      endpoint({ id: 'truoc', pathTemplate: '/api/x', raw: { 'Ten API': '' }, name: '' }),
+      endpoint({ id: 'sau', pathTemplate: '/api/x', raw: { 'Ten API': '' }, name: '' }),
+    ],
+  });
+  const matches = matchPermissionEndpoints(s);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].endpoint.id, 'truoc');
 });
 
 test('sheet da luu bien mat khoi file: endpoint van tra ve het, permRowIndex null', () => {

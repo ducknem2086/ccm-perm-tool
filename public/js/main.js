@@ -63,6 +63,9 @@ let stream = null;
 // Run rieng cua CHECK PERM, doc lap hoan toan voi RUN ALL.
 let permRunning = false;
 let permStream = null;
+// Chot lai luc dung config, khong doc lai tu permResults: statusPermission
+// 'empty' con phat sinh khi request loi mang, dem no la tron hai nguyen nhan.
+let permUnmatched = 0;
 
 const tabs = initTabs();
 const connectionPanel = initConnectionPanel();
@@ -222,8 +225,12 @@ function refreshCheckPermButton() {
     return;
   }
 
-  const { total } = buildPermissionRunConfig(state);
-  btnCheckPerm.title = '';
+  const { total, unmatched, endpointCount } = buildPermissionRunConfig(state);
+  // Endpoint khong ghep duoc dong phan quyen nao van chay nhung cham 'empty' —
+  // con so nay noi truoc, khong de nguoi dung tu dem trong bang ket qua.
+  btnCheckPerm.title = unmatched > 0
+    ? `⚠ ${unmatched}/${endpointCount} endpoint không khớp dòng phân quyền nào — vẫn chạy nhưng chấm 'empty'`
+    : '';
   btnCheckPerm.textContent = `🔐 CHECK PERM (${total})`;
   btnCheckPerm.disabled = total === 0 || permRunning;
 }
@@ -340,7 +347,8 @@ btnCheckPerm.addEventListener('click', async () => {
   }
 
   try {
-    const { config, total } = buildPermissionRunConfig(state);
+    const { config, total, unmatched } = buildPermissionRunConfig(state);
+    permUnmatched = unmatched;
 
     permStream?.close();
     permSeenIndexes.clear();
@@ -369,7 +377,8 @@ btnCheckPerm.addEventListener('click', async () => {
         permRunning = false;
         btnPermCancel.disabled = true;
         refreshCheckPermButton();
-        permStatsEl.textContent = `⏱ ${(summary.elapsedMs / 1000).toFixed(1)}s · ✓ ${summary.ok} · ✕ ${summary.failed}`;
+        permStatsEl.textContent = `⏱ ${(summary.elapsedMs / 1000).toFixed(1)}s · ✓ ${summary.ok} · ✕ ${summary.failed}`
+          + (permUnmatched > 0 ? ` · ⚠ ${permUnmatched} không khớp phân quyền` : '');
         window.ccmToast(
           summary.status === 'cancelled'
             ? `Đã dừng sau ${summary.done}/${summary.total} request`

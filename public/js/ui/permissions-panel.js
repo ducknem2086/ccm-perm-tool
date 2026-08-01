@@ -1,11 +1,11 @@
 import {
   state, persist, notify, subscribe,
-  draftSheet, saveConfig, revertConfig, isConfigDirty, dirtyParts,
+  draftSheet, saveConfig, isConfigDirty, dirtyParts, emptySavedConfig, defaultConfig,
 } from '../state.js';
 import { importGrid } from '../api.js';
 import { getUniqueSheets } from './endpoint-list.js';
 import { endpointColumnsOfSheet } from '../shared/permission-match.js';
-import { uc1Sheets, validatePermissionScope } from '../shared/permission-scope.js';
+import { validatePermissionScope } from '../shared/permission-scope.js';
 
 // Panel nay LA giao dien sua ban nhap, nen la cho duy nhat co quyen doc sheet
 // nhap. Moi noi khac (bang raw, CHECK PERM, RUN ALL) doc savedSheet().
@@ -44,7 +44,7 @@ export function initPermissionsPanel() {
   const usecase1Table = document.getElementById('permissions-usecase1-table');
   const btnAddMapping = document.getElementById('btn-permissions-add-usecase1');
   const btnSave = document.getElementById('btn-permissions-save');
-  const btnRevert = document.getElementById('btn-permissions-revert');
+  const btnDelete = document.getElementById('btn-permissions-delete');
   const dirtyBadge = document.getElementById('perm-dirty-badge');
   const saveErrors = document.getElementById('perm-save-errors');
 
@@ -136,15 +136,32 @@ export function initPermissionsPanel() {
     window.ccmToast?.('Đã lưu cấu hình phân quyền', errors.length > 0 ? 'error' : 'ok');
   });
 
-  btnRevert?.addEventListener('click', () => {
-    revertConfig();
+  // Xoa file phan quyen = go ca ban nhap LAN ban da luu. Chi xoa permissionFile
+  // thi mapping cu con tro vao cot cua file da bien mat, va savedConfig van bat
+  // CHECK PERM cham diem tren sheet khong con ton tai.
+  btnDelete?.addEventListener('click', () => {
+    const base = defaultConfig();
+    state.permissionFile = base.permissionFile;
+    state.permissionMapping = base.permissionMapping;
+    state.savedConfig = { ...state.savedConfig, ...emptySavedConfig() };
+    persist();
+    notify();
     if (saveErrors) saveErrors.hidden = true;
+    window.ccmToast?.('Đã xoá file phân quyền — import lại để nạp dữ liệu mới', 'ok');
   });
+
+  // Danh dau select cot ROLE khi no tro dung cot da dung lam khoa ghep UC2.
+  function markRoleColumnClash(selectEl, value) {
+    const clash = Boolean(value) && value === state.permissionMapping.usecase2.permissionColumn;
+    selectEl.classList.toggle('input-invalid', clash);
+    selectEl.title = clash
+      ? 'Cột này đang là khoá ghép của UC2 — chọn đúng cột ROLE (ô đánh "x") thay vì cột tên.'
+      : '';
+  }
 
   function renderDirty() {
     const dirty = isConfigDirty();
     if (btnSave) btnSave.disabled = !dirty;
-    if (btnRevert) btnRevert.disabled = !dirty;
     if (dirtyBadge) {
       dirtyBadge.hidden = !dirty;
       dirtyBadge.textContent = dirty ? `⚠ Chưa lưu: ${dirtyParts().join(', ')}` : '';
@@ -156,6 +173,7 @@ export function initPermissionsPanel() {
     fileInfo.textContent = hasFile ? state.permissionFile.filename : 'chưa nạp file';
     mappingArea.hidden = !hasFile;
     if (wrapFileSheet) wrapFileSheet.hidden = !hasFile;
+    if (btnDelete) btnDelete.hidden = !hasFile;
 
     if (!hasFile) {
       renderDirty();
@@ -180,9 +198,23 @@ export function initPermissionsPanel() {
       selNameCol, draftHeaders(), state.permissionMapping.usecase2.permissionColumn,
     );
 
-    // Populate sheet endpoints tham chieu (UC2) — chi de lay danh sach cot,
-    // khong phai pham vi quet CHECK PERM (do la cot Sheet cua UC1).
-    const uc1SheetList = [...uc1Sheets(state.permissionMapping.usecase1)];
+    // Populate sheet endpoints tham chieu (UC2) — chi de lay danh sach cot.
+    // MOI sheet co endpoint, khong loc theo UC1 nua: pham vi quet CHECK PERM gio
+    // la danh sach cua RUN ALL, khong con do uc1[].endpointSheet quyet dinh.
+    const uc1SheetList = getUniqueSheets(state.endpoints);
+
+    // Sheet dang tro toi tren man hinh. Khac gia tri trong state o dung mot ca:
+    // chua cau hinh lan nao ('') thi CHI hien thi sheet dau, khong ghi vao state
+    // — ghi vao la panel tu bat dirty badge ngay khi mo, nguoi dung chua dong gi.
+    // Giong cach hai select cot xu ly gia tri rong; validate van chan bang loi
+    // "Chưa chọn sheet endpoints tham chiếu" cho toi khi nguoi dung bam chon.
+    const savedSheetName = state.permissionMapping.usecase2.columnSheet;
+    if (savedSheetName && !uc1SheetList.includes(savedSheetName)) {
+      state.permissionMapping.usecase2.columnSheet = uc1SheetList[0] ?? '';
+      persist();
+    }
+    const shownSheet = state.permissionMapping.usecase2.columnSheet || (uc1SheetList[0] ?? '');
+
     if (selEndpointSheet) {
       selEndpointSheet.replaceChildren(...uc1SheetList.map((s) => {
         const opt = document.createElement('option');
@@ -190,18 +222,11 @@ export function initPermissionsPanel() {
         opt.textContent = s;
         return opt;
       }));
-      let columnSheet = state.permissionMapping.usecase2.columnSheet;
-      if (!uc1SheetList.includes(columnSheet)) {
-        columnSheet = uc1SheetList[0] ?? '';
-        state.permissionMapping.usecase2.columnSheet = columnSheet;
-        persist();
-      }
-      selEndpointSheet.value = columnSheet;
+      selEndpointSheet.value = shownSheet;
     }
 
-    // Populate cot dich — chi cot cua sheet dang chon o selEndpointSheet,
-    // khong phai union moi sheet UC1.
-    const sheetCols = endpointColumnsOfSheet(state.endpoints, state.permissionMapping.usecase2.columnSheet);
+    // Populate cot dich — chi cot cua sheet dang hien o selEndpointSheet.
+    const sheetCols = endpointColumnsOfSheet(state.endpoints, shownSheet);
     if (selEndpointCol) {
       renderColumnSelect(selEndpointCol, sheetCols, state.permissionMapping.usecase2.endpointColumn);
     }
@@ -210,16 +235,19 @@ export function initPermissionsPanel() {
     usecase1Table.replaceChildren();
     state.permissionMapping.usecase1.forEach((m, idx) => {
       const row = document.createElement('div');
-      row.style.display = 'flex';
-      row.style.gap = 'var(--sp-xs)';
-      row.style.alignItems = 'center';
+      row.className = 'perm-uc1-row';
 
       const colSel = document.createElement('select');
       colSel.className = 'input input-sm';
       renderColumnSelect(colSel, draftHeaders(), m.permissionColumn);
+      // Cot ROLE trung cot khoa ghep UC2 la loi cau hinh im lang: bang raw khu
+      // trung theo index nen mat luon cot trang thai, con CHECK PERM doc o
+      // chua ten (khac 'x') nen cham moi endpoint thanh 'khong co quyen'.
+      markRoleColumnClash(colSel, m.permissionColumn);
       colSel.addEventListener('change', () => {
         m.permissionColumn = colSel.value;
         persist();
+        markRoleColumnClash(colSel, colSel.value);
         renderDirty();
       });
 
@@ -264,7 +292,7 @@ export function initPermissionsPanel() {
         render();
       });
 
-      row.append(colSel, document.createTextNode('↔'), sheetSel, document.createTextNode('↔'), authSel, delBtn);
+      row.append(colSel, sheetSel, authSel, delBtn);
       usecase1Table.append(row);
     });
 

@@ -29,13 +29,13 @@ function setup(permissionFile = { filename: '', sheets: [], selectedSheet: '' })
   const usecase1Table = new MockElement('div', 'permissions-usecase1-table');
   const btnAddMapping = new MockElement('button', 'btn-permissions-add-usecase1');
   const btnSave = new MockElement('button', 'btn-permissions-save');
-  const btnRevert = new MockElement('button', 'btn-permissions-revert');
+  const btnDelete = new MockElement('button', 'btn-permissions-delete');
   const dirtyBadge = new MockElement('span', 'perm-dirty-badge');
   const saveErrors = new MockElement('p', 'perm-save-errors');
 
   installMockDocument({
     'btn-permissions-save': btnSave,
-    'btn-permissions-revert': btnRevert,
+    'btn-permissions-delete': btnDelete,
     'perm-dirty-badge': dirtyBadge,
     'perm-save-errors': saveErrors,
     'btn-import-permissions': btnImport,
@@ -71,7 +71,7 @@ function setup(permissionFile = { filename: '', sheets: [], selectedSheet: '' })
   return {
     btnImport, fileInfo, mappingArea, selFileSheet, selNameCol,
     selEndpointSheet, selEndpointCol, usecase1Table, btnAddMapping,
-    btnSave, btnRevert, dirtyBadge, saveErrors,
+    btnSave, btnDelete, dirtyBadge, saveErrors,
   };
 }
 
@@ -154,12 +154,31 @@ test('thay doi sheet file phan quyen cap nhat headers, rows va dropdowns', () =>
   assert.equal(selNameCol.children[0].value, 'HeaderB1');
 });
 
-test('UC1 rong: sheet tham chieu va cot dich deu rong', () => {
+// Pham vi quet CHECK PERM khong con do UC1 quyet dinh, nen picker sheet tham
+// chieu liet ke MOI sheet co endpoint — UC1 rong khong lam no rong theo.
+test('UC1 rong: sheet tham chieu van liet ke moi sheet co endpoint', () => {
   const { selEndpointSheet, selEndpointCol } = setup({
     filename: 'permissions.xlsx', headers: ['API Name'], rows: [],
   });
-  assert.equal(selEndpointSheet.children.length, 0);
+  assert.deepEqual(selEndpointSheet.children.map((o) => o.value), ['SheetA', 'SheetB']);
+  // Endpoint cua fixture khong co raw nen khong sinh cot nao.
   assert.equal(selEndpointCol.children.length, 0);
+});
+
+test('sheet tham chieu liet ke ca sheet khong dong UC1 nao khai', () => {
+  const { selEndpointSheet } = setup({
+    filename: 'permissions.xlsx', headers: ['API Name'], rows: [],
+  });
+  state.endpoints = [
+    { sheetName: 'Sheet 1', raw: { A: '1' } },
+    { sheetName: 'Sheet 2', raw: { B: '2' } },
+  ];
+  state.permissionMapping.usecase1 = [
+    { endpointSheet: 'Sheet 1', permissionColumn: 'API Name', authProfileName: 'X' },
+  ];
+  notify();
+
+  assert.deepEqual(selEndpointSheet.children.map((o) => o.value), ['Sheet 1', 'Sheet 2']);
 });
 
 test('UC1 khai 2 sheet: sheet tham chieu mac dinh la sheet UC1 dau tien, cot lay tu sheet do', () => {
@@ -237,7 +256,7 @@ test('cot Sheet cua dong UC1 khong bi disabled', () => {
   assert.equal(sheetSel.value, 'Sheet 1');
 });
 
-test('columnSheet tro sheet da bi xoa khoi UC1: render tu dong ve sheet UC1 dau tien', () => {
+test('columnSheet tro sheet khong dong UC1 nao khai: GIU NGUYEN, khong reset', () => {
   const { selEndpointSheet } = setup({
     filename: 'permissions.xlsx', headers: ['API Name'], rows: [],
   });
@@ -249,6 +268,21 @@ test('columnSheet tro sheet da bi xoa khoi UC1: render tu dong ve sheet UC1 dau 
     { endpointSheet: 'Sheet 1', permissionColumn: 'API Name', authProfileName: 'X' },
   ];
   state.permissionMapping.usecase2.columnSheet = 'Sheet 2';
+  notify();
+
+  assert.equal(state.permissionMapping.usecase2.columnSheet, 'Sheet 2');
+  assert.equal(selEndpointSheet.value, 'Sheet 2');
+});
+
+test('columnSheet tro sheet da bien mat khoi file endpoints: render ve sheet dau tien', () => {
+  const { selEndpointSheet } = setup({
+    filename: 'permissions.xlsx', headers: ['API Name'], rows: [],
+  });
+  state.endpoints = [
+    { sheetName: 'Sheet 1', raw: { A: '1' } },
+    { sheetName: 'Sheet 2', raw: { B: '2' } },
+  ];
+  state.permissionMapping.usecase2.columnSheet = 'Sheet Da Bi Xoa';
   notify();
 
   assert.equal(state.permissionMapping.usecase2.columnSheet, 'Sheet 1');
@@ -330,23 +364,29 @@ test('doi cot quyen UC1 tren select ghi thang vao state', () => {
   assert.equal(state.permissionMapping.usecase1[0].permissionColumn, 'Truong ca');
 });
 
-/* ---------- gate Luu / Huy ---------- */
+/* ---------- gate Luu / Xoa ---------- */
 
-test('nut Luu va Huy tat khi cau hinh sach, bat khi ban nhap lech', () => {
-  const { selNameCol, btnSave, btnRevert, dirtyBadge } = setup({
+test('nut Luu tat khi cau hinh sach, bat khi ban nhap lech', () => {
+  const { selNameCol, btnSave, dirtyBadge } = setup({
     filename: 'perm.xlsx', headers: ['Role', 'User'], rows: [],
   });
 
   assert.equal(btnSave.disabled, true);
-  assert.equal(btnRevert.disabled, true);
   assert.equal(dirtyBadge.hidden, true);
 
   selNameCol.change('User');
 
   assert.equal(btnSave.disabled, false);
-  assert.equal(btnRevert.disabled, false);
   assert.equal(dirtyBadge.hidden, false);
   assert.ok(dirtyBadge.textContent.includes('mapping UC1/UC2'));
+});
+
+test('nut Xoa chi hien khi da nap file', () => {
+  const { btnDelete } = setup();
+  assert.equal(btnDelete.hidden, true);
+
+  const withFile = setup({ filename: 'perm.xlsx', headers: ['Role'], rows: [] });
+  assert.equal(withFile.btnDelete.hidden, false);
 });
 
 test('bam Luu commit ban nhap sang savedConfig va tat badge', () => {
@@ -376,16 +416,26 @@ test('Luu khong bi chan boi loi validate, loi hien ra o perm-save-errors', () =>
   assert.ok(saveErrors.textContent.includes('Chưa khai mapping UC1'));
 });
 
-test('bam Huy khoi phuc ban nhap ve ban da luu', () => {
-  const { selNameCol, btnRevert, btnSave } = setup({
+test('bam Xoa go ca file, ban nhap va ban da luu', () => {
+  const { selNameCol, btnSave, btnDelete, fileInfo, mappingArea } = setup({
     filename: 'perm.xlsx', headers: ['Role', 'User'], rows: [],
   });
 
   selNameCol.change('User');
-  btnRevert.click();
+  btnSave.click();
+  btnDelete.click();
 
+  assert.equal(state.permissionFile.filename, '');
+  assert.deepEqual(state.permissionFile.sheets, []);
   assert.equal(state.permissionMapping.usecase2.permissionColumn, '');
-  assert.equal(btnSave.disabled, true);
+  assert.deepEqual(state.permissionMapping.usecase1, []);
+  // savedConfig phai sach theo, khong thi CHECK PERM van cham diem tren cot cua
+  // file vua bi xoa.
+  assert.equal(state.savedConfig.permissionMapping.usecase2.permissionColumn, '');
+  assert.equal(state.savedConfig.permissionSheet, '');
+  assert.equal(fileInfo.textContent, 'chưa nạp file');
+  assert.equal(mappingArea.hidden, true);
+  assert.equal(btnDelete.hidden, true);
 });
 
 test('doi sheet lam doi NGAY danh sach cot trong panel, badge bao sheet phan quyen', () => {
