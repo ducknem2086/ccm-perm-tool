@@ -64,10 +64,12 @@ người dùng khai một dòng UC1 cho mỗi auth profile là đủ, không ph�
 const filtered = filterEndpoints(
   state?.endpoints, state?.runFilter, state?.selectedSheet, '', false,
 );
-const unique = dedupeEndpoints(filtered).unique;
+const unique = dedupePreferJoinable(filtered, uc2.endpointColumn);
 ```
 
 Import `filterEndpoints` từ `./run-filter.js`. Bỏ import `uc1Sheets`, bỏ biến `uc1` và `wantedMethods`.
+`dedupePreferJoinable` và `joinValueOf` định nghĩa ở mục "Giữ độ tin của chấm điểm khi pool rộng".
+`uc2.endpointColumn` phải đọc **trước** chỗ này (hiện đang ở dòng 84) vì khử trùng cần nó.
 
 Khử trùng vẫn dùng `dedupeEndpoints` sẵn có — khoá `METHOD:pathTemplate` (`endpoint-dedupe.js:8-10`),
 đúng "trùng endpoint url và method". Vẫn phải chạy **trước** bước ghép dòng UC2: ghép trước rồi khử
@@ -166,6 +168,143 @@ Giữ nguyên hint cảnh báo `perm-uc1-warn` về cột ROLE. Không thêm CSS
 - Đứng ở tab một sheet cụ thể thì CHECK PERM hẹp lại theo. Đây là hành vi được chọn có chủ đích, hint
   ở `index.html` nói rõ.
 - Không đụng `src/server/`. Nhánh chấm quyền của RUN ALL giữ nguyên ngữ nghĩa khoá theo `endpointSheet`.
+- Tầng 3 của `joinValueOf` đổi kết quả **cả với pool hẹp**: endpoint ở sheet không có cột khoá ghép
+  trước đây chấm `'empty'`, nay ghép theo `e.name` và có thể ra `'true'`/`'false'`. Đó là ý đồ —
+  nhưng nghĩa là lần chạy đầu sau thay đổi này có thể khác lần chạy trước trên cùng file. Số
+  `unmatched` (mục D) là chỗ đối chiếu: nó phải giảm, không được tăng.
+
+## Giữ độ tin của chấm điểm khi pool rộng
+
+Công thức chấm điểm **không đổi**: `evaluateUc2Permission` (`src/server/http-client.js:58-77`) đọc
+`req.permRowIndex` (dòng UC2 client ghép sẵn) và `req.authName` → dòng UC1 → `permissionColumn`. Nó
+không đọc `endpointSheet` bao giờ. Với workflow "N dòng cùng cột ROLE, cùng auth" mà thay đổi này
+xoá bỏ, kết quả pool rộng **y hệt** khai đủ N sheet — `uc1.find` lấy dòng đầu theo auth, mọi dòng đều
+cùng `permissionColumn`.
+
+Ba chỗ mong manh sẵn có bị pool rộng khuếch đại, xử lý dưới đây.
+
+### A. Khoá ghép resolve nhiều tầng
+
+`uc2.endpointColumn` là **một** tên cột, chọn từ **một** sheet (`uc2.columnSheet`). Pool rộng trải
+nhiều sheet, mà các sheet đặt tên cột khác nhau — đó là lý do `endpointColumnsOfSheet` tồn tại
+(`permission-match.js:20-22`). Endpoint ở sheet thiếu cột đó có `e.raw?.[endpointColumn]` rỗng, bị
+`filter((it) => it.hay !== '')` (dòng 90) loại khỏi pool ghép → `permRowIndex: null` → chạy mà chấm
+`'empty'`, không báo gì.
+
+Thêm vào `permission-match.js`:
+
+```js
+// Gia tri khoa ghep cua mot endpoint. Ba tang, KHONG phai ba lan doan:
+//   1. dung ten cot da chon
+//   2. cot cung ten sau normalize — lech hoa/thuong hoac khoang trang thua
+//   3. e.name, CHI khi sheet do khong he co cot nay
+// O rong trong sheet CO cot thi tra rong, khong roi xuong tang 3: do la du lieu
+// thieu, doan bang ten endpoint se ghep nham vao dong khac (thuat toan include
+// bot tu dau tu khoa nen rat long).
+export function joinValueOf(endpoint, endpointColumn) {
+  const raw = endpoint?.raw ?? {};
+  const want = normalizeName(endpointColumn);
+  if (want === '') return '';
+
+  const hit = Object.entries(raw).find(([k]) => normalizeName(k) === want);
+  if (hit) return String(hit[1] ?? '');
+
+  return String(endpoint?.name ?? '');
+}
+```
+
+Tầng 3 dùng `e.name` — đúng khoá mà nhánh RUN ALL vẫn dùng (`matchPermissionRow` đọc
+`req.endpointName`), nên hai đường không lệch nguồn.
+
+`matchPermissionEndpoints` dựng pool bằng `hay: normalizeName(joinValueOf(e, endpointColumn))` thay
+cho `normalizeName(e.raw?.[endpointColumn])`.
+
+### B. Khử trùng ưu tiên bản ghép được
+
+`dedupeEndpoints` giữ bản **gặp đầu tiên** (`endpoint-dedupe.js:12-17`). API có mặt ở Sheet 1 và
+Sheet 2, bản Sheet 1 để trống ô tên → bản đó sống sót và không ghép được, còn bản Sheet 2 ghép được
+thì bị vứt. Kết quả phụ thuộc thứ tự mảng.
+
+Thay bằng một lượt khử trùng riêng của CHECK PERM, trong `permission-match.js`:
+
+```js
+// Cung khoa METHOD:pathTemplate nhu dedupeEndpoints, nhung khi hai ban dung do
+// thi giu ban CO khoa ghep. Map giu thu tu chen nen ban gap dau tien van thang
+// khi ca hai cung ghep duoc (hoac cung khong).
+function dedupePreferJoinable(endpoints, endpointColumn) {
+  const best = new Map();
+  for (const e of endpoints) {
+    const method = String(e.method ?? 'GET').toUpperCase();
+    const path = String(e.pathTemplate ?? e.endpoint ?? '').trim();
+    const key = `${method}:${path}`;
+    const cur = best.get(key);
+    if (!cur) { best.set(key, e); continue; }
+    const curHas = normalizeName(joinValueOf(cur, endpointColumn)) !== '';
+    const newHas = normalizeName(joinValueOf(e, endpointColumn)) !== '';
+    if (!curHas && newHas) best.set(key, e);
+  }
+  return [...best.values()];
+}
+```
+
+`matchPermissionEndpoints` gọi hàm này thay cho `dedupeEndpoints(filtered).unique`.
+`dedupeEndpoints` **giữ nguyên** — RUN ALL và import vẫn dùng.
+
+### C. Validate chặn nhập nhằng dòng UC1
+
+`evaluateUc2Permission` lấy dòng UC1 **đầu tiên** khớp auth. Hai dòng cùng auth khác `permissionColumn`
+thì dòng sau bị lờ im lặng. Thêm vào `validatePermissionScope`, sau vòng lặp kiểm từng dòng:
+
+```js
+// Cham diem lay dong UC1 DAU TIEN khop auth (http-client.js:67). Hai dong cung
+// auth khac cot ROLE la cau hinh mo ho — dong thu hai khong bao gio duoc doc.
+const roleByAuth = new Map();
+const reported = new Set();
+for (const m of uc1) {
+  const key = normalizeName(m.authProfileName);
+  if (!key) continue;
+  if (!roleByAuth.has(key)) { roleByAuth.set(key, m.permissionColumn); continue; }
+  const first = roleByAuth.get(key);
+  if (first !== m.permissionColumn && !reported.has(key)) {
+    reported.add(key);
+    errors.push(
+      `UC1: auth "${m.authProfileName}" khai hai cột ROLE khác nhau ("${first}" và `
+      + `"${m.permissionColumn}") — chấm điểm chỉ dùng cột đầu tiên`,
+    );
+  }
+}
+```
+
+### D. Phơi số endpoint không ghép được
+
+`'empty'` hiện chỉ nằm rải trong bảng kết quả (`permission-table.js:20`) — không ai đếm. Đưa con số
+ra trước và sau khi chạy.
+
+`buildPermissionRunConfig` (`permission-scope.js:177-197`) trả thêm một khoá:
+
+```js
+const unmatched = endpoints.filter((e) => e.permRowIndex == null).length;
+return { config, endpointCount: endpoints.length, authCount: auths.length, total, unmatched };
+```
+
+`public/js/main.js`:
+
+- `refreshCheckPermButton` (dòng 217-229) lấy thêm `unmatched`, `endpointCount` và đặt tooltip:
+  ```js
+  btnCheckPerm.title = unmatched > 0
+    ? `⚠ ${unmatched}/${endpointCount} endpoint không khớp dòng phân quyền nào — vẫn chạy nhưng chấm 'empty'`
+    : '';
+  ```
+- Lúc bắt đầu CHECK PERM (dòng 343) giữ `unmatched` vào biến module-level, `onDone` (dòng 372) nối
+  vào `permStatsEl` khi lớn hơn 0:
+  ```js
+  permStatsEl.textContent = `⏱ ${(summary.elapsedMs / 1000).toFixed(1)}s · ✓ ${summary.ok} · ✕ ${summary.failed}`
+    + (permUnmatched > 0 ? ` · ⚠ ${permUnmatched} không khớp phân quyền` : '');
+  ```
+
+Đếm từ `permRowIndex` lúc dựng config, không đếm `statusPermission === 'empty'` trong kết quả —
+`'empty'` còn phát sinh khi request lỗi mạng (`status === null`), trộn hai nguyên nhân vào một con số
+thì nó hết chỉ được chỗ nào cần sửa.
 
 ## Test
 
@@ -189,6 +328,25 @@ Giữ nguyên hint cảnh báo `perm-uc1-warn` về cột ROLE. Không thêm CSS
 
 `test/request-count.test.js` (hoặc test mới cạnh nó)
 13. Pool của CHECK PERM = pool RUN ALL trừ common endpoint, sau khử trùng — kiểm trực tiếp bằng một state có sheet trùng endpoint.
+
+Cơ chế A/B/C/D — `test/permission-match.test.js` và `test/permission-scope.test.js`:
+
+17. `joinValueOf` tầng 1: trả đúng giá trị của `endpointColumn`.
+18. `joinValueOf` tầng 2: cột lệch hoa/thường hoặc thừa khoảng trắng vẫn khớp.
+19. `joinValueOf` tầng 3: sheet **không có** cột đó → trả `e.name`.
+20. `joinValueOf` **không** rơi xuống tầng 3 khi sheet có cột mà ô rỗng → trả `''`.
+21. `joinValueOf` với `endpointColumn` rỗng → `''`, không rơi về `e.name`.
+22. `matchPermissionEndpoints`: endpoint ở sheet đặt tên cột khác vẫn ghép được dòng UC2 qua tầng 3.
+23. `dedupePreferJoinable` giữ bản có khoá ghép khi bản gặp trước để trống ô tên.
+24. `dedupePreferJoinable` giữ bản gặp đầu tiên khi cả hai cùng ghép được — thứ tự ổn định.
+25. `dedupePreferJoinable` giữ bản gặp đầu tiên khi cả hai cùng không ghép được.
+26. `dedupeEndpoints` không đổi hành vi (test cũ xanh nguyên) — RUN ALL và import vẫn dùng.
+27. `validatePermissionScope` báo lỗi khi hai dòng UC1 cùng auth khác `permissionColumn`.
+28. Lỗi đó chỉ xuất hiện **một lần** cho mỗi auth dù có ba dòng trở lên.
+29. Hai dòng UC1 cùng auth **cùng** `permissionColumn` → không lỗi (đúng workflow đang chạy hôm nay).
+30. So khớp auth bỏ hoa/thường và khoảng trắng thừa, giống `evaluateUc2Permission`.
+31. `buildPermissionRunConfig` trả `unmatched` = số endpoint có `permRowIndex == null`.
+32. `unmatched === 0` khi mọi endpoint đều ghép được.
 
 Gate Lưu — file test đang phủ `isConfigDirty`/`dirtyParts`:
 14. Đổi `runFilter.methods` **không** còn bật badge chưa lưu.
