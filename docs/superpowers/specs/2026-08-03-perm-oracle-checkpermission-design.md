@@ -21,9 +21,44 @@ Nghĩa là **mọi** 403 đều được đọc là "bị chặn vì không có 
 
 Không có nguồn thứ hai nào để bác bỏ, nên bốn nguyên nhân trên đều được chấm là "đúng phân quyền".
 
-Quan sát thực tế đã xác nhận: hai function trong `files/data_test/curl1.txt` và `curl2.txt`
-(`/ccm-troubleTicket-feedbackTicket`, `/ccm-troubleTicket-assignmentTicket`) được tool chấm 403 trong
-khi endpoint thật trả 404.
+### Đã xác minh trên dữ liệu thật
+
+Đọc `localStorage['ccm-tool-config']` của tool đang chạy (1105 endpoint, file
+`Đối tượng sử dụng CCOS (3).xlsx`) qua Claude in Chrome:
+
+`importTemplate` map cột `API Mapping` → `target: 'endpoint'` → `pathTemplate`. Nhưng cột đó chứa
+**hai loại giá trị khác hẳn nhau**, và cột `BE Category` tách chúng sạch tuyệt đối — không lẫn một
+dòng nào:
+
+| `BE Category` | Số dòng | `API Mapping` là gì |
+|---|---|---|
+| CCM, FSM, Widget, Inbound, GQKN, Bổ trợ | **710** | BE path thật — `/troubleTicket`, `/troubleTicketSpecification/{*}` |
+| Phân quyền button | 33 | function code FE — `/ccm-inbound-createTicket` |
+| Phần quyền widget *(sai chính tả trong file)* | 91 | function code FE |
+| Phân quyền widget | 271 | function code FE |
+
+**395/1105 dòng (36%) không phải API.** Chúng là phân quyền nút/widget trên FE:
+
+```json
+{ "Name": "Nút Tạo phiếu inbound CCM", "BE Category": "Phân quyền button",
+  "API Mapping": "/ccm-inbound-createTicket", "Method": "GET" }
+```
+
+Tool đang dựng chúng thành `GET https://domain/ccm-inbound-createTicket` — URL không tồn tại. Gateway
+trả 403, `evaluateUc2Permission` đọc thành "không có quyền" và chấm `'true'`. Đây là nguồn của 36%
+kết quả rác, và là lý do hai curl mẫu bị chấm 403 trong khi thực tế 404.
+
+Dòng ứng với hai curl mẫu:
+
+```
+ĐTV nội bộ     | GET /ccm-troubleTicket-feedbackTicket | Phân quyền button | Nút Thêm mới CCM GQKN
+Nhân viên GQKN | GET /ccm-feedbackTicket               | Phân quyền button | Nút Thêm mới CCM
+Nhân viên GQKN | GET /ccm-assignmentTicket             | Phân quyền button | Nút Phân giao CCM
+```
+
+`curl2.txt` gửi `/ccm-troubleTicket-assignmentTicket`, file chỉ có `/ccm-assignmentTicket`. Đây chính
+là ca "không tìm thấy endpoint khớp với endpoint của curl" — **không phải bộ lọc "all" sai**, mà file
+endpoints ghi function code lệch với giá trị FE thật gửi đi. Tool phải phơi được sự lệch đó.
 
 Hệ thống có sẵn một tín hiệu thứ hai: `POST /iam/engage/checkPermission` của IAM — hỏi thẳng "role
 này có quyền với function này không", không đi qua API nghiệp vụ nên không dính URL sai hay WAF. Body:
@@ -42,9 +77,27 @@ trên màn hình. Vì vậy không suy ra được `user` từ token; mỗi danh
 
 ## Quyết định
 
-CHECK PERM chạy **theo cặp**: mỗi endpoint sinh hai request — một tới `checkPermission` (endpoint
-chung), một tới API nghiệp vụ — rồi in **hai status thô thành hai cột** trên bảng log. Không ghép,
-không dẫn xuất; người đọc tự đối chiếu.
+CHECK PERM chạy **theo cặp trên mọi dòng**: mỗi endpoint sinh hai request — một tới `checkPermission`
+(endpoint chung), một tới API nghiệp vụ — rồi in **hai status thô thành hai cột** trên bảng log.
+Không ghép, không dẫn xuất; người đọc tự đối chiếu.
+
+**Không phân loại dòng, không lọc bớt.** Đã cân nhắc và loại phương án tách luồng theo `BE Category`
+(dòng "Phân quyền *" chỉ gọi oracle, dòng còn lại chỉ gọi API) và phương án loại 395 dòng function
+code khỏi pool. Cả hai bắt tool phán quyết dòng nào là API dựa trên một quy ước đặt tên trong file —
+quy ước đó đã sai một lần (`Phần quyền widget` viết nhầm chính tả) và không có gì bảo đảm nó đúng ở
+file sau. Chạy cả hai trên mọi dòng thì **số liệu tự nói**:
+
+- Dòng function code (`/ccm-*`): oracle trả kết quả thật, request nghiệp vụ trả 403/404 vì URL bịa →
+  hai cột lệch nhau rõ ràng.
+- Dòng BE path (`/troubleTicket`): request nghiệp vụ đúng, oracle trả 404/403 vì function không tồn
+  tại → cũng lệch, theo chiều ngược lại.
+
+Người đọc nhìn hai cột là biết dòng đó thuộc loại nào, không cần tool dán nhãn.
+
+**Hai status nằm trên cùng một record.** Pool đã khử trùng nên mỗi endpoint là một dòng bảng duy
+nhất; cả `Status` lẫn `Status Check Perm` phải ở trên dòng đó, không tách thành hai dòng.
+
+Phần dựng request nghiệp vụ (`buildOne`, `request-builder.js`) **giữ nguyên** — đã chạy đúng.
 
 ### Cặp chạy trong cùng một task
 
@@ -58,9 +111,10 @@ worker task
 ```
 
 Đã cân nhắc và loại: đẩy oracle thành request thứ hai trong cùng hàng đợi rồi ghép lại bằng `pairId`.
-Cách đó buộc phải sửa cách đếm progress ở `runner.js`, sửa SSE, và phải định nghĩa hành vi khi một
-nửa cặp chết. Gộp trong task thì `runner.js`, `worker-pool.js`, luồng SSE và cấu trúc bảng kết quả
-**không đổi dòng nào**.
+Cách đó buộc phải sửa cách đếm progress ở `runner.js`, sửa SSE, phải định nghĩa hành vi khi một nửa
+cặp chết, và — nặng nhất — hai status rơi vào **hai dòng bảng khác nhau**, đúng cái phải tránh. Gộp
+trong task thì hai status nằm sẵn trên một record, còn `runner.js`, `worker-pool.js`, luồng SSE và
+cấu trúc bảng kết quả **không đổi dòng nào**.
 
 `checkPermission` lỗi mạng/timeout → cột `Status Check Perm` hiện `—`; request nghiệp vụ **vẫn chạy**
 và cột `Status` vẫn có số. Một nửa cặp chết không kéo nửa kia theo.
@@ -89,13 +143,14 @@ kiểu lỗi đang phải sửa.
 
 ### Đơn vị chạy = một endpoint, không gộp theo BE API
 
-Hai function FE khác nhau có thể trỏ chung một BE API (`GET /troubleTicket` phục vụ nhiều màn hình).
-Khoá khử trùng hiện tại `METHOD:pathTemplate` (`permission-match.js:47-60`) sẽ **xoá mất một bản**, và
-function của bản bị xoá không còn endpoint nào đại diện — đúng triệu chứng "test không tìm thấy
-endpoint khớp với endpoint của curl".
+Khoá khử trùng hiện tại là `METHOD:pathTemplate` (`permission-match.js:47-60`). Khi UC3 được khai,
+khoá đổi thành `METHOD:pathTemplate:function` — mỗi function là một đơn vị phân quyền riêng nên phải
+có cặp request riêng, không được để hai function cùng trỏ một BE API nuốt nhau.
 
-Khi UC3 được khai, khoá khử trùng đổi thành `METHOD:pathTemplate:function`. Mỗi function là một đơn vị
-phân quyền riêng nên phải có cặp request riêng.
+Với file hiện tại người dùng sẽ chọn `uc3.functionColumn = 'API Mapping'` — đúng cột mà
+`importTemplate` đang dùng làm `endpoint` — nên `function` trùng `pathTemplate` và khoá mới **tương
+đương khoá cũ**, không đổi hành vi. Khoá ba thành phần là để đón trường hợp file sau tách function
+code sang cột riêng, lúc đó nhiều function mới thật sự dùng chung một path.
 
 ## Thay đổi theo file
 
@@ -136,6 +191,9 @@ Mọi chỗ đang truyền `state.commonEndpoints` đổi sang `businessCommonTe
 **UC3 vào mapping.** `permissionMapping` và `emptySavedConfig()` thêm:
 
 ```js
+// actionColumn de rong la hop le: file endpoints thuc te khong co cot action FE
+// ('Action BE' chua mo ta tieng Viet, khong dung duoc). De rong thi giu nguyen
+// gia tri action co san trong body cua curl mau — ca curl1 lan curl2 deu 'Read'.
 usecase3: { columnSheet: '', functionColumn: '', actionColumn: '' }
 ```
 
@@ -237,9 +295,10 @@ return { config: { ...config, oracleTemplate },
    ENDPOINTS CHUNG, hoặc mọi auth profile trong UC1 đều đã dán `permCurlRaw`. Không có cả hai →
    `'UC3 đã khai cột FUNCTION nhưng chưa khai endpoint check permission'`. UC3 trống thì bỏ qua cả
    bốn kiểm tra dưới đây.
-2. `uc3.columnSheet` thuộc tập sheet có endpoint; `uc3.functionColumn`/`uc3.actionColumn` nằm trong
+2. `uc3.columnSheet` thuộc tập sheet có endpoint; `uc3.functionColumn` nằm trong
    `endpointColumnsOfSheet(state.endpoints, uc3.columnSheet)`. Dùng đúng hàm mà panel dựng option,
-   không thì validate qua mà dropdown rỗng.
+   không thì validate qua mà dropdown rỗng. `uc3.actionColumn` để rỗng là hợp lệ; đã chọn thì cũng
+   phải nằm trong danh sách cột đó.
 3. Mỗi `permCurlRaw` đã dán phải `parseCurlRequest` ra được URL — hỏng thì báo kèm tên profile.
 4. Body của template oracle phải parse được JSON và có đường dẫn `permissionSpecification`. Không có
    → `'Body curl checkPermission thiếu permissionSpecification'`.
@@ -268,8 +327,9 @@ return { ...req, oracle };
   Cookie / `BROWSER_HEADERS` — **cùng thứ tự ưu tiên** với `buildOne` để hai request trong cặp mang
   cùng danh tính.
 - Body: `JSON.parse` body của curl, gán
-  `body.permissionSpecification.function = endpoint.oracleFunction` và
-  `.action = endpoint.oracleAction`, rồi `JSON.stringify`. Parse hỏng hoặc thiếu
+  `body.permissionSpecification.function = endpoint.oracleFunction`. `action` chỉ ghi đè khi
+  `endpoint.oracleAction` khác rỗng — không thì **giữ nguyên giá trị của curl mẫu** (`"Read"`), vì
+  file endpoints không có cột action FE. Rồi `JSON.stringify`. Parse hỏng hoặc thiếu
   `permissionSpecification` → trả `{ error: 'ORACLE_BODY_INVALID' }`, không đoán bằng string replace.
 - Không gắn msisdn, không gắn `globalQueryParams`: oracle không nhận tham số nào ngoài body.
 - Trả kèm `permFunction` / `permAction` (đúng giá trị vừa nhét vào body) để `finalize` đưa thẳng ra
@@ -353,15 +413,16 @@ Thêm khối UC3 ngay dưới UC2:
 
 ```html
 <div class="perm-section-head"><span class="label">UC3 — ORACLE CHECK PERMISSION</span></div>
-<p class="hint">Hai cột dưới đây cấp giá trị <code>function</code> và <code>action</code> cho request
-<code>checkPermission</code>. Endpoint bỏ trống cột FUNCTION vẫn chạy bình thường, chỉ để trống cột
-<code>Status Check Perm</code>.</p>
+<p class="hint">Cột FUNCTION cấp giá trị <code>permissionSpecification.function</code> cho request
+<code>checkPermission</code> — với file hiện tại đó là cột <code>API Mapping</code>. Cột ACTION để
+trống thì dùng nguyên <code>action</code> trong curl mẫu. Endpoint trống ô FUNCTION vẫn chạy request
+nghiệp vụ bình thường, chỉ để trống cột <code>Status Check Perm</code>.</p>
 <div class="perm-grid">
   <label class="field"><span class="label">Sheet ENDPOINTS tham chiếu</span>
     <select id="sel-perm-uc3-sheet" class="input input-sm"></select></label>
   <label class="field"><span class="label">Cột FUNCTION</span>
     <select id="sel-perm-uc3-function" class="input input-sm"></select></label>
-  <label class="field"><span class="label">Cột ACTION</span>
+  <label class="field"><span class="label">Cột ACTION (tuỳ chọn)</span>
     <select id="sel-perm-uc3-action" class="input input-sm"></select></label>
 </div>
 ```
@@ -415,26 +476,33 @@ btnCheckPerm.title = warns.length ? `⚠ ${warns.join(' · ')}` : '';
 **Nút "Đối soát cURL"** cạnh nút CHECK PERM. Mở ô dán 1..n curl `checkPermission`, tool tách
 `permissionSpecification.function` + `.action` của từng curl rồi đối chiếu với pool đang chọn:
 
+Kết quả thật với file hiện tại (đã kiểm bằng Claude in Chrome):
+
 ```
-/ccm-troubleTicket-feedbackTicket    Read   ✓ khớp 1 endpoint (GET /troubleTicket/feedback)
+/ccm-troubleTicket-feedbackTicket    Read   ✓ khớp 1 endpoint (ĐTV nội bộ · Nút Thêm mới CCM GQKN)
 /ccm-troubleTicket-assignmentTicket  Read   ✗ KHÔNG endpoint nào khai function này
-Pool hiện tại: 148 endpoint · sheet: Trưởng ca (92), ĐTV đối tác (56)
+                                            gần nhất: /ccm-assignmentTicket (Nhân viên GQKN)
+Pool hiện tại: 1105 endpoint · 6 sheet
 ```
 
-Dòng `✗` là câu trả lời trực tiếp cho "không tìm thấy endpoint khớp với endpoint của curl": function
-đó có thật (curl chạy được) nhưng pool không chứa nó. Dòng "Pool hiện tại" chỉ luôn chỗ hụt — thiếu
-dòng ở cột FUNCTION, hay tab sheet / bộ lọc method đang cắt mất.
+Dòng `✗` là câu trả lời trực tiếp cho "không tìm thấy endpoint khớp với endpoint của curl": FE thật
+gửi `/ccm-troubleTicket-assignmentTicket`, file endpoints ghi `/ccm-assignmentTicket`. **Không phải
+bộ lọc "all" sai — file ghi lệch.** Gợi ý "gần nhất" so bằng cùng thuật toán `hitsForRow` đang dùng
+để ghép UC2 (`permission-match.js:71-80`), không thêm thư viện fuzzy nào.
 
 Đối soát đọc pool qua `matchPermissionEndpoints(state)`, đúng danh sách sắp chạy, không dựng lại một
 định nghĩa phạm vi thứ hai.
 
 ## Hệ quả
 
-- Số request của CHECK PERM tăng gần gấp đôi (`pairs + oracleCalls`). Nhãn nút nói rõ trước khi bấm.
+- Số request của CHECK PERM tăng gần gấp đôi (`pairs + oracleCalls`). Với file hiện tại — 1105
+  endpoint, cột `API Mapping` không ô nào rỗng — nghĩa là gấp đúng đôi. Nhãn nút nói rõ trước khi bấm.
 - **Cột `status_permission` không đổi giá trị** với cùng một bộ dữ liệu — công thức không đụng tới.
-  Endpoint trống cột FUNCTION chỉ mất cột `Status Check Perm` (hiện `—`), không mất gì khác.
-- Endpoint trùng METHOD + URL nhưng khác `function` không còn nuốt nhau. Số cặp có thể **tăng** so với
-  số endpoint trước đây — đó là ý đồ, `collapsed` cho biết còn bao nhiêu bản thật sự trùng.
+  36% kết quả rác (395 dòng `Phân quyền button/widget`) **vẫn còn** trong cột đó; cái mới là cột
+  `Status Check Perm` đặt cạnh để nhìn ra chúng. Sửa cột `status_permission` là việc riêng, cần dữ
+  liệu từ lần chạy đầu tiên có oracle mới quyết được.
+- Endpoint trùng METHOD + URL nhưng khác `function` không còn nuốt nhau. Với file hiện tại
+  (`functionColumn = 'API Mapping'`) khoá mới tương đương khoá cũ nên số dòng không đổi.
 - UC3 để trống → hành vi y hệt trước thay đổi này. Không ép cấu hình lại mới bấm được nút.
 - `test/http-client.test.js` **không đỏ** vì công thức chấm giữ nguyên. Hai file sẽ đỏ:
   `test/permission-match.test.js` (khoá khử trùng đổi) và `test/request-count.test.js` (số request
@@ -444,16 +512,24 @@ dòng ở cột FUNCTION, hay tab sheet / bộ lọc method đang cắt mất.
 
 Không viết test tự động. Verify trực tiếp bằng Claude in Chrome:
 
-1. Mở tool, import file endpoints + file phân quyền, khai UC1/UC2/UC3.
+Tool đang chạy sẵn ở `http://localhost:9000` với file thật đã import (state trong
+`localStorage['ccm-tool-config']`), nên không phải dựng lại dữ liệu.
+
+1. Mở `localhost:9000`, khai UC3: sheet tham chiếu bất kỳ sheet nào có dữ liệu, `Cột FUNCTION` =
+   `API Mapping`, `Cột ACTION` để trống.
 2. Khai một dòng ENDPOINTS CHUNG `kind: 'oracle'`, dán `files/data_test/curl1.txt`.
-3. Bấm **Đối soát cURL** với cả `curl1.txt` và `curl2.txt` — cả hai function phải `✓`. Nếu `✗` thì
-   dừng ở đây, sửa cột FUNCTION trước khi chạy.
-4. Bấm CHECK PERM, đọc Network tab: mỗi endpoint phải thấy đúng hai request, oracle đi trước.
-5. Đọc hai cột `Status` và `Status Check Perm` cạnh nhau ở dòng của hai function trong curl mẫu. Đây
-   là chỗ nhìn ra 403 giả: `Status Check Perm = 200` (IAM cho phép) mà `Status = 403` nghĩa là 403
-   không đến từ phân quyền. Tool không kết luận hộ — chỉ đặt hai con số cạnh nhau.
-6. Mở drawer một dòng lệch, đối chiếu body oracle với `files/data_test/curl1.txt`: `function`,
-   `action`, `user.role` phải trùng curl mẫu, chỉ `function`/`action` đổi theo endpoint.
+3. Bấm **Đối soát cURL** với cả hai curl. Kỳ vọng: `curl1` ✓, `curl2` ✗ kèm gợi ý
+   `/ccm-assignmentTicket` — đúng như đã kiểm bằng Claude in Chrome. `curl1` mà ✗ là công cụ hỏng,
+   không phải dữ liệu.
+4. Bấm CHECK PERM, đọc Network tab: mỗi endpoint đúng hai request, `checkPermission` đi trước.
+5. Lọc bảng lấy một dòng `BE Category = Phân quyền button` (vd `Nút Thêm mới CCM GQKN`). Kỳ vọng:
+   `Status` = 403/404 (URL `/ccm-troubleTicket-feedbackTicket` không phải API) trong khi
+   `Status Check Perm` có kết quả thật từ IAM. Hai con số lệch nhau chính là chỗ nhìn ra 36% kết quả
+   rác đang nằm ở đâu.
+6. Lấy tiếp một dòng `BE Category = Widget` (BE path thật). Kỳ vọng lệch theo chiều ngược lại:
+   `Status` hợp lệ, `Status Check Perm` = 404/403 vì `/troubleTicket` không phải function code.
+7. Mở drawer một dòng, đối chiếu body oracle với `curl1.txt`: `user.role`/`id`/`accountId` giữ nguyên
+   từ curl, chỉ `permissionSpecification.function` đổi theo endpoint, `action` vẫn `"Read"`.
 
 ## Không làm
 
@@ -468,4 +544,9 @@ Không viết test tự động. Verify trực tiếp bằng Claude in Chrome:
   hai lần. Cache đúng cần chia sẻ state giữa các worker thread — đắt hơn cái nó tiết kiệm ở quy mô
   hiện tại.
 - Không decode JWT để suy ra `user.id`/`accountId`. Mỗi profile dán curl riêng, danh tính đi kèm curl.
+- **Không phân loại dòng theo `BE Category`, không lọc bớt 395 dòng function code.** Tool chạy cả hai
+  request trên mọi dòng và để số liệu tự nói. Dán nhãn "dòng này không phải API" dựa trên một quy ước
+  đặt tên trong file là đưa thêm một chỗ đoán vào đúng lúc đang gỡ hậu quả của một chỗ đoán khác.
+- Không sửa file endpoints hộ người dùng (tách cột function, sửa `/ccm-assignmentTicket`). Tool chỉ
+  phơi chỗ lệch qua **Đối soát cURL**; sửa file là quyết định của người sở hữu dữ liệu.
 - Không viết test tự động.
