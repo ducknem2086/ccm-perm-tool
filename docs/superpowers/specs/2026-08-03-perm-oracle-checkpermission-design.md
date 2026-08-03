@@ -25,7 +25,8 @@ Quan sát thực tế đã xác nhận: hai function trong `files/data_test/curl
 (`/ccm-troubleTicket-feedbackTicket`, `/ccm-troubleTicket-assignmentTicket`) được tool chấm 403 trong
 khi endpoint thật trả 404.
 
-Hệ thống có sẵn một nguồn sự thật: `POST /iam/engage/checkPermission` của IAM. Body:
+Hệ thống có sẵn một tín hiệu thứ hai: `POST /iam/engage/checkPermission` của IAM — hỏi thẳng "role
+này có quyền với function này không", không đi qua API nghiệp vụ nên không dính URL sai hay WAF. Body:
 
 ```json
 {"@type":"CheckPermission",
@@ -41,8 +42,9 @@ trên màn hình. Vì vậy không suy ra được `user` từ token; mỗi danh
 
 ## Quyết định
 
-CHECK PERM chạy **theo cặp**: mỗi endpoint sinh hai request — một tới oracle `checkPermission`, một
-tới API nghiệp vụ — rồi chấm hai cột kết luận độc lập.
+CHECK PERM chạy **theo cặp**: mỗi endpoint sinh hai request — một tới `checkPermission` (endpoint
+chung), một tới API nghiệp vụ — rồi in **hai status thô thành hai cột** trên bảng log. Không ghép,
+không dẫn xuất; người đọc tự đối chiếu.
 
 ### Cặp chạy trong cùng một task
 
@@ -50,9 +52,9 @@ Một record vẫn là một dòng bảng, nhưng mang hai response.
 
 ```
 worker task
-  ├─ 1. oracle:    POST /iam/engage/checkPermission  → oracle.status
-  └─ 2. nghiệp vụ: GET  /query/whitelist-.../{msisdn} → response.status
-       ⇒ record { response, oracle, statusPermission, endpointMatch }
+  ├─ 1. checkPermission: POST /iam/engage/checkPermission  → oracle.status
+  └─ 2. nghiệp vụ:       GET  /query/whitelist-.../{msisdn} → response.status
+       ⇒ record { response, oracle }   // hai status, hai cot rieng
 ```
 
 Đã cân nhắc và loại: đẩy oracle thành request thứ hai trong cùng hàng đợi rồi ghép lại bằng `pairId`.
@@ -60,43 +62,30 @@ Cách đó buộc phải sửa cách đếm progress ở `runner.js`, sửa SSE,
 nửa cặp chết. Gộp trong task thì `runner.js`, `worker-pool.js`, luồng SSE và cấu trúc bảng kết quả
 **không đổi dòng nào**.
 
-Oracle lỗi mạng/timeout/404/5xx → không kết luận được → cả hai cột chấm `'empty'`, nhưng request
-nghiệp vụ **vẫn chạy** để có số liệu đối chiếu.
+`checkPermission` lỗi mạng/timeout → cột `Status Check Perm` hiện `—`; request nghiệp vụ **vẫn chạy**
+và cột `Status` vẫn có số. Một nửa cặp chết không kéo nửa kia theo.
 
-### Công thức chấm — hai cột độc lập
+### Hai status thô, không ghép công thức
 
-```js
-// null = khong ket luan duoc (404, 5xx, loi mang, oracle khong goi duoc)
-const allowed  = oracleStatus === 200 ? true : oracleStatus === 403 ? false : null;
-const expected = cellVal === 'x';   // o cot ROLE cua file phan quyen
+Hai status **không liên quan gì nhau** về mặt tính toán. Mỗi cái là một cột riêng trên bảng log,
+người đọc tự đối chiếu.
 
-statusPermission = allowed === null ? 'empty'
-                 : (expected === allowed ? 'true' : 'false');
+| Cột | Nguồn | Ghi chú |
+|---|---|---|
+| `Status` | HTTP status của request nghiệp vụ | đã có hôm nay |
+| `Status Check Perm` | HTTP status **thô** của endpoint chung `checkPermission` | mới; `—` khi không gọi |
 
-endpointMatch    = allowed === null ? 'empty'
-                 : allowed ? (status !== 403 ? 'true' : 'false')
-                           : (status === 403 ? 'true' : 'false');
-```
+Không dẫn xuất cột thứ ba từ hai cột này. Không có biến `allowed`, không có ma trận quy đổi. Tool
+đặt hai con số cạnh nhau; kết luận là việc của người đọc.
 
-| Ô ROLE | oracle | endpoint | `status_permission` | `endpoint_khop` | Đọc là |
-|---|---|---|---|---|---|
-| (rỗng) | 403 | 403 | true | true | đúng hoàn toàn — "cả 2 đều 403" |
-| (rỗng) | 403 | 404 | true | false | quyền đúng, nhưng API không tồn tại / URL sai |
-| (rỗng) | 200 | 403 | false | false | **403 giả** — chính là bug đang gặp |
-| (rỗng) | 200 | 200 | false | true | lọt quyền thật: IAM cho phép trong khi file nói không |
-| x | 200 | 200 | true | true | đúng hoàn toàn |
-| x | 200 | 403 | true | false | có quyền nhưng API chặn oan |
-| x | 403 | 403 | false | true | file phân quyền lệch IAM; API thi hành đúng IAM |
-| x | 403 | 200 | false | false | IAM cấm mà API vẫn cho qua |
+**`status_permission` giữ nguyên** — vẫn chấm theo `status === 403` của request nghiệp vụ đúng như
+`require.md` mô tả. `evaluatePermission` và `evaluateUc2Permission` (`src/server/http-client.js:58-135`)
+**không sửa một dòng nào**. Oracle là cột thông tin đặt cạnh, không phải nguồn chấm điểm mới.
 
-Ngữ nghĩa hai cột:
-
-- **`status_permission`** — file phân quyền có khớp IAM không.
-- **`endpoint_khop`** — API có thi hành đúng phán quyết của IAM không.
-
-Hai câu hỏi khác nhau, không trộn vào một chữ. Đã cân nhắc và loại phương án dồn mọi bất đồng về
-`'false'`: bốn nguyên nhân rất khác nhau (URL sai, IAM lệch file, API chặn oan, API lọt quyền) sẽ
-mất dấu trong cùng một giá trị.
+Đã cân nhắc và loại: dùng oracle làm nguồn chấm thay cho status endpoint, hoặc sinh cột dẫn xuất
+"endpoint có khớp oracle không". Cả hai đều bắt tool phán quyết thay người dùng dựa trên giả định
+"oracle 403 = từ chối" — giả định đó chưa được xác nhận bằng response thật, và đoán sai thì lại đúng
+kiểu lỗi đang phải sửa.
 
 ### Đơn vị chạy = một endpoint, không gộp theo BE API
 
@@ -211,8 +200,8 @@ Trả thêm số bản đã gộp để phơi ra UI: `{ unique, collapsed }`.
   oracleAction:   rawValueOf(e, uc3.actionColumn) }
 ```
 
-Endpoint có `oracleFunction === ''` vẫn chạy request nghiệp vụ, nhưng không sinh request oracle và bị
-chấm `'empty'` cả hai cột.
+Endpoint có `oracleFunction === ''` vẫn chạy request nghiệp vụ và vẫn được chấm `status_permission`
+như thường — chỉ không sinh request `checkPermission`, nên cột `Status Check Perm` hiện `—`.
 
 ### `public/js/shared/permission-scope.js`
 
@@ -318,46 +307,19 @@ cái người dùng chờ.
 `req.oracle.error === 'ORACLE_BODY_INVALID'` → bỏ qua bước gọi, `oracle = null`, record mang
 `errorCode` đó để hiện trong drawer.
 
-**Thay `evaluateUc2Permission`** bằng `evaluatePair`:
+**Chấm điểm không đổi.** `evaluatePermission` (dòng 79-135) và `evaluateUc2Permission` (dòng 58-77)
+giữ nguyên từng dòng — chúng vẫn chỉ đọc `status` của request nghiệp vụ. Oracle không đi vào công
+thức nào; nó chỉ thêm dữ liệu vào record.
+
+**Record** mọc thêm ba khoá, `finalize` nhận thêm tham số `oracle`:
 
 ```js
-function evaluatePair({ req, status, oracleStatus, permissionFile, permissionMapping }) {
-  if (status === null) return { statusPermission: 'empty', endpointMatch: 'empty' };
-
-  const row = (permissionFile?.rows ?? [])[req.permRowIndex];
-  if (!row) return { statusPermission: 'empty', endpointMatch: 'empty' };
-
-  const uc1 = permissionMapping?.usecase1 ?? [];
-  const authClean = String(req.authName ?? '').trim().toLowerCase();
-  const mapping = uc1.find((m) => String(m.authProfileName ?? '').trim().toLowerCase() === authClean);
-  if (!mapping) return { statusPermission: 'empty', endpointMatch: 'empty' };
-
-  const headers = permissionFile?.headers ?? [];
-  const colIdx  = headers.indexOf(mapping.permissionColumn);
-  const expected = colIdx !== -1
-    && String(row[colIdx] ?? '').trim().toLowerCase() === 'x';
-
-  const allowed = oracleStatus === 200 ? true : oracleStatus === 403 ? false : null;
-  if (allowed === null) return { statusPermission: 'empty', endpointMatch: 'empty' };
-
-  return {
-    statusPermission: expected === allowed ? 'true' : 'false',
-    endpointMatch: (allowed ? status !== 403 : status === 403) ? 'true' : 'false',
-  };
-}
-```
-
-`evaluatePermission` (dòng 79-135) — nhánh chấm quyền của RUN ALL — **không đụng**. RUN ALL không có
-oracle nên vẫn chấm theo 403 như cũ; trộn hai ngữ nghĩa vào một hàm thì không nhánh nào đọc được nữa.
-
-**Record** mọc thêm bốn khoá:
-
-```js
+// Status tho cua oracle, dat canh response.status de nguoi doc tu doi chieu.
+// KHONG co cot dan xuat nao tu hai con so nay.
 oracle: oracle && {
-  request: { method, url, headers, body },
+  request: { method: ..., url: ..., headers: ..., body: ... },
   status, statusText, headers, body, bodyText,
 },
-endpointMatch,
 oracleFunction: req.oracle?.permFunction ?? null,
 oracleAction:   req.oracle?.permAction ?? null,
 ```
@@ -392,8 +354,8 @@ Thêm khối UC3 ngay dưới UC2:
 ```html
 <div class="perm-section-head"><span class="label">UC3 — ORACLE CHECK PERMISSION</span></div>
 <p class="hint">Hai cột dưới đây cấp giá trị <code>function</code> và <code>action</code> cho request
-<code>checkPermission</code>. Endpoint bỏ trống cột FUNCTION vẫn chạy nhưng không có oracle nên bị
-chấm <code>empty</code> cả hai cột.</p>
+<code>checkPermission</code>. Endpoint bỏ trống cột FUNCTION vẫn chạy bình thường, chỉ để trống cột
+<code>Status Check Perm</code>.</p>
 <div class="perm-grid">
   <label class="field"><span class="label">Sheet ENDPOINTS tham chiếu</span>
     <select id="sel-perm-uc3-sheet" class="input input-sm"></select></label>
@@ -417,21 +379,25 @@ Cạnh ô hiện một dòng tóm tắt sau khi `parseCurlRequest` chạy: `POST
 
 ### `public/js/ui/permission-table.js`
 
-`COLUMNS` (dòng 6-15) thêm ba cột, đặt ngay sau `perm`:
+`COLUMNS` (dòng 6-15) thêm hai cột. `Status Check Perm` đặt **ngay cạnh** `status` để hai con số nằm
+sát nhau — mắt đối chiếu được mà không phải kéo ngang:
 
 ```js
-{ key: 'oracle',   header: 'Oracle' },        // status cua checkPermission, '—' khi khong goi
-{ key: 'epMatch',  header: 'Endpoint khớp' }, // to xanh/do giong cot perm
-{ key: 'fn',       header: 'Function' },      // gia tri da gui di, de doi chieu voi curl
+{ key: 'status',     header: 'Status' },            // da co
+{ key: 'permStatus', header: 'Status Check Perm' }, // status THO cua oracle, '—' khi khong goi
+{ key: 'perm',       header: 'Status Perm' },       // da co, cong thuc khong doi
+...
+{ key: 'fn',         header: 'Function' },          // gia tri da gui di, de doi chieu voi curl
 ```
 
-`buildRow` áp `status-up`/`status-down` cho `epMatch` theo đúng cách đang làm với `perm` (dòng 71-74).
+`permStatus` tô màu theo đúng quy tắc `status` đang dùng (`< 400` → `status-up`, còn lại
+`status-down`, dòng 75-78) — cùng bảng màu thì lệch nhau nhìn ra ngay. Không có cột dẫn xuất nào.
 
 ### `public/js/ui/detail-drawer.js`
 
 Tách hai khối khi record có `oracle`: **REQUEST ORACLE** trước, **REQUEST NGHIỆP VỤ** sau, mỗi khối đủ
-method + url + headers + body + response. Đây là chỗ soi khi `Endpoint khớp = false` — phải thấy được
-IAM trả gì và API trả gì cạnh nhau.
+method + url + headers + body + response. Đây là chỗ soi khi hai cột status lệch nhau — phải thấy được
+IAM trả gì và API trả gì cạnh nhau, kèm body đầy đủ.
 
 ### `public/js/main.js`
 
@@ -465,15 +431,14 @@ dòng ở cột FUNCTION, hay tab sheet / bộ lọc method đang cắt mất.
 ## Hệ quả
 
 - Số request của CHECK PERM tăng gần gấp đôi (`pairs + oracleCalls`). Nhãn nút nói rõ trước khi bấm.
-- Endpoint trống cột FUNCTION vẫn chạy request nghiệp vụ nhưng chấm `'empty'` cả hai cột — trước đây
-  chúng được chấm `'true'`/`'false'` theo 403. Lần chạy đầu sau thay đổi này sẽ có nhiều `'empty'` hơn;
-  `noFunction` là con số đối chiếu.
+- **Cột `status_permission` không đổi giá trị** với cùng một bộ dữ liệu — công thức không đụng tới.
+  Endpoint trống cột FUNCTION chỉ mất cột `Status Check Perm` (hiện `—`), không mất gì khác.
 - Endpoint trùng METHOD + URL nhưng khác `function` không còn nuốt nhau. Số cặp có thể **tăng** so với
   số endpoint trước đây — đó là ý đồ, `collapsed` cho biết còn bao nhiêu bản thật sự trùng.
 - UC3 để trống → hành vi y hệt trước thay đổi này. Không ép cấu hình lại mới bấm được nút.
-- `test/http-client.test.js` sẽ đỏ (nó khẳng định `status === 403 → 'true'`), cùng với
+- `test/http-client.test.js` **không đỏ** vì công thức chấm giữ nguyên. Hai file sẽ đỏ:
   `test/permission-match.test.js` (khoá khử trùng đổi) và `test/request-count.test.js` (số request
-  gấp đôi). Cập nhật hay bỏ mấy file đó nằm ngoài phạm vi này.
+  đổi). Cập nhật hay bỏ hai file đó nằm ngoài phạm vi này.
 
 ## Kiểm chứng
 
@@ -484,15 +449,20 @@ Không viết test tự động. Verify trực tiếp bằng Claude in Chrome:
 3. Bấm **Đối soát cURL** với cả `curl1.txt` và `curl2.txt` — cả hai function phải `✓`. Nếu `✗` thì
    dừng ở đây, sửa cột FUNCTION trước khi chạy.
 4. Bấm CHECK PERM, đọc Network tab: mỗi endpoint phải thấy đúng hai request, oracle đi trước.
-5. Đối chiếu bảng: hai function trong curl mẫu phải hết `status_permission = true` giả — chúng phải
-   rơi vào ô `(rỗng, 200, 403) → false/false` hoặc `(rỗng, 403, 404) → true/false`, đúng với thực tế
-   404 đã quan sát được.
+5. Đọc hai cột `Status` và `Status Check Perm` cạnh nhau ở dòng của hai function trong curl mẫu. Đây
+   là chỗ nhìn ra 403 giả: `Status Check Perm = 200` (IAM cho phép) mà `Status = 403` nghĩa là 403
+   không đến từ phân quyền. Tool không kết luận hộ — chỉ đặt hai con số cạnh nhau.
+6. Mở drawer một dòng lệch, đối chiếu body oracle với `files/data_test/curl1.txt`: `function`,
+   `action`, `user.role` phải trùng curl mẫu, chỉ `function`/`action` đổi theo endpoint.
 
 ## Không làm
 
 - Không đụng `src/server/runner.js` (trừ một dòng đổi `sendRequest` → `sendPair` ở nhánh inline),
   `worker-pool.js`, luồng SSE.
-- Không đụng `evaluatePermission` — nhánh chấm quyền của RUN ALL.
+- **Không đụng công thức chấm điểm.** `evaluatePermission` và `evaluateUc2Permission` giữ nguyên;
+  `status_permission` vẫn đọc `status` của request nghiệp vụ đúng như `require.md`.
+- **Không sinh cột dẫn xuất từ hai status.** Không có `endpoint_khop`, không có ma trận quy đổi. Hai
+  cột thô, người đọc tự đối chiếu.
 - Không đụng Excel export.
 - Không cache kết quả oracle theo `(auth, function, action)`. Hai endpoint cùng function sẽ gọi oracle
   hai lần. Cache đúng cần chia sẻ state giữa các worker thread — đắt hơn cái nó tiết kiệm ở quy mô
