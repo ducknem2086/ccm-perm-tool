@@ -4,7 +4,7 @@
 
 export function emptyPermFilter() {
   return {
-    status: '', permStatus: '', perm: '', auth: '', endpoint: '', role: '', epName: '', permName: '', body: '',
+    status: '', permStatus: '', perm: '', auth: '', endpoint: '', role: '', epName: '', permName: '', fnName: '',
     checkNames: null,
   };
 }
@@ -26,7 +26,7 @@ export function matchPermRecord(rec, filter) {
   if (filter.endpoint && !contains(rec.pathTemplate, filter.endpoint)) return false;
   if (filter.epName && !contains(rec.endpointName, filter.epName)) return false;
   if (filter.permName && !contains(rec.permissionMatchedName, filter.permName)) return false;
-  if (filter.body && !contains(rec.response?.bodyText, filter.body)) return false;
+  if (filter.fnName && !contains(rec.oracleFunction, filter.fnName)) return false;
   // Nut Check (main.js): loc theo tap bename dang hien o bang HAS PERMISSIONS.
   // permissionMatchedName la ban sao chinh xac cua bename da khop luc dung
   // config chay (xem permission-match.js) nen so khop CHINH XAC sau normalize,

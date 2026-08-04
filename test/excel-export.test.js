@@ -267,13 +267,14 @@ test('writeResultsToStream thay duration bang statusPermission va to mau khi has
   }
 });
 
-test('PERMISSION_EXPORT_COLUMNS co dung 8 header theo dung thu tu', () => {
+test('PERMISSION_EXPORT_COLUMNS co dung 9 header theo dung thu tu, khop bang UI', () => {
   assert.deepEqual(PERMISSION_EXPORT_COLUMNS.map((c) => c.header), [
-    'Status Code', 'Status Permission', 'Auth', 'Endpoint', 'Role', 'Endpoint Name', 'UC2 Name', 'Response Body',
+    'Status', 'Status Check Perm', 'Status Perm', 'Auth', 'Endpoint', 'Role',
+    'Endpoint Name', 'UC2 Name', 'Function Name',
   ]);
 });
 
-test('layout permission dung dung 8 cot va to mau statusPermission', async () => {
+test('layout permission dung dung 9 cot, gop method vao o status, to mau statusPermission', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccm-'));
   const file = join(dir, 'out.xlsx');
   try {
@@ -281,11 +282,20 @@ test('layout permission dung dung 8 cot va to mau statusPermission', async () =>
       record({
         index: 1, statusPermission: 'true', sheetName: 'Sheet 1',
         endpointName: 'Tra cuu thue bao', permissionMatchedName: 'Tra cuu TB',
+        oracleFunction: 'FN_TRA_CUU',
+        oracle: { status: 200, request: { method: 'POST' } },
       }),
       record({
         index: 2, statusPermission: 'false', sheetName: 'Sheet 2',
         endpointName: 'Doi SIM 4G', permissionMatchedName: 'Doi SIM',
+        oracleFunction: 'FN_DOI_SIM',
+        oracle: { status: 403, request: { method: 'POST' } },
         response: { status: 403, statusText: 'Forbidden', headers: {}, body: null, bodyText: '{"error":"forbidden"}', sizeBytes: 20 },
+      }),
+      record({
+        index: 3, statusPermission: 'empty', sheetName: 'Sheet 3',
+        endpointName: 'Khong khai FUNCTION', permissionMatchedName: '',
+        oracleFunction: null, oracle: null,
       }),
     ];
     await writeResultsToStream(createWriteStream(file), records, { layout: 'permission' });
@@ -295,25 +305,41 @@ test('layout permission dung dung 8 cot va to mau statusPermission', async () =>
     const ws = wb.getWorksheet('Results');
 
     assert.deepEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8].map((c) => ws.getRow(1).getCell(c).value),
-      ['Status Code', 'Status Permission', 'Auth', 'Endpoint', 'Role', 'Endpoint Name', 'UC2 Name', 'Response Body'],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9].map((c) => ws.getRow(1).getCell(c).value),
+      ['Status', 'Status Check Perm', 'Status Perm', 'Auth', 'Endpoint', 'Role', 'Endpoint Name', 'UC2 Name', 'Function Name'],
     );
 
-    assert.equal(ws.getRow(2).getCell(1).value, 200);
-    assert.equal(ws.getRow(2).getCell(2).value, 'true');
+    assert.equal(ws.getRow(2).getCell(1).value, 'GET · 200');
+    assert.equal(ws.getRow(2).getCell(1).font?.color?.argb, 'FF0ECB81');
+    assert.equal(ws.getRow(2).getCell(2).value, 'POST · 200');
     assert.equal(ws.getRow(2).getCell(2).font?.color?.argb, 'FF0ECB81');
-    assert.equal(ws.getRow(2).getCell(3).value, 'Default');
-    assert.equal(ws.getRow(2).getCell(4).value, '/query/abc/{*}');
-    assert.equal(ws.getRow(2).getCell(5).value, 'Sheet 1');
-    assert.equal(ws.getRow(2).getCell(6).value, 'Tra cuu thue bao');
-    assert.equal(ws.getRow(2).getCell(7).value, 'Tra cuu TB');
+    assert.equal(ws.getRow(2).getCell(3).value, 'true');
+    assert.equal(ws.getRow(2).getCell(3).font?.color?.argb, 'FF0ECB81');
+    assert.equal(ws.getRow(2).getCell(4).value, 'Default');
+    assert.equal(ws.getRow(2).getCell(5).value, '/query/abc/{*}');
+    assert.equal(ws.getRow(2).getCell(6).value, 'Sheet 1');
+    assert.equal(ws.getRow(2).getCell(7).value, 'Tra cuu thue bao');
+    assert.equal(ws.getRow(2).getCell(8).value, 'Tra cuu TB');
+    assert.equal(ws.getRow(2).getCell(9).value, 'FN_TRA_CUU');
 
-    assert.equal(ws.getRow(3).getCell(1).value, 403);
-    assert.equal(ws.getRow(3).getCell(2).value, 'false');
+    assert.equal(ws.getRow(3).getCell(1).value, 'GET · 403');
+    assert.equal(ws.getRow(3).getCell(1).font?.color?.argb, 'FFF6465D');
+    assert.equal(ws.getRow(3).getCell(2).value, 'POST · 403');
     assert.equal(ws.getRow(3).getCell(2).font?.color?.argb, 'FFF6465D');
-    assert.equal(ws.getRow(3).getCell(5).value, 'Sheet 2');
-    assert.equal(ws.getRow(3).getCell(6).value, 'Doi SIM 4G');
-    assert.equal(ws.getRow(3).getCell(7).value, 'Doi SIM');
+    assert.equal(ws.getRow(3).getCell(3).value, 'false');
+    assert.equal(ws.getRow(3).getCell(3).font?.color?.argb, 'FFF6465D');
+    assert.equal(ws.getRow(3).getCell(6).value, 'Sheet 2');
+    assert.equal(ws.getRow(3).getCell(7).value, 'Doi SIM 4G');
+    assert.equal(ws.getRow(3).getCell(8).value, 'Doi SIM');
+    assert.equal(ws.getRow(3).getCell(9).value, 'FN_DOI_SIM');
+
+    // Khong co oracle (khong khai FUNCTION) — o Status Check Perm ra '—' tron,
+    // khong to mau; UC2 Name/Function Name rong ra '—'.
+    assert.equal(ws.getRow(4).getCell(2).value, '—');
+    assert.equal(ws.getRow(4).getCell(2).font?.color?.argb, undefined);
+    assert.equal(ws.getRow(4).getCell(3).value, 'empty');
+    assert.equal(ws.getRow(4).getCell(8).value, '—');
+    assert.equal(ws.getRow(4).getCell(9).value, '—');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

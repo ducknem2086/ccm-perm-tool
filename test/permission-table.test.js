@@ -121,6 +121,8 @@ function rec(index, over = {}) {
     pathTemplate: '/api/v1/user',
     endpointName: 'Tra cuu thue bao',
     permissionMatchedName: 'Tra cuu TB',
+    oracleFunction: 'FN_TRA_CUU',
+    request: { method: 'GET' },
     response: { status: 200, bodyText: '{"data":"ok"}' },
     ...over,
   };
@@ -145,7 +147,7 @@ test('initPermissionTable render du cot dung thu tu, co cot Action dau bang', ()
   const headRow = table.querySelector('thead').querySelectorAll('th').filter((th) => !th.classList.contains('filter-cell'));
   assert.deepEqual(headRow.map((th) => th.textContent), [
     'Action', 'Status', 'Status Check Perm', 'Status Perm', 'Auth', 'Endpoint', 'Role',
-    'Endpoint Name', 'UC2 Name', 'Response Body',
+    'Endpoint Name', 'UC2 Name', 'Function Name',
   ]);
 });
 
@@ -158,6 +160,8 @@ test('initPermissionTable dien dung noi dung tung o theo nguon du lieu', () => {
     pathTemplate: '/api/v1/report',
     endpointName: 'Bao cao chi tiet',
     permissionMatchedName: 'Bao cao',
+    oracleFunction: 'FN_BAO_CAO',
+    request: { method: 'POST' },
     response: { status: 403, bodyText: '{"error":"forbidden"}' },
   });
   const ctrl = initPermissionTable({ getRecords: () => [record], getFilter: () => emptyPermFilter() });
@@ -165,14 +169,15 @@ test('initPermissionTable dien dung noi dung tung o theo nguon du lieu', () => {
 
   const row = table.querySelector('tbody').querySelector('tr');
   const cells = row.children.map((td) => td.textContent);
-  assert.equal(cells[1], '403');
+  assert.equal(cells[1], 'POST · 403');
+  assert.equal(cells[2], '—');
   assert.equal(cells[3], 'false');
   assert.equal(cells[4], 'Admin Profile');
   assert.equal(cells[5], '/api/v1/report');
   assert.equal(cells[6], 'Sheet 2');
   assert.equal(cells[7], 'Bao cao chi tiet');
   assert.equal(cells[8], 'Bao cao');
-  assert.ok(cells[9].includes('forbidden'));
+  assert.equal(cells[9], 'FN_BAO_CAO');
 });
 
 test('o Status Perm gan class status-up cho true, status-down cho false, khong class cho empty', () => {

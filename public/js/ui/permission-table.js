@@ -1,37 +1,9 @@
 import { applyPermFilter } from '../shared/permission-filter-logic.js';
-import { bodyPreview } from '../shared/response-body.js';
+import { PERM_COLUMNS, permCellText } from '../shared/permission-columns.js';
 
-const truncate = (s, n = 120) => (s.length > n ? `${s.slice(0, n)}…` : s);
-
-const COLUMNS = [
-  { key: 'action', header: 'Action' },
-  { key: 'status', header: 'Status' },
-  // Status THO cua endpoint checkPermission chung, dat NGAY CANH status — mat
-  // doi chieu duoc khong phai keo ngang. Khong co cot dan xuat nao tu hai cot nay.
-  { key: 'permStatus', header: 'Status Check Perm' },
-  { key: 'perm', header: 'Status Perm' },
-  { key: 'auth', header: 'Auth' },
-  { key: 'endpoint', header: 'Endpoint' },
-  { key: 'role', header: 'Role' },
-  { key: 'epName', header: 'Endpoint Name' },
-  { key: 'permName', header: 'UC2 Name' },
-  { key: 'body', header: 'Response Body' },
-];
-
-function cellText(rec, key) {
-  switch (key) {
-    case 'status': return rec.response.status === null ? '—' : String(rec.response.status);
-    case 'permStatus': return rec.oracle?.status == null ? '—' : String(rec.oracle.status);
-    case 'perm': return rec.statusPermission ?? 'empty';
-    case 'auth': return rec.authName || '—';
-    case 'endpoint': return rec.pathTemplate || '—';
-    case 'role': return rec.sheetName || '—';
-    case 'epName': return rec.endpointName || '—';
-    case 'permName': return rec.permissionMatchedName || '—';
-    case 'body': return truncate(bodyPreview(rec)) || '—';
-    default: return '';
-  }
-}
+// Action la nut xem chi tiet — chi ton tai tren bang, khong xuat Excel nen
+// khong nam trong PERM_COLUMNS (nguon dung chung voi excel-export.js).
+const COLUMNS = [{ key: 'action', header: 'Action' }, ...PERM_COLUMNS];
 
 export function initPermissionTable({ getRecords, getFilter, filterCell, onRowClick }) {
   const table = document.getElementById('perm-table');
@@ -87,8 +59,8 @@ export function initPermissionTable({ getRecords, getFilter, filterCell, onRowCl
         tr.append(td);
         continue;
       }
-      td.textContent = cellText(rec, col.key);
-      td.title = cellText(rec, col.key);
+      td.textContent = permCellText(rec, col.key);
+      td.title = permCellText(rec, col.key);
       if (col.key === 'perm') {
         td.classList.toggle('status-up', rec.statusPermission === 'true');
         td.classList.toggle('status-down', rec.statusPermission === 'false');

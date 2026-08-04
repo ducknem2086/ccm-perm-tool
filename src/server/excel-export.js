@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { bodyPretty } from '../../public/js/shared/response-body.js';
+import { PERM_COLUMNS, permCellText } from '../../public/js/shared/permission-columns.js';
 
 // Cot nhieu dong (JSON pretty, headers moi cai mot dong) can wrapText, khong thi
 // Excel don het ve mot dong dai.
@@ -79,18 +80,11 @@ export function getExportColumns(hasPermission) {
   return cols;
 }
 
-// Bo cot rieng cho export tu tab CHECK PERMISSION — khong co Headers/Query nen
-// khong che token, va khong doi cho voi Duration nhu bo cot mac dinh.
-export const PERMISSION_EXPORT_COLUMNS = [
-  { header: 'Status Code', key: 'status', width: 12 },
-  { header: 'Status Permission', key: 'statusPermission', width: 18 },
-  { header: 'Auth', key: 'auth', width: 18 },
-  { header: 'Endpoint', key: 'path', width: 45 },
-  { header: 'Role', key: 'role', width: 20 },
-  { header: 'Endpoint Name', key: 'epName', width: 35 },
-  { header: 'UC2 Name', key: 'permName', width: 35 },
-  { header: 'Response Body', key: 'bodyText', width: 80, style: MULTILINE },
-];
+// Cot cho export tu tab CHECK PERMISSION — sinh tu PERM_COLUMNS (nguon dung
+// chung voi bang UI trong permission-table.js) de export khong the lech bang.
+export const PERMISSION_EXPORT_COLUMNS = PERM_COLUMNS.map(({ key, header, width }) => ({
+  key, header, width,
+}));
 
 function toRow(rec, includeToken, hasPermission = false) {
   const row = {
@@ -109,15 +103,20 @@ function toRow(rec, includeToken, hasPermission = false) {
     responseHeaders: serializeHeaders(rec.response.headers, true),
     errorMessage: rec.errorMessage ?? '',
     startedAt: rec.startedAt,
-    role: rec.sheetName ?? '',
-    epName: rec.endpointName ?? '',
-    permName: rec.permissionMatchedName ?? '',
   };
   if (hasPermission) {
     row.statusPermission = rec.statusPermission ?? 'empty';
   } else {
     row.durationMs = rec.durationMs;
   }
+  return row;
+}
+
+// Row cho layout permission — doc tung o qua permCellText, cung ham bang UI
+// dung (permission-table.js), nen export khong the ra khac bang.
+function toPermRow(rec) {
+  const row = {};
+  for (const col of PERM_COLUMNS) row[col.key] = permCellText(rec, col.key);
   return row;
 }
 
@@ -140,12 +139,27 @@ export async function writeResultsToStream(stream, records, {
   header.commit();
 
   for (const rec of records) {
-    const row = ws.addRow(toRow(rec, includeToken, isPermLayout || hasPermission));
+    if (isPermLayout) {
+      const row = ws.addRow(toPermRow(rec));
+      const isOk = rec.response.status !== null && rec.response.status < 400;
+      row.getCell('status').font = { color: { argb: isOk ? COLOR_UP : COLOR_DOWN }, bold: true };
+      if (rec.oracle?.status != null) {
+        const oracleOk = rec.oracle.status < 400;
+        row.getCell('permStatus').font = { color: { argb: oracleOk ? COLOR_UP : COLOR_DOWN } };
+      }
+      const permVal = String(rec.statusPermission ?? '');
+      if (permVal === 'true') row.getCell('perm').font = { color: { argb: COLOR_UP } };
+      else if (permVal === 'false') row.getCell('perm').font = { color: { argb: COLOR_DOWN } };
+      row.commit();
+      continue;
+    }
+
+    const row = ws.addRow(toRow(rec, includeToken, hasPermission));
     const status = rec.response.status;
     const isOk = status !== null && status < 400;
     row.getCell('status').font = { color: { argb: isOk ? COLOR_UP : COLOR_DOWN }, bold: true };
-    if (!isPermLayout && !isOk) row.getCell('errorCode').font = { color: { argb: COLOR_DOWN } };
-    if (isPermLayout || hasPermission) {
+    if (!isOk) row.getCell('errorCode').font = { color: { argb: COLOR_DOWN } };
+    if (hasPermission) {
       const permCell = row.getCell('statusPermission');
       const val = String(rec.statusPermission ?? '');
       if (val === 'true') {

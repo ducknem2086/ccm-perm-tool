@@ -55,7 +55,7 @@ export function initPermissionFilters({ onChange } = {}) {
   const endpointInput = makeSearch('gõ tìm', 'Lọc theo endpoint');
   const epNameInput = makeSearch('gõ tìm', 'Lọc theo tên endpoint');
   const permNameInput = makeSearch('gõ tìm', 'Lọc theo UC2 name');
-  const bodyInput = makeSearch('gõ tìm', 'Lọc theo response body');
+  const fnNameInput = makeSearch('gõ tìm', 'Lọc theo function name');
 
   fillSelect(statusSelect, [], '(tất cả)');
   fillSelect(permStatusSelect, [], '(tất cả)');
@@ -72,13 +72,13 @@ export function initPermissionFilters({ onChange } = {}) {
     filter.endpoint = endpointInput.value.trim();
     filter.epName = epNameInput.value.trim();
     filter.permName = permNameInput.value.trim();
-    filter.body = bodyInput.value.trim();
+    filter.fnName = fnNameInput.value.trim();
     onChange?.();
   }
 
   const inputs = [
     statusSelect, permStatusSelect, permSelect, authSelect, roleSelect,
-    endpointInput, epNameInput, permNameInput, bodyInput,
+    endpointInput, epNameInput, permNameInput, fnNameInput,
   ];
   for (const el of inputs) {
     el.addEventListener('change', syncFilter);
@@ -97,7 +97,7 @@ export function initPermissionFilters({ onChange } = {}) {
         case 'endpoint': return endpointInput;
         case 'epName': return epNameInput;
         case 'permName': return permNameInput;
-        case 'body': return bodyInput;
+        case 'fnName': return fnNameInput;
         default: return null;
       }
     },

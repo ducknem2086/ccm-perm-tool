@@ -22,7 +22,7 @@ function rec(over = {}) {
 
 test('emptyPermFilter tra ve 10 khoa rong', () => {
   assert.deepEqual(emptyPermFilter(), {
-    status: '', permStatus: '', perm: '', auth: '', endpoint: '', role: '', epName: '', permName: '', body: '',
+    status: '', permStatus: '', perm: '', auth: '', endpoint: '', role: '', epName: '', permName: '', fnName: '',
     checkNames: null,
   });
 });
@@ -97,10 +97,10 @@ test('loc theo permName khop chuoi con khong phan biet hoa thuong', () => {
   assert.equal(matchPermRecord(rec({ permissionMatchedName: 'Doi SIM' }), filter), false);
 });
 
-test('loc theo body khop chuoi con khong phan biet hoa thuong', () => {
-  const filter = { ...emptyPermFilter(), body: 'error' };
-  assert.equal(matchPermRecord(rec({ response: { status: 500, bodyText: '{"ERROR":"boom"}' } }), filter), true);
-  assert.equal(matchPermRecord(rec({ response: { status: 200, bodyText: '{"data":"ok"}' } }), filter), false);
+test('loc theo fnName khop chuoi con khong phan biet hoa thuong', () => {
+  const filter = { ...emptyPermFilter(), fnName: 'tra_cuu' };
+  assert.equal(matchPermRecord(rec({ oracleFunction: 'FN_TRA_CUU' }), filter), true);
+  assert.equal(matchPermRecord(rec({ oracleFunction: 'FN_DOI_SIM' }), filter), false);
 });
 
 test('loc theo checkNames (tap bename tu nut Check) so khop CHINH XAC sau normalize', () => {
