@@ -58,7 +58,10 @@ function setup(permissionFile = { filename: '', sheets: [], selectedSheet: '' })
   state.savedConfig.permissionSheet = state.permissionFile.selectedSheet;
   state.permissionMapping = {
     usecase1: [],
-    usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' }
+    usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' },
+    // UC3 phai co mat: render() doc thang state.permissionMapping.usecase3
+    // khong guard, dung nhu defaultConfig() luon dien san ba o nay.
+    usecase3: { columnSheet: '', functionColumn: '', actionColumn: '' }
   };
   state.endpoints = [
     { sheetName: 'SheetA', method: 'GET', pathTemplate: '/api/a' },

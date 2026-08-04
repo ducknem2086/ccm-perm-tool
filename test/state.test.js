@@ -95,9 +95,13 @@ test('defaultConfig has permission configs', () => {
   assert.deepEqual(config.permissionFile, { filename: '', sheets: [], selectedSheet: '' });
   assert.deepEqual(config.permissionMapping, {
     usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' },
+    usecase3: { columnSheet: '', functionColumn: '', actionColumn: '' },
   });
   assert.deepEqual(config.savedConfig, {
-    permissionMapping: { usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' } },
+    permissionMapping: {
+      usecase1: [], usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' },
+      usecase3: { columnSheet: '', functionColumn: '', actionColumn: '' },
+    },
     permissionSheet: '',
   });
 });

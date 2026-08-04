@@ -58,6 +58,13 @@ function state(over = {}) {
   };
 }
 
+// matchPermissionEndpoints tra { list, collapsed }: list la ket qua ghep, con
+// collapsed la cac ban bi khu trung. Phan lon test o day chi xet list nen bo
+// qua collapsed qua wrapper nay.
+function matchList(s) {
+  return matchPermissionEndpoints(s).list;
+}
+
 // Trong ket qua cua matchPermissionEndpoints, tim entry cua mot endpoint id cu the.
 function find(matches, id) {
   return matches.find((m) => m.endpoint.id === id);
@@ -154,7 +161,7 @@ test('vong 0 dung include: endpoint CHUA ten phan quyen deu khop, khong doi bang
       rows: [['Tra cuu whitelist', 'x']],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 2);
   assert.equal(find(matches, 'exact').permRowIndex, 0);
   assert.equal(find(matches, 'superset').permRowIndex, 0);
@@ -171,7 +178,7 @@ test('chieu include mot phia: ten phan quyen CHUA endpoint thi KHONG khop', () =
       rows: [['Tra cuu whitelist roaming VIP', 'x']],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permRowIndex, null);
 });
@@ -184,7 +191,7 @@ test('mapping doc ban DA LUU, khong doc ban nhap dang sua', () => {
     usecase2: { permissionColumn: 'Cot Ma', endpointColumn: 'Cot Ma' },
   };
 
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permRowIndex, 0);
 });
@@ -192,10 +199,10 @@ test('mapping doc ban DA LUU, khong doc ban nhap dang sua', () => {
 test('bo loc method doc BAN NHAP (state.runFilter), giong nut RUN ALL', () => {
   const s = state({ endpoints: [endpoint({ id: 'e1', method: 'GET' })] });
   s.runFilter = { methods: ['DELETE'] };
-  assert.equal(matchPermissionEndpoints(s).length, 0);
+  assert.equal(matchList(s).length, 0);
 
   s.runFilter = { methods: ['GET'] };
-  assert.equal(matchPermissionEndpoints(s).length, 1);
+  assert.equal(matchList(s).length, 1);
 });
 
 test('tab sheet dang chon thu hep pool, tab all lay het', () => {
@@ -205,10 +212,10 @@ test('tab sheet dang chon thu hep pool, tab all lay het', () => {
       endpoint({ id: 'e2', sheetName: 'Sheet 2' }),
     ],
   });
-  assert.equal(matchPermissionEndpoints(s).length, 2);
+  assert.equal(matchList(s).length, 2);
 
   s.selectedSheet = 'Sheet 2';
-  const narrowed = matchPermissionEndpoints(s);
+  const narrowed = matchList(s);
   assert.equal(narrowed.length, 1);
   assert.equal(narrowed[0].endpoint.id, 'e2');
 });
@@ -218,14 +225,14 @@ test('dong UC1 khai endpointSheet khac KHONG con thu hep pool', () => {
   s.savedConfig.permissionMapping.usecase1 = [
     { endpointSheet: 'Sheet 1', permissionColumn: 'Sheet 1 - User', authProfileName: 'User Profile' },
   ];
-  assert.equal(matchPermissionEndpoints(s).length, 1);
+  assert.equal(matchList(s).length, 1);
 });
 
 test('common endpoints khong lot vao pool du commonEndpointsEnabled bat', () => {
   const s = state({ endpoints: [endpoint({ id: 'e1' })] });
   s.commonEndpoints = 'GET /api/common/health';
   s.commonEndpointsEnabled = true;
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].endpoint.id, 'e1');
 });
@@ -236,7 +243,7 @@ test('endpoint o sheet dat ten cot khac van ghep duoc qua tang 3 cua joinValueOf
       endpoint({ id: 'e1', sheetName: 'Sheet 2', raw: { 'API Name': 'gi do' }, name: 'Tra cuu whitelist' }),
     ],
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permRowIndex, 0);
 });
@@ -248,7 +255,7 @@ test('khu trung giu ban CO khoa ghep khi ban gap truoc de trong o ten', () => {
       endpoint({ id: 'day', sheetName: 'Sheet 2', pathTemplate: '/api/x', raw: { 'Ten API': 'Tra cuu whitelist' } }),
     ],
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].endpoint.id, 'day');
   assert.equal(matches[0].permRowIndex, 0);
@@ -261,7 +268,7 @@ test('khu trung giu ban gap dau tien khi ca hai cung ghep duoc', () => {
       endpoint({ id: 'sau', pathTemplate: '/api/x', raw: { 'Ten API': 'Tra cuu whitelist' } }),
     ],
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].endpoint.id, 'truoc');
 });
@@ -273,7 +280,7 @@ test('khu trung giu ban gap dau tien khi ca hai cung khong ghep duoc', () => {
       endpoint({ id: 'sau', pathTemplate: '/api/x', raw: { 'Ten API': '' }, name: '' }),
     ],
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].endpoint.id, 'truoc');
 });
@@ -282,7 +289,7 @@ test('sheet da luu bien mat khoi file: endpoint van tra ve het, permRowIndex nul
   const s = state({ endpoints: [endpoint({ id: 'e1' })] });
   s.savedConfig.permissionSheet = 'Sheet Da Bi Xoa';
 
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permRowIndex, null);
 });
@@ -300,7 +307,7 @@ test('bot tu DAU, khong phai tu cuoi', () => {
       rows: [['Tra cuu whitelist roaming VIP', 'x']],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   // vong 1 bot tu dau "Tra" ra "cuu whitelist roaming VIP" khop e1.
   assert.equal(find(matches, 'e1').permRowIndex, 0);
   assert.equal(find(matches, 'e2').permRowIndex, null);
@@ -319,7 +326,7 @@ test('toi da 4 vong (k=0..3), khong noi sang vong thu 5', () => {
       rows: [['A B C D E', 'x']],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permRowIndex, null);
 });
@@ -334,7 +341,7 @@ test('keyword it hon 4 tu: dung khi het tu, khong sinh needle rong', () => {
       rows: [['A B', 'x']], // 2 tu: vong 0 "A B", vong 1 "B" — dung o vong 1
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permName, 'A B');
 });
@@ -352,7 +359,7 @@ test('dung o vong dau tien co ket qua, khong noi sang vong long hon', () => {
       rows: [['Tra cuu whitelist roaming', 'x']],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(find(matches, 'tight').permRowIndex, 0);
   assert.equal(find(matches, 'loose').permRowIndex, null);
 });
@@ -370,7 +377,7 @@ test('vong co ket qua nhung moi endpoint da bi giu cho — van thoat, khong noi 
       ],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permName, 'Tra cuu whitelist roaming');
 });
@@ -381,7 +388,7 @@ test('khu trung METHOD:pathTemplate — hai endpoint cung path o cung sheet chi 
     endpoint({ id: 'e2', sheetName: 'Sheet 1', pathTemplate: '/trung', raw: { 'Ten API': 'Tra cuu whitelist' } }),
   ];
   const s = state({ endpoints: eps });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].endpoint.id, 'e1');
 });
@@ -392,7 +399,7 @@ test('khu trung METHOD:pathTemplate — cung path nhung khac method thi khong kh
     endpoint({ id: 'post1', method: 'POST', pathTemplate: '/a', raw: { 'Ten API': 'Tra cuu whitelist' } }),
   ];
   const s = state({ endpoints: eps });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 2);
 });
 
@@ -409,7 +416,7 @@ test('dong UC2 dung truoc trong file giu cho khi hai dong cung voi toi mot endpo
       ],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].permName, 'Z whitelist roaming VIP');
 });
@@ -422,7 +429,7 @@ test('endpoint thieu raw hoac o cot dich rong khong tham gia khop, nhung van co 
       endpoint({ id: 'ok', raw: { 'Ten API': 'Tra cuu whitelist' } }),
     ],
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 3);
   assert.equal(find(matches, 'no-raw').permRowIndex, null);
   assert.equal(find(matches, 'empty-target').permRowIndex, null);
@@ -433,7 +440,7 @@ test('checkbox enabled cua bang ENDPOINTS KHONG anh huong pool CHECK PERM', () =
   const s = state({
     endpoints: [endpoint({ id: 'e1', enabled: false, raw: { 'Ten API': 'Tra cuu whitelist' } })],
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].endpoint.id, 'e1');
   assert.equal(matches[0].permRowIndex, 0);
@@ -444,7 +451,7 @@ test('bo loc method ap dung o buoc gom, truoc khi ghep', () => {
     endpoints: [endpoint({ id: 'e1', method: 'POST', raw: { 'Ten API': 'Tra cuu whitelist' } })],
     runFilter: { methods: ['GET'] },
   });
-  assert.deepEqual(matchPermissionEndpoints(s), []);
+  assert.deepEqual(matchList(s), []);
 });
 
 test('permName la gia tri goc trong file, khong normalize', () => {
@@ -456,18 +463,18 @@ test('permName la gia tri goc trong file, khong normalize', () => {
       rows: [['  Tra Cuu Whitelist  ', 'x']],
     },
   });
-  const matches = matchPermissionEndpoints(s);
+  const matches = matchList(s);
   assert.equal(matches[0].permName, '  Tra Cuu Whitelist  ');
 });
 
 test('chua chon cot Name (UC2) hoac cot dich — endpoint van tra ve het, permRowIndex null', () => {
-  const noSrc = matchPermissionEndpoints(state({
+  const noSrc = matchList(state({
     permissionMapping: { usecase1: uc1, usecase2: { permissionColumn: '', endpointColumn: 'Ten API' } },
   }));
   assert.equal(noSrc.length, 1);
   assert.equal(noSrc[0].permRowIndex, null);
 
-  const noTarget = matchPermissionEndpoints(state({
+  const noTarget = matchList(state({
     permissionMapping: { usecase1: uc1, usecase2: { permissionColumn: 'Ten Chuc Nang', endpointColumn: '' } },
   }));
   assert.equal(noTarget.length, 1);

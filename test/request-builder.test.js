@@ -60,7 +60,7 @@ test('validateConfig bat domain sai', () => {
 test('validateConfig bat khi danh sach endpoint rong', () => {
   const cfg = baseConfig();
   cfg.endpoints = [];
-  cfg.commonEndpoints = '';
+  cfg.commonEndpointList = [];
   const errs = validateConfig(cfg);
   assert.ok(errs.some((e) => e.field === 'endpoints'));
 });
@@ -886,7 +886,10 @@ test('buildRequests loc theo selectedSheet va cong them commonEndpoints', () => 
       { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q1/{*}', sheetName: 'Sheet1' },
       { id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q2/{*}', sheetName: 'Sheet2' },
     ],
-    commonEndpoints: 'POST /common-post/{*}\n/common-get/{*}'
+    commonEndpointList: [
+      { kind: 'business', line: 'POST /common-post/{*}' },
+      { kind: 'business', line: '/common-get/{*}' }
+    ]
   });
   const reqs = buildRequests(cfg);
   // ep_1 (1 request) + common-post (1 request) + common-get (1 request) = 3 total requests
@@ -902,7 +905,7 @@ test('buildRequests cho endpoint chung khong co msisdn placeholder chay 1 reques
   const cfg = baseConfig({
     selectedSheet: 'Sheet1',
     endpoints: [],
-    commonEndpoints: 'GET /api/v1/health'
+    commonEndpointList: [{ kind: 'business', line: 'GET /api/v1/health' }]
   });
   const reqs = buildRequests(cfg);
   assert.equal(reqs.length, 1);
@@ -912,7 +915,7 @@ test('buildRequests cho endpoint chung khong co msisdn placeholder chay 1 reques
 test('validateConfig cho phep chi co commonEndpoints duoc nhap', () => {
   const cfg = baseConfig({
     endpoints: [],
-    commonEndpoints: '/common-get'
+    commonEndpointList: [{ kind: 'business', line: '/common-get' }]
   });
   const errs = validateConfig(cfg);
   // endpoints list is empty but commonEndpoints has valid path, so it should be valid
@@ -926,7 +929,10 @@ test('buildRequests bo qua commonEndpoints khi commonEndpointsEnabled la false',
       { id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q1/{*}', sheetName: 'Sheet1' },
       { id: 'ep_2', enabled: true, method: 'GET', attachMsisdn: false, pathTemplate: '/q2/{*}', sheetName: 'Sheet2' },
     ],
-    commonEndpoints: 'POST /common-post/{*}\n/common-get/{*}',
+    commonEndpointList: [
+      { kind: 'business', line: 'POST /common-post/{*}' },
+      { kind: 'business', line: '/common-get/{*}' }
+    ],
     commonEndpointsEnabled: false,
   });
   const reqs = buildRequests(cfg);

@@ -28,13 +28,19 @@ test('cot hep chua MSISDN, DATE RANGE, QUERY PARAMS theo dung thu tu', () => {
   assert.deepEqual(order, ['MSISDN', 'DATE RANGE', 'QUERY PARAMS']);
 });
 
-test('cot rong co card CONNECTION/BODY CHUNG gop lam mot, roi den ADVANCED+ENDPOINTS CHUNG+PERMISSIONS, roi den ENDPOINTS', () => {
+test('cot hep giu card CONNECTION/BODY CHUNG gop lam mot', () => {
   const html = readHtml();
-  const col = html.match(/<div class="col col-wide">([\s\S]*?)<section id="panel-auths"/);
-  assert.ok(col, 'phai tim thay cot rong');
+  const col = html.match(/<div class="col col-narrow">([\s\S]*?)<div class="col col-wide">/);
+  assert.ok(col, 'phai tim thay cot hep');
   assert.ok(col[1].includes('id="card-connection"'), 'phai co card CONNECTION gop voi BODY CHUNG');
   assert.ok(col[1].includes('id="inp-domain"'), 'card gop phai chua Domain (goc tu CONNECTION)');
   assert.ok(col[1].includes('id="sel-body-mode"'), 'card gop phai chua BODY CHUNG config');
+});
+
+test('cot rong co ADVANCED+ENDPOINTS CHUNG+PERMISSIONS, roi den ENDPOINTS', () => {
+  const html = readHtml();
+  const col = html.match(/<div class="col col-wide">([\s\S]*?)<section id="panel-auths"/);
+  assert.ok(col, 'phai tim thay cot rong');
   assert.ok(col[1].includes('class="cfg-row"'), 'phai co div cfg-row');
   assert.ok(col[1].includes('class="cfg-stack"'), 'phai co div cfg-stack (ADVANCED + ENDPOINTS CHUNG)');
   assert.ok(col[1].includes('>ADVANCED'), 'phai co card ADVANCED');
@@ -42,10 +48,6 @@ test('cot rong co card CONNECTION/BODY CHUNG gop lam mot, roi den ADVANCED+ENDPO
   assert.ok(col[1].includes('id="card-permissions"'), 'phai co card PERMISSIONS');
   assert.ok(col[1].includes('id="list-endpoint"'), 'phai co card ENDPOINTS (danh sach)');
 
-  assert.ok(
-    col[1].indexOf('id="card-connection"') < col[1].indexOf('class="cfg-row"'),
-    'CONNECTION/BODY CHUNG phai truoc cfg-row (ADVANCED nam duoi BODY CHUNG)',
-  );
   assert.ok(
     col[1].indexOf('class="cfg-stack"') < col[1].indexOf('id="card-permissions"'),
     'ADVANCED/ENDPOINTS CHUNG (cfg-stack) phai nam ben trai PERMISSIONS',
@@ -69,7 +71,7 @@ test('CSS dinh nghia cfg-row hai cot 1fr 2fr', () => {
   assert.match(readCss(), /\.cfg-row\s*\{[^}]*grid-template-columns:\s*1fr\s+2fr/);
 });
 
-test('topbar gom ca tabs-left, tabs-right (run-filter-bar) va topbar-right (btn-run, run-breakdown, btn-check-perm)', () => {
+test('topbar gom ca tabs-left, tabs-right (run-filter-bar) va topbar-right (btn-run, btn-check-perm)', () => {
   const html = readHtml();
   const topbar = html.match(/<header class="topbar">([\s\S]*?)<\/header>/);
   assert.ok(topbar, 'phai co topbar');
@@ -77,7 +79,9 @@ test('topbar gom ca tabs-left, tabs-right (run-filter-bar) va topbar-right (btn-
   assert.ok(topbar[1].includes('class="tabs-right"'), 'phai co tabs-right');
   assert.ok(topbar[1].includes('id="run-filter-bar"'), 'phai co run-filter-bar');
   assert.ok(topbar[1].includes('id="btn-run"'), 'phai co btn-run');
-  assert.ok(topbar[1].includes('id="run-breakdown"'), 'phai co run-breakdown');
+  // run-breakdown da bo khoi topbar; run-filter-bar.js van getElementById no
+  // nhung co guard null (if (!breakdown) return) nen khong con dau vet o DOM.
+  assert.ok(!topbar[1].includes('id="run-breakdown"'), 'run-breakdown da bo khoi topbar');
   assert.ok(topbar[1].includes('id="btn-check-perm"'), 'btn-check-perm phai dung canh btn-run o topbar');
   assert.ok(!topbar[1].includes('id="token-indicator"'), 'khong duoc co token-indicator');
   assert.ok(!topbar[1].includes('id="btn-reload-token"'), 'khong duoc co btn-reload-token');

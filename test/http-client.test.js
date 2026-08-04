@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendRequest } from '../src/server/http-client.js';
+// sendPair thay sendRequest cu lam diem vao cua worker. Khong co req.oracle
+// thi no chi chay nhanh nghiep vu roi finalize — dung hanh vi ma cac test
+// duoi day dang xet, nen giu ten cu qua alias.
+import { sendPair as sendRequest } from '../src/server/http-client.js';
 import { startMockServer } from './helpers/mock-server.js';
 
 function req(over = {}) {

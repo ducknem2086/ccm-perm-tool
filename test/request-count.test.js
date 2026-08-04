@@ -96,7 +96,13 @@ test('countRequests loc theo selectedSheet va cong them commonEndpoints', () => 
     { id: '2', enabled: true, attachMsisdn: false, sheetName: 'Sheet2' }
   ], ['0912345678'], {
     selectedSheet: 'Sheet1',
-    commonEndpoints: 'POST /api/common-endpoint\n/api/another-common'
+    // ENDPOINTS CHUNG nay la danh sach co phan loai, khong con la chuoi.
+    // Chi dong kind 'business' vao pool RUN ALL; 'oracle' danh cho CHECK PERM.
+    commonEndpointsEnabled: true,
+    commonEndpointList: [
+      { kind: 'business', line: 'POST /api/common-endpoint' },
+      { kind: 'business', line: '/api/another-common' }
+    ]
   });
   // 1 (Sheet1 endpoint) + 2 (common endpoints) = 3 total requests
   assert.equal(countRequests(s), 3);
