@@ -1,17 +1,37 @@
+import { parseRawHeaders } from './shared/endpoint-path.js';
+
 const STORAGE_KEY = 'ccm-tool-config';
 
 let authSeq = 0;
+
+let commonEndpointSeq = 0;
+
+export function makeCommonEndpoint(over = {}) {
+  commonEndpointSeq += 1;
+  return {
+    id: `ce_${Date.now().toString(36)}_${commonEndpointSeq}`,
+    kind: 'business', // 'business' vao pool RUN ALL, 'oracle' la khai bao checkPermission
+    line: '',
+    // Rieng dong 'oracle': cURL checkPermission that, dung lam KHUON cho
+    // request (URL + toan bo header + body skeleton). Danh tinh trong do bi
+    // thay bang danh tinh cua auth dang chay — xem buildOracleRequest.
+    // Khong co khuon thi Origin/Referer/X-Current-Url roi ve origin cua tool
+    // (localhost:9000) va IAM sau WAF tra 401.
+    curlRaw: '',
+    ...over,
+  };
+}
 
 export function makeAuth(over = {}) {
   authSeq += 1;
   return {
     id: `auth_${Date.now().toString(36)}_${authSeq}`,
     name: '',
-    mode: 'fields',
-    token: '',
-    cookie: '',
-    refreshToken: '',
+    // Nguon danh tinh DUY NHAT. Moi header cua request nghiep vu lay tu day;
+    // CHECK PERM muon lai rieng phan cookie loi auth (xem auth-identity.js).
     curlRaw: '',
+    // Khong nam trong token — FE tu gui theo role dang chon tren man hinh.
+    role: '',
     ...over,
   };
 }
@@ -25,7 +45,11 @@ export function emptySavedConfig() {
   return {
     permissionMapping: {
       usecase1: [],
-      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' }
+      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' },
+      // actionColumn de rong la hop le: file endpoints thuc te thuong khong co
+      // cot action FE rieng — de rong thi giu nguyen action co san trong body
+      // cua curl mau checkPermission.
+      usecase3: { columnSheet: '', functionColumn: '', actionColumn: '' }
     },
     // KHONG co 'methods'. Bo loc method di thang qua state.runFilter nhu RUN ALL
     // (matchPermissionEndpoints goi filterEndpoints), nen dua no vao gate chi lam
@@ -38,7 +62,10 @@ export function defaultConfig() {
   return {
     domain: '',
     selectedSheet: 'all',
-    commonEndpoints: '',
+    // Danh sach co phan loai: kind 'business' vao pool RUN ALL (thay cho chuoi
+    // commonEndpoints cu — xem migrateCommonEndpoints), kind 'oracle' la khai
+    // bao endpoint checkPermission mac dinh, KHONG vao pool nao.
+    commonEndpointList: [],
     commonEndpointsEnabled: true,
     auths: [makeAuth({ name: 'Default' })],
     runFilter: { methods: [], msisdnPatterns: [], authIds: [] },
@@ -46,6 +73,10 @@ export function defaultConfig() {
     dateFormat: 'ddMMyyyy',
     msisdns: [],
     endpoints: [],
+    // Ten sheet tho lay tu file import — song song voi endpoints, KHONG suy ra
+    // tu no. Giu lai sheet bi lech cot theo template (0 dong map duoc) de tab
+    // van hien du sheet trong file goc thay vi am tham bien mat.
+    endpointSheetNames: [],
     importTemplate: [
       { id: 'tpl_name', type: 'name', selector: 'name', target: 'name' },
       { id: 'tpl_method', type: 'name', selector: 'method', target: 'method' },
@@ -69,7 +100,10 @@ export function defaultConfig() {
       // CHECK PERM chi mot duong: endpoint thuoc sheet khai o usecase1[].endpointSheet,
       // khu trung METHOD:pathTemplate. Endpoint khong dong UC2 nao keo ve van chay, cham 'empty'.
       usecase1: [],
-      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' }
+      usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' },
+      // UC3 cap function/action cho oracle checkPermission. De trong ca ba o
+      // thi CHECK PERM chi chay request nghiep vu nhu truoc thay doi nay.
+      usecase3: { columnSheet: '', functionColumn: '', actionColumn: '' }
     },
     savedConfig: emptySavedConfig(),
     advanced: {
@@ -188,11 +222,28 @@ function normalizeSavedConfig(incoming) {
       usecase2: {
         ...base.permissionMapping.usecase2,
         ...(incoming.permissionMapping?.usecase2 ?? {})
+      },
+      // Cau hinh cu chua co UC3 — trai tu base de mo len khong bi undefined.
+      usecase3: {
+        ...base.permissionMapping.usecase3,
+        ...(incoming.permissionMapping?.usecase3 ?? {})
       }
     },
     // 'methods' cua cau hinh cu bi bo qua o day — khong con thuoc gate.
     permissionSheet: incoming.permissionSheet ?? ''
   };
+}
+
+// Ban cu luu ENDPOINTS CHUNG thanh chuoi 'commonEndpoints' (moi dong 1
+// endpoint). Tach thanh danh sach 'business' — mo cau hinh cu len chay y het
+// truoc, khong ai bi ep khai lai. Chi chay khi commonEndpointList chua co gi,
+// tranh de len danh sach nguoi dung vua tao trong phien nay.
+function migrateCommonEndpoints(target, incoming) {
+  if ((target.commonEndpointList ?? []).length > 0) return;
+  const text = String(incoming?.commonEndpoints ?? '').trim();
+  if (text === '') return;
+  target.commonEndpointList = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    .map((line) => makeCommonEndpoint({ kind: 'business', line }));
 }
 
 // Ban cu luu permissionFile.headers/rows thay vi sheets. Dung lai mot sheet
@@ -217,18 +268,56 @@ function migrateSavedConfig(incoming) {
   state.savedConfig = normalizeSavedConfig(incoming?.savedConfig) ?? snapshot();
 }
 
-// Ban cu luu credential o ba khoa phang cua state. Goi chung lai thanh mot
-// profile ten 'Default' de cau hinh cu mo len chay y het truoc.
+function curlFromLegacyFields(a) {
+  const lines = [];
+  if (a?.token) lines.push(`Authorization: Bearer ${a.token}`);
+  if (a?.cookie) lines.push(`Cookie: ${a.cookie}`);
+  if (a?.refreshToken) lines.push(`refresh_token: ${a.refreshToken}`);
+  return lines.join('\n');
+}
+
+// HEADERS CHUNG co dang khai danh tinh hay khong. Doc ca hai che do nhap
+// (bang key-value va o dan cURL) vi ca hai deu vao globalHeaderPairs.
+function globalHeadersCarryIdentity(incoming) {
+  const names = [];
+  if ((incoming?.globalHeaderMode ?? 'kv') === 'raw') {
+    names.push(...parseRawHeaders(incoming?.globalHeaderRaw ?? '').map((p) => p.key));
+  } else {
+    names.push(...(incoming?.globalHeaders ?? []).filter((p) => p.enabled !== false).map((p) => p.key));
+  }
+  return names.some((k) => ['authorization', 'cookie'].includes(String(k).toLowerCase()));
+}
+
+// Auth profile cu khai ba o rieng token/cookie/refreshToken (mode 'fields')
+// hoac dan nguyen cURL (mode 'curl') — gop ca hai duong ve mot curlRaw duy nhat.
+//
+// NHUNG ba o rieng chi duoc dung len curlRaw khi HEADERS CHUNG khong tu khai
+// danh tinh. Ly do: truoc thay doi nay authHeaderPairs tra [] cho mode
+// 'fields', nen ba o do KHONG BAO GIO duoc gui di — cau hinh nao vua co ba o
+// vua co cURL o HEADERS CHUNG thi thu dang chay that la cai cURL, con ba o
+// chi la rac con sot tu phien truoc. Dung chung len curlRaw se de nguoc len
+// HEADERS CHUNG (auth thang global) va gui token het han -> 401 hang loat.
+function legacyAuthToCurlRaw(a, incoming) {
+  const own = String(a?.curlRaw ?? '').trim();
+  if (own !== '') return String(a.curlRaw);
+  return globalHeadersCarryIdentity(incoming) ? '' : curlFromLegacyFields(a);
+}
+
+// Ban cu luu credential o ba khoa phang cua state, hoac tren tung auth
+// profile — gop tat ca ve mot curlRaw + role moi. Xem
+// docs/superpowers/specs/2026-08-03-auth-single-cookie-design.md.
 function migrateAuths(target, incoming) {
   const saved = Array.isArray(incoming?.auths) ? incoming.auths : [];
   target.auths = saved.length > 0
-    ? saved.map((a) => ({ ...makeAuth(), ...a }))
-    : [makeAuth({
-      name: 'Default',
-      token: String(incoming?.token ?? ''),
-      cookie: String(incoming?.cookie ?? ''),
-      refreshToken: String(incoming?.refreshToken ?? ''),
-    })];
+    // Trai len makeAuth() de auth cu thieu khoa nao — nhat la `id`, thu
+    // selectedAuths loc theo — van duoc cap gia tri hop le thay vi undefined.
+    ? saved.map((a) => makeAuth({
+      ...(a.id ? { id: a.id } : {}),
+      name: a.name ?? '',
+      role: a.role ?? '',
+      curlRaw: legacyAuthToCurlRaw(a, incoming),
+    }))
+    : [makeAuth({ name: 'Default', curlRaw: curlFromLegacyFields(incoming) })];
 
   delete target.token;
   delete target.cookie;
@@ -255,12 +344,18 @@ export function load() {
       usecase2: {
         ...base.permissionMapping?.usecase2,
         ...(saved.permissionMapping?.usecase2 ?? {})
+      },
+      usecase3: {
+        ...base.permissionMapping?.usecase3,
+        ...(saved.permissionMapping?.usecase3 ?? {})
       }
     }
   });
   migrateAuths(state, saved);
   migratePermissionFile(state, saved);
   migrateSavedConfig(saved);
+  migrateCommonEndpoints(state, saved);
+  delete state.commonEndpoints;
 
   // Cau hinh cu dung khoa concurrency, doc sang workerCount.
   if (saved.advanced?.workerCount === undefined && saved.advanced?.concurrency !== undefined) {
@@ -283,12 +378,18 @@ export function applyConfig(incoming) {
       usecase2: {
         ...base.permissionMapping?.usecase2,
         ...(incoming.permissionMapping?.usecase2 ?? {})
+      },
+      usecase3: {
+        ...base.permissionMapping?.usecase3,
+        ...(incoming.permissionMapping?.usecase3 ?? {})
       }
     }
   });
   migrateAuths(state, incoming);
   migratePermissionFile(state, incoming);
   migrateSavedConfig(incoming);
+  migrateCommonEndpoints(state, incoming);
+  delete state.commonEndpoints;
 
   // Cau hinh cu dung khoa concurrency, doc sang workerCount.
   if (incoming.advanced?.workerCount === undefined && incoming.advanced?.concurrency !== undefined) {

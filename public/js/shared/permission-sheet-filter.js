@@ -1,18 +1,19 @@
 // Loc thuan cho bang phan quyen RAW (khac permission-filter-logic.js — do loc
-// ket qua CHECK PERM). Cot role lay tu UC1 mappings, quy uoc 'x' phai khop
-// dung evaluateUc2Permission ben server (src/server/http-client.js) — mot
-// nguon su that duy nhat cho "co quyen".
+// ket qua CHECK PERM). Cot role suy tu usecase1[].permissionColumn — cung
+// nguon UC1 quyet dinh pool CHECK PERM (xem permission-match.js). Quy uoc 'x'
+// phai khop dung evaluateUc2Permission ben server (src/server/http-client.js).
 
-// {index,name} cua tung cot role, thu tu header, khu trung khi hai mapping
-// UC1 cung tro ve mot cot.
+// {index,name}[] — moi cot duoc khai o UC1, khu trung, giu thu tu header.
 export function roleColumns(headers, uc1) {
-  const seen = new Map();
+  const seen = new Set();
+  const out = [];
   for (const m of uc1 ?? []) {
-    const idx = (headers ?? []).indexOf(m.permissionColumn);
-    if (idx === -1 || seen.has(idx)) continue;
-    seen.set(idx, headers[idx]);
+    const index = (headers ?? []).indexOf(m.permissionColumn);
+    if (index === -1 || seen.has(index)) continue;
+    seen.add(index);
+    out.push({ index, name: headers[index] });
   }
-  return [...seen.entries()].sort((a, b) => a[0] - b[0]).map(([index, name]) => ({ index, name }));
+  return out;
 }
 
 export function roleColumnIndexes(headers, uc1) {
@@ -30,11 +31,32 @@ export function rowHasPermission(row, roleIdxs) {
 }
 
 export function emptySheetFilter() {
-  return { granted: true, denied: true };
+  return { granted: true, denied: true, search: '' };
 }
 
-export function applySheetFilter(rows, roleIdxs, filter) {
+// idIdx: cot dinh danh (cot dau tien hien thi) — search CHI loc tren cot nay,
+// khong dung cho cot role. Bo qua khi idIdx = -1 (chua chon cot dinh danh).
+export function applySheetFilter(rows, roleIdxs, filter, idIdx = -1) {
+  const search = String(filter.search ?? '').trim().toLowerCase();
   return rows
     .map((row, index) => ({ row, index, granted: rowHasPermission(row, roleIdxs) }))
-    .filter((r) => (r.granted ? filter.granted : filter.denied));
+    .filter((r) => (r.granted ? filter.granted : filter.denied))
+    .filter((r) => (!search || idIdx === -1
+      ? true
+      : String(r.row[idIdx] ?? '').toLowerCase().includes(search)));
+}
+
+// Gia tri cot dinh danh (bename) cua cac dong dang hien theo filter YES/NO —
+// nguon cho nut Check o main.js. Bo dong rong, khu trung.
+export function visibleIdentifierValues(headers, rows, uc1, uc2, sheetFilter) {
+  const idIdx = identifierColumnIndex(headers, uc2);
+  if (idIdx === -1) return [];
+  const roleIdxs = roleColumnIndexes(headers, uc1);
+  const visible = applySheetFilter(rows, roleIdxs, sheetFilter, idIdx);
+  const names = new Set();
+  for (const v of visible) {
+    const val = String(v.row[idIdx] ?? '').trim();
+    if (val) names.add(val);
+  }
+  return [...names];
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toCurl, curlFilename } from '../public/js/shared/curl.js';
+import { toCurl, curlOf, curlFilename } from '../public/js/shared/curl.js';
 
 function record(over = {}) {
   return {
@@ -74,4 +74,47 @@ test('curlFilename chen ten profile de hai profile khong trung ten file', () => 
 test('curlFilename bo qua authName rong', () => {
   const rec = { index: 1, endpointName: 'X', msisdn: '', authName: '' };
   assert.equal(curlFilename(rec), 'curl-1-x.txt');
+});
+
+test('curlFilename kind oracle them hau to checkperm', () => {
+  const rec = { index: 3, endpointName: 'Tra cứu', msisdn: '0912345678', authName: 'PROD-A' };
+  assert.equal(curlFilename(rec, 'oracle'), 'curl-3-tra-cuu-0912345678-prod-a-checkperm.txt');
+});
+
+test('curlFilename kind business (mac dinh) khong them hau to', () => {
+  const rec = { index: 3, endpointName: 'Tra cứu' };
+  assert.equal(curlFilename(rec, 'business'), curlFilename(rec));
+});
+
+test('curlOf dung request truc tiep, khong can boc trong rec.request', () => {
+  const cmd = curlOf({
+    method: 'POST',
+    url: 'https://api.vn/iam/engage/checkPermission',
+    headers: { Cookie: 'access_token=abc' },
+    body: '{"a":1}',
+  });
+  assert.equal(cmd, [
+    "curl --location --request POST 'https://api.vn/iam/engage/checkPermission'",
+    "  --header 'Cookie: access_token=abc'",
+    `  --data-raw '{"a":1}'`,
+  ].join(' \\\n'));
+});
+
+test('curlOf chiu duoc request undefined', () => {
+  assert.equal(curlOf(undefined), "curl --location --request GET ''");
+});
+
+test('toCurl van dung nguyen chu ky cu — doc tu rec.request', () => {
+  assert.equal(toCurl(record()), curlOf(record().request));
+});
+
+test('parseCurlRequest doc duoc URL cua Copy as cURL (cmd) tren Windows', async () => {
+  const { parseCurlRequest } = await import('../public/js/shared/curl-parse.js');
+  const text = 'curl ^"https://api-dev-oda.vnpt.vn/iam/engage/checkPermission^" ^\n'
+    + '  -H ^"Content-Type: application/json^" ^\n'
+    + '  --data-raw ^"{\^"a\^":1}^"';
+  const parsed = parseCurlRequest(text);
+  assert.equal(parsed.url, 'https://api-dev-oda.vnpt.vn/iam/engage/checkPermission');
+  assert.equal(parsed.headers['Content-Type'], 'application/json');
+  assert.equal(parsed.method, 'POST');
 });

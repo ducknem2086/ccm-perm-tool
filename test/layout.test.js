@@ -69,7 +69,7 @@ test('CSS dinh nghia cfg-row hai cot 1fr 2fr', () => {
   assert.match(readCss(), /\.cfg-row\s*\{[^}]*grid-template-columns:\s*1fr\s+2fr/);
 });
 
-test('topbar gom ca tabs-left, tabs-right (run-filter-bar) va topbar-right (btn-run, run-breakdown, btn-export-config, btn-import-config)', () => {
+test('topbar gom ca tabs-left, tabs-right (run-filter-bar) va topbar-right (btn-run, run-breakdown, btn-check-perm)', () => {
   const html = readHtml();
   const topbar = html.match(/<header class="topbar">([\s\S]*?)<\/header>/);
   assert.ok(topbar, 'phai co topbar');
@@ -78,19 +78,40 @@ test('topbar gom ca tabs-left, tabs-right (run-filter-bar) va topbar-right (btn-
   assert.ok(topbar[1].includes('id="run-filter-bar"'), 'phai co run-filter-bar');
   assert.ok(topbar[1].includes('id="btn-run"'), 'phai co btn-run');
   assert.ok(topbar[1].includes('id="run-breakdown"'), 'phai co run-breakdown');
-  assert.ok(topbar[1].includes('id="btn-export-config"'), 'phai co btn-export-config');
-  assert.ok(topbar[1].includes('id="btn-import-config"'), 'phai co btn-import-config');
+  assert.ok(topbar[1].includes('id="btn-check-perm"'), 'btn-check-perm phai dung canh btn-run o topbar');
   assert.ok(!topbar[1].includes('id="token-indicator"'), 'khong duoc co token-indicator');
   assert.ok(!topbar[1].includes('id="btn-reload-token"'), 'khong duoc co btn-reload-token');
+  assert.ok(!topbar[1].includes('id="btn-export-config"'), 'btn-export-config da doi vao BODY CHUNG, khong con o topbar');
+  assert.ok(!topbar[1].includes('id="btn-import-config"'), 'btn-import-config da doi vao BODY CHUNG, khong con o topbar');
 });
 
-test('co tab CHECK PERMISSION, panel-perm, nut btn-check-perm va btn-perm-export', () => {
+test('co tab CHECK PERMISSION, panel-perm, nut btn-perm-export', () => {
   const html = readHtml();
   assert.ok(html.includes('id="tab-perm"'), 'phai co tab-perm');
   assert.ok(html.includes('id="panel-perm"'), 'phai co panel-perm');
-  assert.ok(html.includes('id="btn-check-perm"'), 'phai co nut btn-check-perm');
   assert.ok(html.includes('id="btn-perm-export"'), 'phai co nut btn-perm-export');
   assert.ok(html.includes('id="perm-table"'), 'phai co bang perm-table');
+});
+
+test('panel-perm gom canh bao khong khop phan quyen chung 1 runbar voi nut Check/Dung/Export', () => {
+  const html = readHtml();
+  const panelMatch = html.match(/<section id="panel-perm"[\s\S]*?<div id="perm-split"/);
+  assert.ok(panelMatch, 'phai tim thay block panel-perm truoc perm-split');
+  assert.ok(!panelMatch[0].includes('id="btn-check-perm"'), 'btn-check-perm da doi ve topbar, khong con trong panel-perm');
+  assert.ok(panelMatch[0].includes('id="btn-perm-check"'), 'nut Check (loc hang loat) phai nam trong panel-perm');
+  assert.ok(panelMatch[0].includes('id="perm-warnings"'), 'phai co the hien canh bao truc tiep, khong chi qua tooltip');
+
+  const runbarMatch = panelMatch[0].match(/<div class="runbar">([\s\S]*?)<\/div>\s*<\/div>/);
+  assert.ok(runbarMatch, 'phai tim thay runbar cua panel-perm');
+  assert.ok(runbarMatch[0].includes('id="perm-warnings"'), 'perm-warnings phai nam trong cung runbar voi nut Check/Dung/Export');
+});
+
+test('BODY CHUNG (card-connection) chua 2 nut export/import config', () => {
+  const html = readHtml();
+  const cardMatch = html.match(/<section class="card" id="card-connection">[\s\S]*?<\/section>/);
+  assert.ok(cardMatch, 'phai tim thay card-connection');
+  assert.ok(cardMatch[0].includes('id="btn-export-config"'), 'btn-export-config phai nam trong card CONNECTION/BODY CHUNG');
+  assert.ok(cardMatch[0].includes('id="btn-import-config"'), 'btn-import-config phai nam trong card CONNECTION/BODY CHUNG');
 });
 
 test('panel-perm chia split-pane voi bang phan quyen va 2 checkbox loc', () => {
@@ -100,20 +121,29 @@ test('panel-perm chia split-pane voi bang phan quyen va 2 checkbox loc', () => {
   assert.ok(html.includes('id="perm-sheet-table"'), 'phai co bang perm-sheet-table');
   assert.ok(html.includes('id="chk-perm-granted"'), 'phai co checkbox chk-perm-granted');
   assert.ok(html.includes('id="chk-perm-denied"'), 'phai co checkbox chk-perm-denied');
-  assert.ok(html.includes('id="btn-perm-col-filter"'), 'phai co nut btn-perm-col-filter');
-  assert.ok(html.includes('id="perm-col-popup"'), 'phai co popup perm-col-popup');
+  assert.ok(!html.includes('id="btn-perm-col-filter"'), 'nut Cot hien thi da bi bo — mot nguon su that voi checklist o tab INPUT');
 });
 
-test('mac dinh mo tab chi tich Khong quyen, bo tich Co quyen', () => {
+// Bang phan quyen RAW la anh chup nguyen file: quet MOI dong, 'x' la co,
+// con lai la khong. Mac dinh bo tich mot ve lam bang trong ra mot nua va doc
+// nham thanh "khong quet het dong" — de ca hai tich, nguoi dung tu thu hep.
+test('mac dinh mo tab tich ca Co quyen lan Khong quyen', () => {
   const html = readHtml();
-  assert.match(html, /id="chk-perm-granted"\s+type="checkbox"\s*\/>/, 'chk-perm-granted phai KHONG co checked mac dinh');
+  assert.match(html, /id="chk-perm-granted"\s+type="checkbox"\s+checked\s*\/>/, 'chk-perm-granted phai co checked mac dinh');
   assert.match(html, /id="chk-perm-denied"\s+type="checkbox"\s+checked\s*\/>/, 'chk-perm-denied phai co checked mac dinh');
 });
 
-test('UC2 co du 4 select: cot Name, sheet tham chieu, cot dich, cot khu trung', () => {
+test('UC2 co du 3 select: cot Name, sheet tham chieu, cot dich', () => {
   const html = readHtml();
   assert.ok(html.includes('id="sel-permissions-name-col"'), 'phai co sel-permissions-name-col');
   assert.ok(html.includes('id="sel-permissions-endpoint-sheet"'), 'phai co sel-permissions-endpoint-sheet');
   assert.ok(html.includes('id="sel-permissions-endpoint-col"'), 'phai co sel-permissions-endpoint-col');
-  assert.ok(html.includes('id="sel-permissions-dedupe-col"'), 'phai co sel-permissions-dedupe-col');
+  assert.ok(!html.includes('id="sel-permissions-dedupe-col"'), 'CHECK PERM khong con khu trung theo cot cau hinh');
+});
+
+test('khong con radio chon pham vi CHECK PERM va checklist cot role — mot luong duy nhat', () => {
+  const html = readHtml();
+  assert.ok(!html.includes('id="rad-perm-mode-all"'), 'radio mode da bi bo — mot luong duy nhat');
+  assert.ok(!html.includes('id="rad-perm-mode-mapping"'));
+  assert.ok(!html.includes('id="permissions-role-cols"'), 'checklist cot role da bi bo — cot role suy tu UC1');
 });

@@ -135,7 +135,7 @@ export function evaluatePermission({ req, status, permissionFile, permissionMapp
 }
 
 function finalize({
-  req, startedAt, t0,
+  req, startedAt, t0, oracle = null,
   status = null, statusText = '', resHeaders = {},
   body = null, bodyText = '',
   redirected = false, finalUrl = '',
@@ -144,6 +144,9 @@ function finalize({
   permissionFile = null,
   permissionMapping = null,
 }) {
+  // KHONG doc oracle — cong thuc cham diem giu nguyen tu truoc thay doi nay,
+  // chi doc status cua request nghiep vu. Oracle la cot thong tin dat canh,
+  // khong phai nguon chấm điểm moi.
   const statusPermission = evaluatePermission({ req, status, permissionFile, permissionMapping });
   // CHECK PERM dat permName: null cho endpoint khong dong UC2 nao keo ve. Dung
   // '??' o day thi no roi xuong matchPermissionName — ham khop EXACT thuoc
@@ -182,6 +185,29 @@ function finalize({
       redirected,
       finalUrl: finalUrl || req.url,
     },
+    // Status THO cua endpoint checkPermission chung, dat canh response de
+    // nguoi doc tu doi chieu. null khi endpoint khong co function (khong goi
+    // checkPermission) — KHONG co cong thuc nao doc tu day.
+    oracle: req.oracle ? {
+      request: {
+        method: req.oracle.method ?? null,
+        url: req.oracle.url ?? null,
+        headers: req.oracle.headers ?? {},
+        body: req.oracle.body ?? null,
+      },
+      status: oracle?.status ?? null,
+      statusText: oracle?.statusText ?? '',
+      headers: oracle?.resHeaders ?? {},
+      body: oracle?.body ?? null,
+      bodyText: oracle?.bodyText ?? '',
+      sizeBytes: Buffer.byteLength(oracle?.bodyText ?? '', 'utf8'),
+      redirected: oracle?.redirected ?? false,
+      finalUrl: oracle?.finalUrl || req.oracle.url || '',
+      errorCode: oracle?.errorCode ?? null,
+      errorMessage: oracle?.errorMessage ?? null,
+    } : null,
+    oracleFunction: req.oracle?.permFunction ?? null,
+    oracleAction: req.oracle?.permAction ?? null,
     statusPermission,
     permissionMatchedName,
     errorCode: errorCode ?? extractErrorCode(body, errorCodePaths),
@@ -192,23 +218,20 @@ function finalize({
   };
 }
 
-export async function sendRequest(req, options = {}) {
-  const {
-    timeoutMs = 30000, signal, errorCodePaths = DEFAULT_ERROR_CODE_PATHS,
-    permissionFile = null, permissionMapping = null,
-  } = options;
-  const startedAt = new Date();
-  const t0 = performance.now();
+// Goi mot request tho, tra ket qua tho — khong dung toi req.index/permRun/...
+// Dung chung cho ca request nghiep vu lan request oracle (sendPair goi ham
+// nay hai lan). Tach khoi finalize() de finalize chi lo dung record, khong lo
+// goi mang.
+async function send(req, options = {}) {
+  const { timeoutMs = 30000, signal, errorCodePaths = DEFAULT_ERROR_CODE_PATHS } = options;
 
   if (req.unresolved?.length) {
-    return finalize({
-      req, startedAt, t0,
+    return {
+      status: null, statusText: '', resHeaders: {}, body: null, bodyText: '',
+      redirected: false, finalUrl: req.url ?? '',
       errorCode: 'UNRESOLVED_VAR',
       errorMessage: `Thiếu giá trị cho biến: ${req.unresolved.join(', ')}`,
-      errorCodePaths,
-      permissionFile,
-      permissionMapping,
-    });
+    };
   }
 
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -251,8 +274,7 @@ export async function sendRequest(req, options = {}) {
       : null;
     logDiagnostic(req, { status: res.status, resHeaders, hint, redirected, finalUrl });
 
-    return finalize({
-      req, startedAt, t0,
+    return {
       status: res.status,
       statusText: res.statusText,
       resHeaders,
@@ -260,23 +282,51 @@ export async function sendRequest(req, options = {}) {
       redirected, finalUrl,
       errorCode: hint?.code ?? null,
       errorMessage: hint?.message ?? null,
-      errorCodePaths,
-      permissionFile,
-      permissionMapping,
-    });
+    };
   } catch (err) {
     let code;
     if (signal?.aborted) code = 'ABORTED';
     else if (timeoutSignal.aborted) code = 'ETIMEDOUT';
     else code = err.code || err.cause?.code || 'EFETCH';
 
-    return finalize({
-      req, startedAt, t0,
+    return {
+      status: null, statusText: '', resHeaders: {}, body: null, bodyText: '',
+      redirected: false, finalUrl: req.url,
       errorCode: code,
       errorMessage: err.message || String(err),
-      errorCodePaths,
-      permissionFile,
-      permissionMapping,
-    });
+    };
   }
+}
+
+// Diem vao cua worker (thay sendRequest cu). Chay oracle TRUOC: no khong doi
+// trang thai gi tren he thong dich (chi hoi quyen), nen khi request nghiep vu
+// la POST/DELETE thi thu tu nay tranh duoc canh "da ghi du lieu roi moi biet
+// la khong duoc phep". Mot nua cap chet khong keo nua kia theo — request
+// nghiep vu van chay du oracle loi mang/timeout.
+export async function sendPair(req, options = {}) {
+  const {
+    errorCodePaths = DEFAULT_ERROR_CODE_PATHS,
+    permissionFile = null, permissionMapping = null,
+    ...sendOpts
+  } = options;
+  const startedAt = new Date();
+  const t0 = performance.now();
+
+  let oracle = null;
+  if (req.oracle) {
+    oracle = req.oracle.error
+      ? {
+        status: null, statusText: '', resHeaders: {}, body: null, bodyText: '',
+        redirected: false, finalUrl: req.oracle.url ?? '',
+        errorCode: req.oracle.error,
+        errorMessage: 'Body cURL check permission không hợp lệ — thiếu permissionSpecification',
+      }
+      : await send(req.oracle, sendOpts);
+  }
+
+  const main = await send(req, sendOpts);
+
+  return finalize({
+    req, startedAt, t0, oracle, ...main, errorCodePaths, permissionFile, permissionMapping,
+  });
 }

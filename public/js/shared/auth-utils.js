@@ -1,16 +1,17 @@
 import { parseRawHeaders } from './endpoint-path.js';
+import { identityOf } from './auth-identity.js';
 
-// Mode 'curl' khong luu mang header da parse — parse lai tu curlRaw moi lan
-// dung, giong cach globalHeaderRaw dang chay. Mot nguon su that duy nhat.
+// Auth profile khong con mode — mot cURL la nguon danh tinh duy nhat, parse
+// lai tu curlRaw moi lan dung giong cach globalHeaderRaw dang chay.
 export function authHeaderPairs(auth) {
-  return (auth?.mode ?? 'fields') === 'curl' ? parseRawHeaders(auth?.curlRaw ?? '') : [];
+  return parseRawHeaders(auth?.curlRaw ?? '');
 }
 
+// Dung dung thu decide chay duoc hay khong: co access_token trong cookie,
+// khong phai "co header Authorization" — checkPermission xac thuc bang
+// cookie, khong bang Authorization (xem auth-identity.js).
 export function hasToken(auth) {
-  if ((auth?.mode ?? 'fields') === 'curl') {
-    return authHeaderPairs(auth).some((p) => p.key.toLowerCase() === 'authorization');
-  }
-  return String(auth?.token ?? '').trim() !== '';
+  return identityOf(auth) !== null;
 }
 
 // Phan biet hoa thuong: 'PROD' va 'prod' la hai profile khac nhau, nguoi dung

@@ -22,8 +22,8 @@ test('countRequests coi thieu attachMsisdn la true', () => {
   assert.equal(countRequests(st([{ enabled: true }])), 2);
 });
 
-test('countRequests bo qua endpoint bi tat', () => {
-  assert.equal(countRequests(st([{ enabled: false, attachMsisdn: true }])), 0);
+test('countRequests van dem endpoint bi bo tick — checkbox khong thu hep pham vi chay', () => {
+  assert.equal(countRequests(st([{ enabled: false, attachMsisdn: true }])), 2);
 });
 
 test('countRequests cong don nhieu endpoint', () => {

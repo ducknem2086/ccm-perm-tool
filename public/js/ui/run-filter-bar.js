@@ -1,5 +1,5 @@
 import { state, persist, notify } from '../state.js';
-import { filterEndpoints, filterMsisdns, selectedAuths } from '../shared/run-filter.js';
+import { filterEndpoints, filterMsisdns, selectedAuths, businessCommonText } from '../shared/run-filter.js';
 
 const MAX_SUGGEST = 20;
 
@@ -160,7 +160,10 @@ export function initRunFilterBar() {
     host.replaceChildren(msisdnGroup(), authGroup());
     if (!breakdown) return;
     const f = filter();
-    const e = filterEndpoints(state.endpoints, f, state.selectedSheet, state.commonEndpoints, state.commonEndpointsEnabled).length;
+    const e = filterEndpoints(
+      state.endpoints, f, state.selectedSheet,
+      businessCommonText(state.commonEndpointList), state.commonEndpointsEnabled,
+    ).length;
     const m = filterMsisdns(state.msisdns, f).length;
     const a = selectedAuths(state.auths, f).length;
     breakdown.textContent = `${e} endpoint × ${m} msisdn × ${a} auth`;

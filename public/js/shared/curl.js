@@ -4,8 +4,10 @@
 
 const quote = (s) => `'${String(s ?? '').replace(/'/g, "'\\''")}'`;
 
-export function toCurl(rec) {
-  const req = rec?.request ?? {};
+// Dung cho ca request nghiep vu lan request oracle (checkPermission) — hai
+// khoi dung chung mot hinh dang { method, url, headers, body }.
+export function curlOf(request) {
+  const req = request ?? {};
   const method = String(req.method || 'GET').toUpperCase();
   const parts = [`curl --location --request ${method} ${quote(req.url)}`];
 
@@ -21,6 +23,8 @@ export function toCurl(rec) {
   return parts.join(' \\\n  ');
 }
 
+export const toCurl = (rec) => curlOf(rec?.request);
+
 // Bo dau tieng Viet roi thay moi cum ky tu la bang '-' de ten file an toan
 // tren ca Windows lan Linux.
 const slug = (s) => String(s ?? '')
@@ -31,12 +35,13 @@ const slug = (s) => String(s ?? '')
   .replace(/^-+|-+$/g, '')
   .toLowerCase();
 
-export function curlFilename(rec) {
+export function curlFilename(rec, kind = 'business') {
   const parts = [
     `curl-${rec?.index ?? 0}`,
     slug(rec?.endpointName),
     slug(rec?.msisdn),
     slug(rec?.authName),
+    kind === 'oracle' ? 'checkperm' : null,
   ];
   return `${parts.filter(Boolean).join('-')}.txt`;
 }

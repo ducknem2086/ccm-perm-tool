@@ -116,7 +116,7 @@ export function registerRoutes(app) {
     const run = getRun(req.params.runId);
     if (!run) return res.status(404).json({ error: 'Không tìm thấy run' });
 
-    const { indexes, includeToken = false } = req.body ?? {};
+    const { indexes, includeToken = false, layout = 'default' } = req.body ?? {};
     const keep = Array.isArray(indexes) && indexes.length > 0 ? new Set(indexes) : null;
     const records = run.results
       .filter((r) => (keep ? keep.has(r.index) : true))
@@ -128,7 +128,7 @@ export function registerRoutes(app) {
 
     try {
       const hasPermission = Boolean(run.options?.permissionFile?.filename);
-      await writeResultsToStream(res, records, { includeToken: Boolean(includeToken), hasPermission });
+      await writeResultsToStream(res, records, { includeToken: Boolean(includeToken), hasPermission, layout });
     } catch (err) {
       console.error('Export that bai:', err);
       if (!res.headersSent) res.status(500).json({ error: err.message });

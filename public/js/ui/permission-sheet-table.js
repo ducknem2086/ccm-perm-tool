@@ -111,7 +111,7 @@ export function initPermissionSheetTable({
       }
 
       const roleIdxSet = new Set(allRoleCols.map((c) => c.index));
-      const visible = applySheetFilter(rows, [...roleIdxSet], getFilter());
+      const visible = applySheetFilter(rows, [...roleIdxSet], getFilter(), idIdx);
 
       if (visible.length === 0) {
         tbody.replaceChildren(emptyRow('Chưa có dòng nào khớp bộ lọc.'));

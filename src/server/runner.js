@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { sendRequest } from './http-client.js';
+import { sendPair } from './http-client.js';
 import { runPool, MAX_INFLIGHT } from './worker-pool.js';
 
 const runs = new Map();
@@ -99,7 +99,7 @@ async function runInline(run, push, concurrency) {
       if (run.controller.signal.aborted) return;
       const req = queue.shift();
       if (done.has(req.index)) continue;
-      const record = await sendRequest(req, {
+      const record = await sendPair(req, {
         timeoutMs: run.options.timeoutMs,
         signal: run.controller.signal,
         errorCodePaths: run.options.errorCodePaths,

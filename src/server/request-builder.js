@@ -4,8 +4,12 @@ import { isEndpointPath } from '../../public/js/shared/validators.js';
 import {
   splitTemplate, parseInlineQuery, hasMsisdnPlaceholder, parseRawHeaders,
 } from '../../public/js/shared/endpoint-path.js';
-import { filterEndpoints, filterMsisdns, selectedAuths, parseCommonEndpoints } from '../../public/js/shared/run-filter.js';
+import {
+  filterEndpoints, filterMsisdns, selectedAuths, parseCommonEndpoints, businessCommonText,
+} from '../../public/js/shared/run-filter.js';
 import { authHeaderPairs, findDuplicateNames } from '../../public/js/shared/auth-utils.js';
+import { identityOf, authCookieString } from '../../public/js/shared/auth-identity.js';
+import { parseCurlRequest } from '../../public/js/shared/curl-parse.js';
 
 // Endpoint cu chua co field nay thi mac dinh la co gan msisdn.
 const wantsMsisdn = (ep) => ep?.attachMsisdn !== false;
@@ -23,8 +27,12 @@ export function validateConfig(config) {
   if (!range.ok) errors.push({ field: 'dateRange', message: range.error });
 
   const commonEndpointsEnabled = config?.commonEndpointsEnabled;
-  const common = commonEndpointsEnabled !== false ? parseCommonEndpoints(config?.commonEndpoints) : [];
-  const enabled = (config?.endpoints ?? []).filter((e) => e.enabled);
+  // commonEndpointList thay cho chuoi commonEndpoints cu — noi lai text cua
+  // rieng muc 'business', dong 'oracle' khong bao gio vao pool nay.
+  const commonEndpointsText = businessCommonText(config?.commonEndpointList);
+  const common = commonEndpointsEnabled !== false ? parseCommonEndpoints(commonEndpointsText) : [];
+  // Moi endpoint deu tinh — checkbox enabled khong con thu hep pham vi chay.
+  const enabled = config?.endpoints ?? [];
   if (enabled.length === 0 && common.length === 0) {
     errors.push({ field: 'endpoints', message: 'Cần bật ít nhất 1 endpoint hoặc có endpoint chung' });
   }
@@ -76,7 +84,6 @@ export function validateConfig(config) {
   // roi bao "xong".
   const runFilter = config?.runFilter ?? {};
   const selectedSheet = config?.selectedSheet;
-  const commonEndpointsText = config?.commonEndpoints;
   const hasRows = selectedAuths(auths, runFilter).length > 0
     && filterEndpoints(config?.endpoints, runFilter, selectedSheet, commonEndpointsText, commonEndpointsEnabled).length > 0
     && (filterMsisdns(msisdns, runFilter).length > 0
@@ -173,6 +180,100 @@ function putIfAbsent(headers, name, value) {
   headers[name] = value;
 }
 
+// Xoa header theo ten khong phan biet hoa/thuong — dung khi doi danh tinh
+// tu cURL mau sang auth dang chay (xem buildOracleRequest).
+function deleteHeaderCI(headers, name) {
+  const lower = name.toLowerCase();
+  for (const k of Object.keys(headers)) if (k.toLowerCase() === lower) delete headers[k];
+}
+
+// Sub-request oracle di kem request nghiep vu, dinh vao req.oracle boi
+// buildOne — chay trong CUNG mot task worker, khong phai mot phan tu rieng
+// trong mang requests (xem sendPair, http-client.js).
+//
+// cURL mau o ENDPOINTS CHUNG la KHUON cua request: URL, toan bo header
+// (Origin/Referer/X-Current-Url/Sec-Fetch-Site... cua app THAT) va body
+// skeleton. Chi DANH TINH bi thay bang danh tinh cua auth dang chay.
+//
+// Khong tu dung request tu dau: Origin/Referer/X-Current-Url khi do roi ve
+// origin cua chinh tool (localhost:9000) va Sec-Fetch-Site thanh 'cross-site',
+// IAM sau WAF tra 401. Do la ly do khuon phai giu — xem bang doi soat trong
+// docs/superpowers/specs/2026-08-03-auth-single-cookie-design.md.
+function buildOracleRequest({ config, auth, endpoint }) {
+  const fn = String(endpoint.oracleFunction ?? '').trim();
+  if (!fn) return null;
+
+  const tpl = config?.oracleTemplate;
+  if (!tpl) return null;
+
+  const id = identityOf(auth);
+  if (!id?.individualId || !id?.accountId) return { error: 'ORACLE_IDENTITY_MISSING' };
+  const role = String(auth?.role ?? '').trim();
+  if (!role) return { error: 'ORACLE_ROLE_MISSING' };
+
+  const curlRaw = String(tpl.curlRaw ?? '').trim();
+  const parsed = curlRaw ? parseCurlRequest(curlRaw) : null;
+  if (curlRaw && !parsed) return { error: 'ORACLE_TEMPLATE_INVALID' };
+
+  // Khuon body lay tu cURL mau de giu nguyen @type va moi field la neu IAM
+  // doi schema; khong co mau thi dung khuon toi thieu da biet.
+  let body = null;
+  if (parsed?.body) {
+    try { body = JSON.parse(parsed.body); } catch { body = null; }
+  }
+  if (!body?.permissionSpecification) {
+    body = {
+      '@type': 'CheckPermission',
+      permissionSpecification: { '@type': 'PermissionSpecification' },
+      user: { '@type': 'PartyRef' },
+    };
+  }
+
+  body.permissionSpecification.function = fn;
+  // Cot ACTION rong = giu nguyen action cua cURL mau; khong co mau thi 'Read'
+  // (gia tri ca hai cURL checkPermission that dang dung).
+  const action = String(endpoint.oracleAction ?? '').trim()
+    || String(body.permissionSpecification.action ?? '').trim()
+    || 'Read';
+  body.permissionSpecification.action = action;
+  // user cua cURL mau thuoc VE NGUOI DA DAN — ba khoa danh tinh phai doi sang
+  // auth dang chay, cac khoa khac trong khoi user giu nguyen.
+  body.user = { ...(body.user ?? {}), role, id: id.individualId, accountId: id.accountId };
+
+  // Header cua khuon truoc, roi moi lap phan con thieu — nguoc lai la de len
+  // Origin/Referer/X-Current-Url that bang gia tri cua tool.
+  const headers = { ...(parsed?.headers ?? {}) };
+  // Danh tinh cua nguoi da dan khuon: bo han. Authorization khong duoc dat
+  // lai — cURL checkPermission that cua FE khong gui header nay.
+  deleteHeaderCI(headers, 'Cookie');
+  deleteHeaderCI(headers, 'Authorization');
+  headers.Cookie = authCookieString(auth);
+
+  putIfAbsent(headers, 'Content-Type', 'application/json');
+  const origin = String(config.origin ?? '').trim().replace(/\/+$/, '');
+  putIfAbsent(headers, 'Origin', origin);
+  putIfAbsent(headers, 'Referer', origin ? `${origin}/` : '');
+  putIfAbsent(headers, 'X-Current-Url', origin ? `${origin}/` : '');
+  for (const [k, v] of Object.entries(BROWSER_HEADERS)) putIfAbsent(headers, k, v);
+
+  // URL tuyet doi trong khuon dung nguyen; khong co khuon thi ghep tu dong
+  // 'METHOD /path' khai o ENDPOINTS CHUNG.
+  const base = String(config.domain ?? '').trim().replace(/\/+$/, '');
+  let method = parsed?.method || 'POST';
+  let url = parsed?.url ?? '';
+  if (!url) {
+    const [line] = parseCommonEndpoints(tpl.line ?? '');
+    if (!line) return { error: 'ORACLE_LINE_INVALID' };
+    method = line.method;
+    url = line.pathTemplate;
+  }
+  if (!/^https?:\/\//i.test(url)) url = `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+
+  return {
+    method, url, headers, body: JSON.stringify(body), permFunction: fn, permAction: action,
+  };
+}
+
 function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
   const missing = new Set();
   const take = (tpl) => {
@@ -203,12 +304,6 @@ function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
   )) {
     headers[take(k)] = take(v);
   }
-
-  // Ba credential nay het han theo phien dang nhap nen nam o profile rieng,
-  // khong nhet vao BROWSER_HEADERS.
-  putIfAbsent(headers, 'Authorization', auth?.token ? `Bearer ${auth.token}` : '');
-  putIfAbsent(headers, 'Cookie', auth?.cookie);
-  putIfAbsent(headers, 'refresh_token', auth?.refreshToken);
 
   const method = (endpoint.method || 'GET').toUpperCase();
   let body = NO_BODY_METHODS.has(method) ? null : buildBody(endpoint, config, take);
@@ -250,6 +345,10 @@ function buildOne({ config, auth, endpoint, msisdn, scope, index }) {
     pathParams: msisdn ? { msisdn } : {},
     body,
     unresolved: [...missing],
+    permName: endpoint.permName ?? null,
+    permRowIndex: endpoint.permRowIndex ?? null,
+    permRun: endpoint.permRun === true,
+    oracle: buildOracleRequest({ config, auth, endpoint }),
   };
 }
 
@@ -267,7 +366,10 @@ export function buildRequests(config) {
   // Loc mot lan roi dung lai — de trong vong lap thi filterMsisdns chay lai
   // auths.length x endpoints.length lan vo ich.
   const auths = selectedAuths(config.auths, runFilter);
-  const eps = filterEndpoints(config.endpoints, runFilter, config.selectedSheet, config.commonEndpoints, config.commonEndpointsEnabled);
+  const eps = filterEndpoints(
+    config.endpoints, runFilter, config.selectedSheet,
+    businessCommonText(config.commonEndpointList), config.commonEndpointsEnabled,
+  );
   const msisdns = filterMsisdns(config.msisdns, runFilter);
 
   const requests = [];

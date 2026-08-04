@@ -49,7 +49,8 @@ test('defaultConfig tra ve cau hinh mac dinh dung chuuan', () => {
   assert.equal(cfg.refreshToken, undefined);
   assert.equal(cfg.auths.length, 1);
   assert.equal(cfg.auths[0].name, 'Default');
-  assert.equal(cfg.auths[0].mode, 'fields');
+  assert.equal(cfg.auths[0].curlRaw, '');
+  assert.equal(cfg.auths[0].role, '');
   assert.deepEqual(cfg.runFilter, { methods: [], msisdnPatterns: [], authIds: [] });
   assert.deepEqual(cfg.dateRange, { from: '', to: '' });
   assert.equal(cfg.dateFormat, 'ddMMyyyy');
@@ -134,13 +135,13 @@ test('persist luu state vao localStorage va load doc lai merge voi defaultConfig
   // Apply state moi
   applyConfig({
     domain: 'https://test.com',
-    auths: [{ id: 'a1', name: 'P', mode: 'fields', token: 'my-token', cookie: '', refreshToken: '', curlRaw: '' }],
+    auths: [{ id: 'a1', name: 'P', curlRaw: "curl 'https://x' -H 'Authorization: Bearer my-token'" }],
     dateRange: { from: '2026-01-01' },
     advanced: { workerCount: 10 }
   });
 
   assert.equal(state.domain, 'https://test.com');
-  assert.equal(state.auths[0].token, 'my-token');
+  assert.match(state.auths[0].curlRaw, /Bearer my-token/);
   assert.equal(state.dateRange.from, '2026-01-01');
   assert.equal(state.dateRange.to, '');
   assert.equal(state.advanced.workerCount, 10);
@@ -152,7 +153,7 @@ test('persist luu state vao localStorage va load doc lai merge voi defaultConfig
 
   load();
   assert.equal(state.domain, 'https://test.com');
-  assert.equal(state.auths[0].token, 'my-token');
+  assert.match(state.auths[0].curlRaw, /Bearer my-token/);
   assert.equal(state.dateRange.from, '2026-01-01');
   assert.equal(state.advanced.workerCount, 10);
 });
@@ -227,10 +228,9 @@ test('load goi config cu thanh auths[0] ten Default', () => {
 
   assert.equal(state.auths.length, 1);
   assert.equal(state.auths[0].name, 'Default');
-  assert.equal(state.auths[0].mode, 'fields');
-  assert.equal(state.auths[0].token, 'TOK');
-  assert.equal(state.auths[0].cookie, 'CK');
-  assert.equal(state.auths[0].refreshToken, 'RF');
+  assert.match(state.auths[0].curlRaw, /Authorization: Bearer TOK/);
+  assert.match(state.auths[0].curlRaw, /Cookie: CK/);
+  assert.match(state.auths[0].curlRaw, /refresh_token: RF/);
 });
 
 test('load xoa ba khoa credential cu khoi state', () => {
@@ -252,7 +252,7 @@ test('load van sinh Default khi ba o credential cu deu rong', () => {
 
   assert.equal(state.auths.length, 1);
   assert.equal(state.auths[0].name, 'Default');
-  assert.equal(state.auths[0].token, '');
+  assert.equal(state.auths[0].curlRaw, '');
 });
 
 test('load khong dung vao auths da co san', () => {
@@ -270,7 +270,7 @@ test('load khong dung vao auths da co san', () => {
   assert.deepEqual(state.auths.map((a) => a.name), ['PROD', 'UAT']);
 });
 
-test('load bu truong con thieu cho auth luu tu ban cu', () => {
+test('load bu truong con thieu cho auth luu tu ban cu — mode fields voi token gop thanh curlRaw', () => {
   setupMockLocalStorage();
   localStorage.setItem('ccm-tool-config', JSON.stringify({
     auths: [{ id: 'a1', name: 'PROD', token: 'T1' }],
@@ -278,9 +278,111 @@ test('load bu truong con thieu cho auth luu tu ban cu', () => {
   Object.assign(state, defaultConfig());
   load();
 
-  assert.equal(state.auths[0].mode, 'fields');
+  assert.match(state.auths[0].curlRaw, /Authorization: Bearer T1/);
+  assert.equal(state.auths[0].role, '');
+  assert.equal(state.auths[0].mode, undefined);
+  assert.equal(state.auths[0].cookie, undefined);
+});
+
+// Auth cu thieu khoa `id` ma khong duoc cap lai thi selectedAuths (loc theo
+// runFilter.authIds) khong khop dong nao -> RUN ALL sinh 0 request.
+test('load cap id moi cho auth cu khong co khoa id', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ name: 'PROD', token: 'T1' }, { name: 'UAT', token: 'T2' }],
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.ok(state.auths[0].id, 'auth thu nhat phai co id');
+  assert.ok(state.auths[1].id, 'auth thu hai phai co id');
+  assert.notEqual(state.auths[0].id, state.auths[1].id);
+});
+
+test('load giu nguyen id cu khi auth cu da co id', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ id: 'a_giu_nguyen', name: 'PROD', token: 'T1' }],
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.auths[0].id, 'a_giu_nguyen');
+});
+
+/* ---------- migrate 3 o rieng: KHONG duoc de len HEADERS CHUNG ---------- */
+
+// Truoc thay doi "mot cURL la nguon danh tinh duy nhat", authHeaderPairs tra
+// [] cho mode 'fields' — ba o rieng KHONG BAO GIO duoc gui di. Cau hinh vua
+// co ba o vua co cURL o HEADERS CHUNG thi thu dang chay that la cURL do.
+// Dung ba o rac len curlRaw se de nguoc len HEADERS CHUNG (auth thang
+// global) va gui token het han -> 401 hang loat.
+const GLOBAL_CURL_CO_DANH_TINH = "curl 'https://x' -H 'Authorization: Bearer MOI' -b 'access_token=MOI'";
+
+test('migrate KHONG dung ba o cu len curlRaw khi HEADERS CHUNG (cURL) da khai danh tinh', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ id: 'a1', name: 'PROD', mode: 'fields', token: 'CU-HET-HAN', cookie: 'ck=cu' }],
+    globalHeaderMode: 'raw',
+    globalHeaderRaw: GLOBAL_CURL_CO_DANH_TINH,
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
   assert.equal(state.auths[0].curlRaw, '');
-  assert.equal(state.auths[0].cookie, '');
+});
+
+test('migrate KHONG dung ba o cu len curlRaw khi HEADERS CHUNG (bang kv) khai Authorization', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ id: 'a1', name: 'PROD', mode: 'fields', token: 'CU-HET-HAN' }],
+    globalHeaderMode: 'kv',
+    globalHeaders: [{ key: 'Authorization', value: 'Bearer MOI', enabled: true }],
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.equal(state.auths[0].curlRaw, '');
+});
+
+test('migrate BO QUA dong HEADERS CHUNG da tat khi xet danh tinh', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ id: 'a1', name: 'PROD', mode: 'fields', token: 'CU' }],
+    globalHeaderMode: 'kv',
+    globalHeaders: [{ key: 'Authorization', value: 'Bearer MOI', enabled: false }],
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.match(state.auths[0].curlRaw, /Authorization: Bearer CU/);
+});
+
+test('migrate VAN dung ba o cu len curlRaw khi HEADERS CHUNG khong khai danh tinh', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ id: 'a1', name: 'PROD', mode: 'fields', token: 'CU', cookie: 'ck=1' }],
+    globalHeaderMode: 'raw',
+    globalHeaderRaw: "curl 'https://x' -H 'X-Tenant: vnpt'",
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.match(state.auths[0].curlRaw, /Authorization: Bearer CU/);
+  assert.match(state.auths[0].curlRaw, /Cookie: ck=1/);
+});
+
+test('auth da dan cURL rieng luon duoc giu, ke ca khi HEADERS CHUNG co danh tinh', () => {
+  setupMockLocalStorage();
+  localStorage.setItem('ccm-tool-config', JSON.stringify({
+    auths: [{ id: 'a1', name: 'PROD', mode: 'curl', token: '', curlRaw: "curl 'https://x' -H 'Authorization: Bearer TU-AUTH'" }],
+    globalHeaderMode: 'raw',
+    globalHeaderRaw: GLOBAL_CURL_CO_DANH_TINH,
+  }));
+  Object.assign(state, defaultConfig());
+  load();
+
+  assert.match(state.auths[0].curlRaw, /Bearer TU-AUTH/);
 });
 
 test('load bu runFilter con thieu', () => {
@@ -297,7 +399,7 @@ test('applyConfig migrate config cu giong load', () => {
   applyConfig({ domain: 'https://api-abc.vn', token: 'TOK' });
 
   assert.equal(state.auths[0].name, 'Default');
-  assert.equal(state.auths[0].token, 'TOK');
+  assert.match(state.auths[0].curlRaw, /Authorization: Bearer TOK/);
   assert.equal(state.token, undefined);
 });
 

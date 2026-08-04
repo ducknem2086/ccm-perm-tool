@@ -9,6 +9,7 @@ class MockElement {
     this.parentElement = null;
     this._classList = new Set();
     this.attributes = {};
+    this.dataset = {};
     this.listeners = {};
     this.value = '';
     this.type = '';
@@ -70,6 +71,16 @@ class MockElement {
       countSpan.textContent = '(0)';
       titleSpan.append(countSpan);
       h2.append(titleSpan);
+
+      if (html.includes('data-search')) {
+        const searchInput = new MockElement('input');
+        searchInput.type = 'search';
+        searchInput.className = 'input input-sm el-search';
+        searchInput.attributes['data-search'] = '';
+        const ph = /data-search placeholder="([^"]*)"/.exec(html);
+        searchInput.placeholder = ph ? ph[1] : '';
+        h2.append(searchInput);
+      }
 
       const body = new MockElement('div');
       body.className = 'el-body';
@@ -455,5 +466,281 @@ test('onImport thay the luong import mac dinh', async () => {
   await Promise.all(fileInput.dispatchEvent({ type: 'change' }));
 
   assert.equal(got.name, 'apis.xlsx');
+});
+
+/* ---------- search box ---------- */
+
+function endpointItems() {
+  return [
+    { name: 'Tra cứu thuê bao', pathTemplate: '/query/abc-information' },
+    { name: 'Tra cứu gói cước', pathTemplate: '/query/package-info' },
+    { name: 'Đăng ký gói', pathTemplate: '/register/package' },
+  ];
+}
+
+const byNameOrPath = (item, q) => {
+  const query = q.trim().toLowerCase();
+  return item.name.toLowerCase().includes(query) || item.pathTemplate.toLowerCase().includes(query);
+};
+
+test('khong truyen search thi khong co o tim kiem', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  createEditableList({
+    host, title: 'MSISDN', kind: 'msisdn', getItems: () => [], setItems: () => {},
+  });
+  assert.equal(host.querySelector('[data-search]'), null);
+});
+
+test('truyen search thi o tim kiem nam trong h2 tieu de, ben canh khoi ten', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint', getItems: () => [], setItems: () => {},
+    search: { placeholder: 'Tìm theo tên hoặc endpoint...', match: byNameOrPath },
+  });
+
+  const h2 = host.querySelectorAll('.card-title')[0];
+  const searchInput = host.querySelector('[data-search]');
+  assert.ok(searchInput);
+  assert.ok(h2.children.includes(searchInput), 'o search phai la con truc tiep cua h2 tieu de');
+  assert.equal(searchInput.placeholder, 'Tìm theo tên hoặc endpoint...');
+});
+
+test('go vao o search chi hien dong khop, khong xoa du lieu goc', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'tra cứu';
+  searchInput.dispatchEvent({ type: 'input' });
+
+  const rows = host.querySelector('[data-body]').querySelectorAll('.el-input');
+  assert.equal(rows.length, 2, 'chi 2 dong co ten bat dau bang Tra cuu');
+  assert.equal(items.length, 3, 'du lieu goc khong bi xoa boi search');
+});
+
+test('search khop theo pathTemplate', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'register';
+  searchInput.dispatchEvent({ type: 'input' });
+
+  const rows = host.querySelector('[data-body]').querySelectorAll('.el-input');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].value, '/register/package');
+});
+
+test('search khong khop hien thong bao rieng, giu nguyen du lieu', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'khong-ton-tai';
+  searchInput.dispatchEvent({ type: 'input' });
+
+  const body = host.querySelector('[data-body]');
+  const empty = body.querySelector('.el-empty');
+  assert.ok(empty);
+  assert.equal(empty.textContent, 'Không tìm thấy dòng nào khớp tìm kiếm.');
+  assert.equal(items.length, 3);
+});
+
+test('xoa o search tra ve day du danh sach', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'register';
+  searchInput.dispatchEvent({ type: 'input' });
+  assert.equal(host.querySelector('[data-body]').querySelectorAll('.el-input').length, 1);
+
+  searchInput.value = '';
+  searchInput.dispatchEvent({ type: 'input' });
+  assert.equal(host.querySelector('[data-body]').querySelectorAll('.el-input').length, 3);
+});
+
+test('sua dong dang hien thi khi loc van ghi dung vao phan tu goc, khong lech index', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'register';
+  searchInput.dispatchEvent({ type: 'input' });
+
+  const row = host.querySelector('[data-body]').querySelectorAll('.el-input')[0];
+  row.value = '/register/package-v2';
+  row.dispatchEvent({ type: 'input' });
+
+  assert.equal(items[0].pathTemplate, '/query/abc-information', 'dong 0 khong bi dung nham');
+  assert.equal(items[1].pathTemplate, '/query/package-info', 'dong 1 khong bi dung nham');
+  assert.equal(items[2].pathTemplate, '/register/package-v2', 'dong 2 (dang hien) duoc sua dung');
+});
+
+/* ---------- getVisibleItems / getSearchQuery ---------- */
+
+test('getVisibleItems tra nguyen danh sach khi o tim kiem rong', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  const list = createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  assert.deepEqual(list.getVisibleItems(), items);
+});
+
+test('getVisibleItems chi tra item khop khi da go tim kiem', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  const list = createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'tra cứu';
+  searchInput.dispatchEvent({ type: 'input' });
+
+  const visible = list.getVisibleItems();
+  assert.equal(visible.length, 2);
+  assert.ok(visible.every((it) => it.name.toLowerCase().includes('tra cứu')));
+});
+
+test('getVisibleItems tra rong khi khong item nao khop', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  const list = createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'khong-ton-tai';
+  searchInput.dispatchEvent({ type: 'input' });
+
+  assert.deepEqual(list.getVisibleItems(), []);
+});
+
+test('list khong truyen search: getVisibleItems tra nguyen danh sach, getSearchQuery rong', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = ['0912345678', '0987654321'];
+
+  const list = createEditableList({
+    host, title: 'MSISDN', kind: 'msisdn',
+    getItems: () => items, setItems: (v) => { items = v; },
+  });
+
+  assert.deepEqual(list.getVisibleItems(), items);
+  assert.equal(list.getSearchQuery(), '');
+});
+
+test('getSearchQuery tra dung gia tri dang go trong o tim kiem', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  const list = createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+  });
+
+  const searchInput = host.querySelector('[data-search]');
+  searchInput.value = 'register';
+  searchInput.dispatchEvent({ type: 'input' });
+
+  assert.equal(list.getSearchQuery(), 'register');
+});
+
+/* ---------- canh gac: ref nut khong chet sau render() ---------- */
+
+test('canh gac: ref nut extraAction van la chinh element trong DOM sau render()', () => {
+  setupDOMMock();
+  const host = new MockElement('section');
+  let items = endpointItems();
+
+  const list = createEditableList({
+    host, title: 'ENDPOINTS', kind: 'endpoint',
+    getItems: () => items, setItems: (v) => { items = v; },
+    getValue: (ep) => ep.pathTemplate,
+    setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
+    search: { match: byNameOrPath },
+    extraActions: [{ label: '☑ MSISDN: Tất cả Có', title: '', onClick: () => {} }],
+  });
+
+  const btnBefore = host.querySelectorAll('[data-extra-action]')[0];
+  assert.ok(btnBefore);
+
+  list.render();
+  list.render();
+
+  const btnAfter = host.querySelectorAll('[data-extra-action]')[0];
+  assert.equal(btnAfter, btnBefore, 'render() lap lai khong duoc dung lai .el-actions');
 });
 

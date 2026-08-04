@@ -58,7 +58,7 @@ phải ở cookie — không dùng cặp đó làm bằng chứng về cookie.
 | `access_token` | JWT · `typ: Bearer` · `aud: account` |
 | `id_token` | JWT · `typ: ID` · `aud: tmf-api` |
 | `client_id` | plain text `tmf-api` |
-| `claims_<env>` | JSON URL-encoded — **không phải JWT**, đọc thẳng được |
+| `claims_<env>` | JSON base64 một khối — **không phải JWT** (không có hai dấu chấm), decode base64 một lần là đọc được |
 | `REDIRECT_AFTER_LOGIN` | URL trang gốc |
 
 `claims_dev` của `curl1.txt` giải ra:
@@ -96,6 +96,64 @@ cho `checkPermission`. Không còn chỗ nào để hai nguồn lệch nhau.
 **Đối soát cURL bị bỏ hẳn.** Nó trả lời câu "endpoint nào khớp với function của cURL này" bằng cách
 bắt người dùng dán thêm cURL — trong khi CHECK PERM chạy trên toàn pool đã trả lời câu đó bằng hai
 cột status. Một tính năng, hai đường, giữ cả hai là giữ chỗ để lệch.
+
+**cURL mẫu chung ở ENDPOINTS CHUNG được GIỮ.** Chỗ trùng lặp cần bỏ chỉ là `auth.permCurlRaw`; cURL
+mẫu chung không phải bản sao của nó mà là **khuôn của request**: URL, toàn bộ header của app thật, và
+body skeleton. Bỏ luôn cả khuôn rồi tự dựng request từ đầu là sai — xem mục dưới.
+
+### Vì sao không tự dựng request từ đầu
+
+Đã thử và hỏng: bỏ khuôn thì `Origin`/`Referer`/`X-Current-Url` rơi về origin của chính tool và
+`Sec-Fetch-Site` thành `cross-site`. Đối chiếu với `curl1.txt` thật:
+
+| Header | cURL thật | Khi tự dựng |
+|---|---|---|
+| `Origin` | `https://dev-oda.vnpt.vn` | `http://localhost:9000` |
+| `Referer` | `https://dev-oda.vnpt.vn/` | `http://localhost:9000/` |
+| `X-Current-Url` | `https://dev-oda.vnpt.vn/#/ccos/coordination-management` | `http://localhost:9000/` |
+| `Sec-Fetch-Site` | `same-site` | `cross-site` |
+| `Connection` | `keep-alive` | mất |
+| `Accept-Language` | `en-US,en;q=0.9,vi;q=0.8` | `en,vi;q=0.9` |
+
+IAM nằm sau WAF soi `Origin` → **401 toàn bộ**. Đây là lý do khuôn phải giữ: tool không đoán được URL
+trang đang xem hay origin của app, chỉ lệnh cURL thật mới mang chúng.
+
+### Parser phải ăn được mọi kiểu "Copy as …"
+
+Bản cũ cho phép dán token trần vào ô riêng nên parser không nằm trên đường tới hiện. Bắt dán nguyên
+lệnh cURL thì nó thành điểm chết: Chrome xuất bốn kiểu, `parseRawHeaders` chỉ đọc được một.
+
+| Kiểu copy | Trước khi sửa |
+|---|---|
+| cURL (bash) | đúng |
+| cURL (cmd) — **mặc định trên Windows** | tên header ra `^"Authorization` → mất Bearer |
+| PowerShell — Windows | 1 header rác |
+| fetch | tên header ra `"authorization` → mất Bearer |
+
+Mất `Authorization` → request nghiệp vụ đi không kèm Bearer → **401**, và **im lặng** vì vẫn sinh ra
+được vài cặp header trông như thật.
+
+`parseRawHeaders` giờ nhận cả bốn, cộng thêm hai chốt chặn im lặng:
+
+- `normalizeWindowsCmdQuotes` đổi `^"` → `"` (và `\^"` → `\"`, `^^` → `^`) trước mọi đường parse;
+  `parseCurlRequest` cũng gọi nó, không thì URL đọc ra còn dính `^`.
+- Cặp header có tên không hợp lệ theo RFC 7230 token bị **loại**, để một bản dán không đọc được trả về
+  rỗng và `authIdentityErrors` báo "không đọc được header nào" thay vì âm thầm gửi header rác.
+
+### Hai usecase, hai credential
+
+`Authorization` và cookie `access_token` là hai token khác nhau, khác cả `sid`, ngay trong cùng một
+phiên trình duyệt:
+
+| cURL | `Authorization: Bearer` | `cookie.access_token` |
+|---|---|---|
+| nghiệp vụ (`curl.txt`) | có · sid `966fcf60` | có · sid `4d2c6652` |
+| `checkPermission` (`curl1.txt`) | **không có** | có · sid `7003f08e` |
+
+Request nghiệp vụ xác thực bằng Bearer, `checkPermission` xác thực bằng cookie. **Chỉ cURL nghiệp vụ
+mang đủ cả hai** — nên ô cURL ở AUTHS phải nhận cURL nghiệp vụ. Dán nhầm cURL `checkPermission` vào đó
+thì request nghiệp vụ đi không Bearer → 401 hàng loạt. `authWarnings` (không chặn chạy, khác
+`authIdentityErrors`) báo đúng ca này ngay dưới ô nhập.
 
 ## Phần A — danh tính
 
@@ -136,6 +194,32 @@ function curlFromLegacyFields(a) {
 
 Profile cũ `mode: 'curl'` giữ nguyên `curlRaw`. Profile cũ `mode: 'fields'` lấy chuỗi trên. `role` để
 rỗng — người dùng khai lại, và validate sẽ đòi khi UC3 đang bật.
+
+Mỗi profile migrate phải trải lên `makeAuth()`, không map thẳng từng khoá: cấu hình cũ có thể thiếu
+`id`, mà `selectedAuths` lọc theo `runFilter.authIds` — `id: undefined` làm RUN ALL sinh **0 request**.
+
+**Ba ô cũ chỉ được dựng lên `curlRaw` khi HEADERS CHUNG không tự khai danh tính.** Trước thay đổi này
+`authHeaderPairs` trả `[]` cho `mode: 'fields'`, nên ba ô đó **không bao giờ được gửi đi** — cấu hình
+vừa có ba ô vừa có cURL ở HEADERS CHUNG thì thứ đang chạy thật là cái cURL, còn ba ô chỉ là rác còn
+sót từ phiên trước. Dựng chúng lên `curlRaw` sẽ đè ngược lên HEADERS CHUNG (auth thắng global, xem
+mục thứ tự ưu tiên ngay dưới) và gửi token hết hạn → **401 hàng loạt**. Kiểm tra cả hai chế độ nhập
+của HEADERS CHUNG (`globalHeaderRaw` và bảng `globalHeaders` đang bật) xem có `Authorization`/`Cookie`
+không. Profile đã có `curlRaw` sẵn thì luôn giữ nguyên, không xét gì thêm.
+
+### Thứ tự ưu tiên header của request nghiệp vụ
+
+`mergePairs(endpoint, auth, global)` — danh sách đầu thắng khi trùng tên:
+
+| Nguồn | Hạng |
+|---|---|
+| HEADERS riêng của endpoint | cao nhất |
+| cURL của auth profile | giữa |
+| HEADERS CHUNG | thấp nhất |
+
+**Đây là thay đổi hành vi so với bản cũ** với riêng `mode: 'fields'`: ba ô cũ trước đây là *fallback*
+(`putIfAbsent` sau khi merge), giờ cURL của auth là *nguồn có thẩm quyền*. Đúng theo thiết kế — nhiều
+auth profile chỉ có nghĩa khi danh tính của từng profile thắng cấu hình dùng chung. Bản `mode: 'curl'`
+cũ vốn đã chạy đúng thứ tự này.
 
 `makeCommonEndpoint()` bỏ `curlRaw` — dòng `oracle` chỉ còn `line`.
 
@@ -185,64 +269,42 @@ một phần tử trong `AUTH_CORE_KEYS`.
 `buildOne` giữ nguyên — headers vẫn từ `authHeaderPairs(auth)` (parse `curlRaw`), chỉ bỏ ba dòng
 `putIfAbsent` cho `Authorization`/`Cookie`/`refresh_token` vì ba khoá đó không còn tồn tại.
 
-`buildOracleRequest` viết lại, **không đọc cURL nào**:
+`buildOracleRequest` đọc **đúng một** cURL: mẫu chung ở ENDPOINTS CHUNG (`oracleTemplate.curlRaw`).
+Không đọc `auth.permCurlRaw` nữa — khoá đó bị bỏ. Mẫu là **khuôn**, chỉ danh tính bị thay:
 
-```js
-function buildOracleRequest({ config, auth, endpoint }) {
-  const fn = String(endpoint.oracleFunction ?? '').trim();
-  if (!fn) return null;
+| Phần của request | Nguồn |
+|---|---|
+| URL, method | cURL mẫu (URL tuyệt đối dùng nguyên) |
+| Mọi header trừ `Cookie`/`Authorization` | cURL mẫu, giữ **nguyên văn** |
+| `Cookie` | `authCookieString(auth)` — 5 khoá lõi của auth đang chạy |
+| `Authorization` | **xoá, không đặt lại** — cURL `checkPermission` thật không gửi header này |
+| `permissionSpecification.function` | cột FUNCTION (UC3) |
+| `permissionSpecification.action` | cột ACTION, rỗng thì giữ `action` của mẫu, không có nữa thì `Read` |
+| `user.role` / `.id` / `.accountId` | `auth.role` + `identityOf(auth)`; field lạ khác trong `user` giữ nguyên |
+| Header/`body` skeleton còn thiếu | `putIfAbsent` + `BROWSER_HEADERS` như `buildOne` |
 
-  const tpl = config?.oracleTemplate;
-  if (!tpl) return null;
-  // Dung lai parser cua ENDPOINTS CHUNG — 'POST /iam/engage/checkPermission'
-  // tach ra { method, pathTemplate } y het dong 'business'.
-  const [line] = parseCommonEndpoints(tpl.line ?? '');
-  if (!line) return { error: 'ORACLE_LINE_INVALID' };
+Thứ tự bắt buộc: **trải header của khuôn trước**, rồi mới `putIfAbsent` — ngược lại thì
+`Origin`/`Referer`/`X-Current-Url` của tool đè lên giá trị thật của app.
 
-  const id = identityOf(auth);
-  if (!id?.individualId || !id?.accountId) return { error: 'ORACLE_IDENTITY_MISSING' };
-  const role = String(auth?.role ?? '').trim();
-  if (!role) return { error: 'ORACLE_ROLE_MISSING' };
+Chưa dán mẫu thì vẫn dựng được request tối thiểu từ dòng `METHOD /path`, nhưng validate chặn trước
+(xem dưới) vì gần như chắc chắn 401.
 
-  const headers = { Cookie: authCookieString(auth), 'Content-Type': 'application/json' };
-  // KHONG co Authorization — curl checkPermission that cua FE khong gui header nay.
-  const origin = String(config.origin ?? '').trim().replace(/\/+$/, '');
-  putIfAbsent(headers, 'Origin', origin);
-  putIfAbsent(headers, 'Referer', origin ? `${origin}/` : '');
-  putIfAbsent(headers, 'X-Current-Url', origin ? `${origin}/` : '');
-  for (const [k, v] of Object.entries(BROWSER_HEADERS)) putIfAbsent(headers, k, v);
-
-  const action = String(endpoint.oracleAction ?? '').trim() || 'Read';
-  const body = {
-    '@type': 'CheckPermission',
-    permissionSpecification: { '@type': 'PermissionSpecification', function: fn, action },
-    user: { '@type': 'PartyRef', role, id: id.individualId, accountId: id.accountId },
-  };
-
-  const base = String(config.domain ?? '').trim().replace(/\/+$/, '');
-  return { method: line.method, url: `${base}${line.pathTemplate}`, headers,
-           body: JSON.stringify(body), permFunction: fn, permAction: action };
-}
-```
-
-**Đổi hành vi cần biết:** cột ACTION để trống trước đây nghĩa là "giữ nguyên `action` trong cURL mẫu";
-giờ không còn mẫu nên mặc định `"Read"` — đúng giá trị cả hai cURL thật đang dùng.
-
-Ba mã lỗi mới `ORACLE_IDENTITY_MISSING` / `ORACLE_ROLE_MISSING` / `ORACLE_LINE_INVALID` đi cùng đường
-với `ORACLE_BODY_INVALID` sẵn có, hiện ở cột `Status Check Perm` thay vì âm thầm gửi request thiếu
-người. `ORACLE_BODY_INVALID` không còn chỗ phát sinh (body do tool dựng) nhưng giữ lại trong
-`error-code.js` để record cũ mở lại vẫn đọc được nhãn.
+Mã lỗi: `ORACLE_IDENTITY_MISSING` (cookie không ra được `individual_id`/`preferred_username`),
+`ORACLE_ROLE_MISSING` (chưa khai role), `ORACLE_TEMPLATE_INVALID` (mẫu không parse ra URL),
+`ORACLE_LINE_INVALID` (không mẫu và dòng `METHOD /path` cũng rỗng).
 
 ### `public/js/shared/permission-scope.js`
 
-`validatePermissionScope` — nhánh UC3 bỏ toàn bộ kiểm tra `permCurlRaw` và body cURL mẫu, thay bằng:
+`validatePermissionScope` — nhánh UC3 bỏ kiểm tra `permCurlRaw`, thay bằng:
 
-- Phải có đúng một dòng `kind: 'oracle'` ở ENDPOINTS CHUNG, `line` parse ra `METHOD /path`.
+- Phải có dòng `kind: 'oracle'` ở ENDPOINTS CHUNG.
+- Dòng đó **phải có `curlRaw`** — thiếu thì báo thẳng "request sẽ mang Origin/Referer của tool và IAM
+  trả 401", không để người dùng chạy hết một lượt rồi mới thấy 401 hàng loạt.
+- `curlRaw` phải `parseCurlRequest` ra được URL.
 - Với mỗi auth profile thuộc UC1: gộp `authIdentityErrors(auth)`, tiền tố tên profile.
 - `role` rỗng khi UC3 đã khai cột FUNCTION → báo.
 
-`buildPermissionRunConfig` giữ nguyên cách đính `oracleTemplate`, chỉ khác là nó không còn mang
-`curlRaw`.
+`buildPermissionRunConfig` giữ nguyên cách đính `oracleTemplate` — nó mang cả `line` lẫn `curlRaw`.
 
 ### Xoá
 
@@ -266,6 +328,39 @@ Mỗi profile còn một `textarea` cURL và một `input` role, cộng dòng t�
 ● oda.superadmin@vnpt.vn · id 334abe82… · hết hạn 14:21 03/08 · claims_dev
 ⚠ Authorization và cookie thuộc hai phiên đăng nhập khác nhau
 ```
+
+Ba nút trên đầu mỗi thẻ profile: `⌫` **xoá nội dung đã nhập** (`curlRaw` + `role`) nhưng giữ nguyên
+`id` và `name` — khác hẳn `✕` xoá cả profile. Giữ `id` để `runFilter.authIds` không đứt, giữ `name`
+để dòng UC1 khai theo tên không mất đích. Nút tự tắt khi profile chưa nhập gì. Đây là đường thoát khi
+credential cũ còn sót trong `curlRaw` đang đè lên HEADERS CHUNG.
+
+Không cần đụng gì đến validate: RUN ALL vốn không đòi token (`validateConfig` không kiểm) nên profile
+vừa `⌫` vẫn chạy được bằng HEADERS CHUNG; CHECK PERM thì `authIdentityErrors` báo đúng "Chưa dán cURL"
+kèm tên profile.
+
+### Nút `✓ Verify` — một engine, ba mặt hiển thị
+
+Cảnh báo thụ động không đủ: người dùng phải chạy rồi mới biết mình hỏng ở đâu. `verifyAuth(auth)` trả
+về `{ ok, checks: [{ status, scope, label, detail }] }` và là **nguồn sự thật duy nhất** — hai hàm cũ
+chỉ còn là bộ lọc trên nó:
+
+```js
+export const authIdentityErrors = (auth) => verifyAuth(auth).checks
+  .filter((c) => c.status === 'fail').map((c) => c.detail);
+export const authWarnings = (auth) => verifyAuth(auth).checks
+  .filter((c) => c.status === 'warn').map((c) => c.detail);
+```
+
+`scope` ghi rõ check đó chặn đường nào (`NGHIỆP VỤ` / `CHECK PERM` / `CẢ HAI`) — cần thiết vì hai
+usecase xác thực bằng hai thứ khác nhau, thiếu Bearer chỉ hỏng đường nghiệp vụ chứ không hỏng
+`checkPermission`.
+
+Verify **không gọi mạng** — mọi check đều đọc được ngay từ chuỗi đã dán, nên bấm là có kết quả và
+không sinh side effect. Kết quả lưu theo id profile trong closure và bị xoá khi `curlRaw`/`role` đổi
+hoặc khi bấm `⌫`, để không bao giờ hiện verdict lạc hậu.
+
+Gộp về một engine cũng bỏ được một trùng lặp cũ: thiếu `access_token` trước đây vừa là lỗi chặn vừa là
+cảnh báo với hai câu chữ khác nhau. Giờ một điều kiện, một thông báo.
 
 ### `public/js/shared/auth-utils.js`
 
@@ -346,7 +441,7 @@ credential sống.
 | `test/auth-identity.test.js` (mới) | lọc cookie đúng 5 khoá lõi kể cả `claims_<env>` lạ tên; `identityOf` ưu tiên `claims_*`, rơi về JWT khi thiếu; đủ 7 ca của `authIdentityErrors`; JWT hỏng không ném lỗi |
 | `test/auth-utils.test.js` | `hasToken` đọc cookie `access_token`; `authHeaderPairs` parse `curlRaw` không cần `mode`; bỏ ca `mode` |
 | `test/state.test.js` | migrate profile cũ `mode:'fields'` ra `curlRaw` ba dòng; profile `mode:'curl'` giữ nguyên |
-| `test/request-builder.test.js` | `buildOracleRequest` dựng body từ danh tính cookie + role; không có header `Authorization`; ACTION rỗng → `Read`; thiếu role → `ORACLE_ROLE_MISSING` |
+| `test/request-builder.test.js` | cURL mẫu giữ nguyên `Origin`/`Referer`/`X-Current-Url`/`Sec-Fetch-Site` của app thật; `Cookie` và khối `user` bị thay bằng danh tính auth; `Authorization` của mẫu bị bỏ; ACTION rỗng → giữ action của mẫu; thiếu role → `ORACLE_ROLE_MISSING` |
 | `test/permission-scope.test.js` | validate báo lỗi kèm tên profile khi cookie hết hạn / lệch `sid` / thiếu role |
 | `test/auths-panel.test.js` | còn 2 ô, dòng tóm tắt danh tính, không còn radio mode |
 | `test/detail-drawer.test.js` | hai cột khi có oracle, một cột khi không; mỗi cột đủ 2 nút; tab bar cột trái không đụng cột phải; ô URL có class `url-box` |

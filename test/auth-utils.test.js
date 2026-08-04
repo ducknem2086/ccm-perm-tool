@@ -7,34 +7,43 @@ const CURL = `curl 'https://api-abc.vn/x' \\
   -H 'X-Tenant: vnpt' \\
   -b 'BIGipServerpool=1.2.3'`;
 
-test('authHeaderPairs mode fields tra mang rong', () => {
-  assert.deepEqual(authHeaderPairs({ mode: 'fields', token: 'x' }), []);
-});
+function b64url(obj) {
+  return Buffer.from(JSON.stringify(obj)).toString('base64url');
+}
 
-test('authHeaderPairs mode curl tra het header parse duoc', () => {
-  const pairs = authHeaderPairs({ mode: 'curl', curlRaw: CURL });
+function makeJwt(payload) {
+  return `${b64url({ alg: 'RS256' })}.${b64url(payload)}.sig`;
+}
+
+function curlWithAccessToken(exp = Math.floor(Date.now() / 1000) + 3600) {
+  const token = makeJwt({ individual_id: 'ind-1', preferred_username: 'user@vnp.vn', exp });
+  return `curl 'https://x.vn' -b 'access_token=${token}'`;
+}
+
+test('authHeaderPairs parse het header trong curlRaw, khong con phu thuoc mode', () => {
+  const pairs = authHeaderPairs({ curlRaw: CURL });
   assert.deepEqual(pairs.map((p) => p.key), ['Authorization', 'X-Tenant', 'Cookie']);
   assert.equal(pairs[0].value, 'Bearer eyJabc');
   assert.equal(pairs[2].value, 'BIGipServerpool=1.2.3');
 });
 
-test('authHeaderPairs coi thieu mode la fields', () => {
-  assert.deepEqual(authHeaderPairs({ curlRaw: CURL }), []);
+test('authHeaderPairs tra mang rong khi curlRaw rong', () => {
+  assert.deepEqual(authHeaderPairs({ curlRaw: '' }), []);
+  assert.deepEqual(authHeaderPairs({}), []);
 });
 
 test('authHeaderPairs chiu duoc auth undefined', () => {
   assert.deepEqual(authHeaderPairs(undefined), []);
 });
 
-test('hasToken mode fields dua vao o token', () => {
-  assert.equal(hasToken({ mode: 'fields', token: 'eyJ' }), true);
-  assert.equal(hasToken({ mode: 'fields', token: '   ' }), false);
+test('hasToken true khi cookie trong curlRaw co access_token con han', () => {
+  assert.equal(hasToken({ curlRaw: curlWithAccessToken() }), true);
 });
 
-test('hasToken mode curl tim header Authorization khong phan biet hoa thuong', () => {
-  assert.equal(hasToken({ mode: 'curl', curlRaw: CURL }), true);
-  assert.equal(hasToken({ mode: 'curl', curlRaw: "curl 'https://x' -H 'authorization: Bearer z'" }), true);
-  assert.equal(hasToken({ mode: 'curl', curlRaw: "curl 'https://x' -H 'Accept: */*'" }), false);
+test('hasToken false khi cookie khong co access_token', () => {
+  assert.equal(hasToken({ curlRaw: CURL }), false, 'CURL chi co Authorization, khong co cookie access_token');
+  assert.equal(hasToken({ curlRaw: '' }), false);
+  assert.equal(hasToken(undefined), false);
 });
 
 test('findDuplicateNames tra ten bi trung', () => {

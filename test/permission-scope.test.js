@@ -470,3 +470,136 @@ test('validatePermissionScope tra mang rong khi cau hinh sach', () => {
   const errors = validatePermissionScope(baseState());
   assert.deepEqual(errors, []);
 });
+
+/* ---------- UC3: danh tinh tu cURL cua auth ---------- */
+
+function b64url(obj) {
+  return Buffer.from(JSON.stringify(obj)).toString('base64url');
+}
+
+function makeJwt(payload) {
+  return `${b64url({ alg: 'RS256' })}.${b64url(payload)}.sig`;
+}
+
+function validCurl() {
+  const token = makeJwt({
+    individual_id: 'ind-1', preferred_username: 'user@vnp.vn', exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  return `curl 'https://x.vn' -b 'access_token=${token}'`;
+}
+
+const uc3 = { columnSheet: 'Sheet 1', functionColumn: 'Ten API', actionColumn: '' };
+
+// cURL mau la KHUON cua request checkPermission — thieu no thi request mang
+// Origin/Referer cua tool thay vi cua app that va IAM tra 401.
+const ORACLE_CURL = `curl 'https://api-dev-oda.vnpt.vn/iam/engage/checkPermission' \\
+  -H 'Origin: https://dev-oda.vnpt.vn' \\
+  -H 'Referer: https://dev-oda.vnpt.vn/' \\
+  --data-raw '{"@type":"CheckPermission","permissionSpecification":{"function":"/x","action":"Read"},"user":{"role":"r","id":"i","accountId":"a"}}'`;
+
+function uc3State(over = {}) {
+  return baseState({
+    permissionMapping: { usecase1: uc1, usecase2: uc2, usecase3: uc3 },
+    commonEndpointList: [{
+      id: 'ce_1', kind: 'oracle', line: 'POST /iam/engage/checkPermission', curlRaw: ORACLE_CURL,
+    }],
+    auths: [
+      { id: 'a_user', name: 'User Profile', curlRaw: validCurl(), role: 'core_donvixuly' },
+      { id: 'a_admin', name: 'Admin Profile', curlRaw: validCurl(), role: 'core_admin' },
+      { id: 'a_cskh', name: 'Cskh Profile', curlRaw: validCurl(), role: 'core_cskh' },
+      { id: 'a_extra', name: 'Extra Profile', curlRaw: validCurl(), role: 'x' },
+    ],
+    ...over,
+  });
+}
+
+test('validatePermissionScope UC3 khong bao loi khi moi auth trong UC1 co cURL hop le va da khai role', () => {
+  const errors = validatePermissionScope(uc3State());
+  assert.deepEqual(errors.filter((e) => e.startsWith('UC3:')), []);
+});
+
+test('validatePermissionScope UC3 bao loi khi chua khai dong endpoint check permission', () => {
+  const state = uc3State({ commonEndpointList: [] });
+  const errors = validatePermissionScope(state);
+  assert.ok(errors.some((e) => e.includes('chưa khai dòng endpoint check permission')));
+});
+
+// Thieu khuon = request mang Origin/Referer/X-Current-Url cua tool
+// (localhost:9000) thay vi cua app that -> IAM sau WAF tra 401. Phai chan
+// truoc khi chay chu khong de nguoi dung doi ca luot roi thay 401 hang loat.
+test('validatePermissionScope UC3 bao loi khi dong oracle chua dan cURL mau', () => {
+  const state = uc3State({
+    commonEndpointList: [{ id: 'ce_1', kind: 'oracle', line: 'POST /iam/engage/checkPermission', curlRaw: '' }],
+  });
+  const errors = validatePermissionScope(state);
+  assert.ok(errors.some((e) => e.includes('chưa dán cURL mẫu') && e.includes('401')));
+});
+
+test('validatePermissionScope UC3 bao loi khi cURL mau khong doc duoc URL', () => {
+  const state = uc3State({
+    commonEndpointList: [{ id: 'ce_1', kind: 'oracle', line: 'POST /x', curlRaw: 'khong phai curl' }],
+  });
+  const errors = validatePermissionScope(state);
+  assert.ok(errors.some((e) => e.includes('cURL mẫu check permission không đọc được URL')));
+});
+
+test('validatePermissionScope UC3 bao loi kem ten profile khi access_token het han', () => {
+  const expired = makeJwt({
+    individual_id: 'ind-1', preferred_username: 'user@vnp.vn', exp: Math.floor(Date.now() / 1000) - 3600,
+  });
+  const state = uc3State({
+    auths: [
+      { id: 'a_user', name: 'User Profile', curlRaw: `curl 'https://x.vn' -b 'access_token=${expired}'`, role: 'core_donvixuly' },
+      { id: 'a_admin', name: 'Admin Profile', curlRaw: validCurl(), role: 'core_admin' },
+      { id: 'a_cskh', name: 'Cskh Profile', curlRaw: validCurl(), role: 'core_cskh' },
+    ],
+  });
+  const errors = validatePermissionScope(state);
+  assert.ok(errors.some((e) => e.includes('UC3: auth profile "User Profile"') && e.includes('hết hạn')));
+});
+
+test('validatePermissionScope UC3 bao loi kem ten profile khi Authorization va cookie khac phien dang nhap', () => {
+  const cookieToken = makeJwt({
+    individual_id: 'ind-1', preferred_username: 'user@vnp.vn', sid: 'sid-A',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  const bearerToken = makeJwt({
+    individual_id: 'ind-1', preferred_username: 'user@vnp.vn', sid: 'sid-B',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  const curl = `curl 'https://x.vn' -b 'access_token=${cookieToken}' -H 'Authorization: Bearer ${bearerToken}'`;
+  const state = uc3State({
+    auths: [
+      { id: 'a_user', name: 'User Profile', curlRaw: curl, role: 'core_donvixuly' },
+      { id: 'a_admin', name: 'Admin Profile', curlRaw: validCurl(), role: 'core_admin' },
+      { id: 'a_cskh', name: 'Cskh Profile', curlRaw: validCurl(), role: 'core_cskh' },
+    ],
+  });
+  const errors = validatePermissionScope(state);
+  assert.ok(errors.some((e) => e.includes('UC3: auth profile "User Profile"') && e.includes('hai phiên đăng nhập khác nhau')));
+});
+
+test('validatePermissionScope UC3 bao loi kem ten profile khi chua khai role', () => {
+  const state = uc3State({
+    auths: [
+      { id: 'a_user', name: 'User Profile', curlRaw: validCurl(), role: '' },
+      { id: 'a_admin', name: 'Admin Profile', curlRaw: validCurl(), role: 'core_admin' },
+      { id: 'a_cskh', name: 'Cskh Profile', curlRaw: validCurl(), role: 'core_cskh' },
+    ],
+  });
+  const errors = validatePermissionScope(state);
+  assert.ok(errors.some((e) => e === 'UC3: auth profile "User Profile" chưa khai role — cần để dựng body checkPermission'));
+});
+
+test('validatePermissionScope UC3 bo qua auth ngoai UC1 du cURL hong', () => {
+  const state = uc3State({
+    auths: [
+      { id: 'a_user', name: 'User Profile', curlRaw: validCurl(), role: 'core_donvixuly' },
+      { id: 'a_admin', name: 'Admin Profile', curlRaw: validCurl(), role: 'core_admin' },
+      { id: 'a_cskh', name: 'Cskh Profile', curlRaw: validCurl(), role: 'core_cskh' },
+      { id: 'a_extra', name: 'Extra Profile', curlRaw: '', role: '' },
+    ],
+  });
+  const errors = validatePermissionScope(state);
+  assert.ok(!errors.some((e) => e.includes('Extra Profile')));
+});

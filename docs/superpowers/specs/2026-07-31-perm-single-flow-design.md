@@ -6,6 +6,15 @@
 >
 > Thay thế luôn quyết định "cột role suy từ `roleColumns`" — cột role quay về suy từ `usecase1`,
 > tức khôi phục § "Nguồn sự thật" của `2026-07-31-perm-tab-split-view-design.md`.
+>
+> **Đính chính (2026-08-01):** §3 dòng "Checkbox `enabled` của endpoint | **Đọc**" và §7 sai. GOM
+> **không được** đọc `enabled` — checkbox đó thuộc phạm vi RUN ALL (bảng ENDPOINTS), không phải phạm
+> vi CHECK PERM (cột Sheet của UC1 quyết định). Bug y hệt bug mà spec này từng chỉ ra ở mode `all` cũ
+> (§7 gốc) tái xuất hiện vì merge hai luồng đã vô tình kéo theo hành vi lọc `enabled` của luồng
+> `mapping`. Sửa tại `matchPermissionEndpoints` (không gọi `filterEndpoints`, tự lọc sheet UC1 +
+> method topbar) và `scopedEndpointsAndAuths` (ép `enabled: true` lên endpoint trả về, chặn tầng lọc
+> lần hai ở `buildRequests`/`validateConfig` phía server). Xem `test/permission-match.test.js` và
+> `test/permission-scope.test.js`.
 
 ## 1. Vấn đề
 

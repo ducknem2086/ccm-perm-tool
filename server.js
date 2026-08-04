@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path';
 import { registerRoutes } from './src/server/routes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const PORT = 2345;
+// 9000 trung voi origin cua app CCOS that (http://localhost:9000). API dich
+// kiem tra Origin/Referer nen chay cung port giup request khop hoan toan.
+export const PORT = 9000;
 export const PUBLIC_DIR = join(__dirname, 'public');
 
 export function createApp() {

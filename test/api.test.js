@@ -32,6 +32,8 @@ class MockEventSource {
   }
 }
 
+globalThis.location = { origin: 'http://localhost:9000' };
+
 test('startRun goi POST /api/run voi config va tra ve res JSON khi thanh cong', async () => {
   let requestParams = null;
   globalThis.fetch = async (url, options) => {
@@ -48,6 +50,17 @@ test('startRun goi POST /api/run voi config va tra ve res JSON khi thanh cong', 
   assert.equal(requestParams.options.headers['content-type'], 'application/json');
   assert.equal(JSON.parse(requestParams.options.body).domain, 'https://api.vn');
   assert.deepEqual(res, { runId: 'run-1', total: 10 });
+});
+
+test('startRun kem origin cua tool de server dat Origin/Referer', async () => {
+  let sent = null;
+  globalThis.fetch = async (url, options) => {
+    sent = JSON.parse(options.body);
+    return { ok: true, text: async () => JSON.stringify({ runId: 'run-1', total: 1 }) };
+  };
+
+  await startRun({ domain: 'https://api.vn' });
+  assert.equal(sent.origin, 'http://localhost:9000');
 });
 
 test('startRun nem Error co attribute .errors khi API res 400', async () => {
@@ -195,11 +208,33 @@ test('exportExcel goi API export va kich hoat browser download file', async () =
   await exportExcel('run-1', [0, 1], true);
 
   assert.equal(requestParams.url, '/api/export/run-1');
-  assert.deepEqual(JSON.parse(requestParams.options.body), { indexes: [0, 1], includeToken: true });
+  assert.deepEqual(JSON.parse(requestParams.options.body), { indexes: [0, 1], includeToken: true, layout: 'default' });
   assert.equal(dummyElement.download, 'report_result.xlsx');
   assert.equal(dummyElement.href, 'blob:http://localhost/dummy-blob');
   assert.equal(elementAppended, true);
   assert.equal(clicked, true);
   assert.equal(elementRemoved, true);
   assert.equal(revokedUrl, 'blob:http://localhost/dummy-blob');
+});
+
+test('exportExcel gui dung layout khi goi voi tham so thu tu', async () => {
+  let requestParams = null;
+
+  globalThis.fetch = async (url, options) => {
+    requestParams = { url, options };
+    return {
+      ok: true,
+      headers: { get: () => 'attachment; filename="report_result.xlsx"' },
+      blob: async () => ({}),
+    };
+  };
+  globalThis.URL = { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} };
+  globalThis.document = {
+    createElement: () => ({ click: () => {}, remove: () => {} }),
+    body: { append: () => {} },
+  };
+
+  await exportExcel('run-2', [3], false, 'permission');
+
+  assert.deepEqual(JSON.parse(requestParams.options.body), { indexes: [3], includeToken: false, layout: 'permission' });
 });

@@ -123,10 +123,10 @@ ui: { permSplitPct: 60 },
 
   <div class="split-side">
     <div class="split-head">
-      <span class="label">BẢNG PHÂN QUYỀN</span>
-      <label><input id="chk-perm-granted" type="checkbox" /> Có quyền</label>
-      <label><input id="chk-perm-denied" type="checkbox" checked /> Không quyền</label>
-      <div class="col-filter">
+      <span class="label">Bảng quyền</span>
+      <label><input id="chk-perm-granted" type="checkbox" /> Có</label>
+      <label><input id="chk-perm-denied" type="checkbox" checked /> Không</label>
+      <div class="col-filter"> 
         <button id="btn-perm-col-filter" type="button" class="btn btn-secondary btn-sm">Cột hiển thị ▾</button>
         <ul id="perm-col-popup" class="col-filter-popup" hidden></ul>
       </div>

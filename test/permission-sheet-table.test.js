@@ -207,6 +207,17 @@ test('getRoleColumns rong: khong cot nao duoc cham, moi dong la khong co quyen',
   assert.deepEqual(result, { shown: 2, total: 2 });
 });
 
+test('filter search loc theo cot dau tien (dinh danh UC2), khong loc cot role', () => {
+  const { table } = setupMockDOM();
+  const ctrl = makeCtrl({ getFilter: () => ({ granted: true, denied: true, search: 'cap nhat' }) });
+  const result = ctrl.render();
+
+  const rows = table.querySelector('tbody').querySelectorAll('tr');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].children[1].textContent, 'Cap nhat whitelist');
+  assert.deepEqual(result, { shown: 1, total: 2 });
+});
+
 test('render tra ve shown/total dung', () => {
   setupMockDOM();
   const ctrl = makeCtrl();

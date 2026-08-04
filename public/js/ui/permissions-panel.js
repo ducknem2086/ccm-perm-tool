@@ -32,6 +32,31 @@ function renderColumnSelect(selectEl, options, currentValue) {
   selectEl.value = currentValue || (options[0] ?? '');
 }
 
+// UC3 cot ACTION la tuy chon — khac renderColumnSelect o cho KHONG tu dong
+// chon cot dau tien khi de trong. Rong la mot lua chon hop le ("giu nguyen
+// action cua cURL mau"), khong phai trang thai chua cau hinh.
+function renderOptionalColumnSelect(selectEl, options, currentValue) {
+  const nodes = [];
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = '(không dùng — giữ nguyên action của cURL mẫu)';
+  nodes.push(none);
+  if (currentValue && !options.includes(currentValue)) {
+    const marker = document.createElement('option');
+    marker.value = currentValue;
+    marker.textContent = `${currentValue} (không có trong sheet này)`;
+    nodes.push(marker);
+  }
+  for (const h of options) {
+    const opt = document.createElement('option');
+    opt.value = h;
+    opt.textContent = h;
+    nodes.push(opt);
+  }
+  selectEl.replaceChildren(...nodes);
+  selectEl.value = currentValue || '';
+}
+
 export function initPermissionsPanel() {
   const btnImport = document.getElementById('btn-import-permissions');
   const fileInfo = document.getElementById('permissions-file-info');
@@ -41,6 +66,9 @@ export function initPermissionsPanel() {
   const selNameCol = document.getElementById('sel-permissions-name-col');
   const selEndpointSheet = document.getElementById('sel-permissions-endpoint-sheet');
   const selEndpointCol = document.getElementById('sel-permissions-endpoint-col');
+  const selUc3Sheet = document.getElementById('sel-perm-uc3-sheet');
+  const selUc3Function = document.getElementById('sel-perm-uc3-function');
+  const selUc3Action = document.getElementById('sel-perm-uc3-action');
   const usecase1Table = document.getElementById('permissions-usecase1-table');
   const btnAddMapping = document.getElementById('btn-permissions-add-usecase1');
   const btnSave = document.getElementById('btn-permissions-save');
@@ -126,6 +154,24 @@ export function initPermissionsPanel() {
 
   selEndpointCol?.addEventListener('change', () => {
     state.permissionMapping.usecase2.endpointColumn = selEndpointCol.value;
+    persist();
+    render();
+  });
+
+  selUc3Sheet?.addEventListener('change', () => {
+    state.permissionMapping.usecase3.columnSheet = selUc3Sheet.value;
+    persist();
+    render();
+  });
+
+  selUc3Function?.addEventListener('change', () => {
+    state.permissionMapping.usecase3.functionColumn = selUc3Function.value;
+    persist();
+    render();
+  });
+
+  selUc3Action?.addEventListener('change', () => {
+    state.permissionMapping.usecase3.actionColumn = selUc3Action.value;
     persist();
     render();
   });
@@ -235,6 +281,31 @@ export function initPermissionsPanel() {
     const sheetCols = endpointColumnsOfSheet(state.endpoints, shownSheet);
     if (selEndpointCol) {
       renderColumnSelect(selEndpointCol, sheetCols, state.permissionMapping.usecase2.endpointColumn);
+    }
+
+    // UC3 — cung khuon voi UC2: sheet tham chieu chi de lay danh sach cot,
+    // khong phai pham vi chay. De trong ca ba o la hop le (UC3 tuy chon).
+    const uc3 = state.permissionMapping.usecase3;
+    const uc3SheetName = uc3.columnSheet || (uc1SheetList[0] ?? '');
+    if (uc3.columnSheet && !uc1SheetList.includes(uc3.columnSheet)) {
+      state.permissionMapping.usecase3.columnSheet = uc1SheetList[0] ?? '';
+      persist();
+    }
+    if (selUc3Sheet) {
+      selUc3Sheet.replaceChildren(...uc1SheetList.map((s) => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        return opt;
+      }));
+      selUc3Sheet.value = uc3SheetName;
+    }
+    const uc3Cols = endpointColumnsOfSheet(state.endpoints, uc3SheetName);
+    if (selUc3Function) {
+      renderColumnSelect(selUc3Function, uc3Cols, uc3.functionColumn);
+    }
+    if (selUc3Action) {
+      renderOptionalColumnSelect(selUc3Action, uc3Cols, uc3.actionColumn);
     }
 
     // Render Usecase 1 mappings

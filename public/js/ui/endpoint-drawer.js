@@ -162,6 +162,7 @@ export function initEndpointDrawer() {
 
     if (mode === 'none') {
       pane.append(hint('Request này không gửi body.'));
+      pane.append(hint('Nếu tab BODY CHUNG có khai (khác None), endpoint này sẽ dùng body chung đó — trừ khi method không hỗ trợ body.'));
       return;
     }
 

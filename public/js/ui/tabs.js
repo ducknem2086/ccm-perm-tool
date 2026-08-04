@@ -1,4 +1,4 @@
-const TAB_IDS = ['input', 'auths', 'output'];
+const TAB_IDS = ['input', 'auths', 'output', 'perm'];
 
 export function initTabs({ onChange } = {}) {
   const tabs = TAB_IDS.map((id) => document.getElementById(`tab-${id}`));

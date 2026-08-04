@@ -183,7 +183,7 @@ test('runPool removes abort listener after finished', async () => {
     const reqs = [mkReq(1, `${mock.base}/x`)];
     const controller = new AbortController();
     const signal = controller.signal;
-    
+
     let removed = false;
     const originalRemove = signal.removeEventListener.bind(signal);
     signal.removeEventListener = (type, listener, options) => {
@@ -249,5 +249,3 @@ test('runPool does not spawn replacement worker when queue is empty', async () =
     await mock.close();
   }
 });
-
-

@@ -76,7 +76,22 @@ test('resolveColumns bo qua dong template co selector rong', () => {
 test('mapRows doc dung ba truong', () => {
   const r = mapRows(grid([['Tra cứu TB', 'GET', '/query/abc/{*}']]), tpl());
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.records, [{ name: 'Tra cứu TB', method: 'GET', endpoint: '/query/abc/{*}', sheetName: 'Sheet 1' }]);
+  assert.deepEqual(r.records, [{
+    name: 'Tra cứu TB', method: 'GET', endpoint: '/query/abc/{*}', sheetName: 'Sheet 1',
+    raw: { 'Tên API': 'Tra cứu TB', 'HTTP Method': 'GET', 'Đường dẫn': '/query/abc/{*}' },
+  }]);
+});
+
+test('mapRows giu raw cells cua toan bo header goc', () => {
+  const r = mapRows(grid([['A', 'GET', '/a/{*}', 'Ghi chu B']], ['Tên API', 'HTTP Method', 'Đường dẫn', 'Mo ta']), tpl());
+  assert.deepEqual(r.records[0].raw, {
+    'Tên API': 'A', 'HTTP Method': 'GET', 'Đường dẫn': '/a/{*}', 'Mo ta': 'Ghi chu B',
+  });
+});
+
+test('mapRows bo o rong va header rong khoi raw', () => {
+  const r = mapRows(grid([['A', 'GET', '/a/{*}', '']], ['Tên API', 'HTTP Method', 'Đường dẫn', '']), tpl());
+  assert.deepEqual(r.records[0].raw, { 'Tên API': 'A', 'HTTP Method': 'GET', 'Đường dẫn': '/a/{*}' });
 });
 
 test('mapRows viet hoa method va mac dinh GET khi o rong', () => {
@@ -85,11 +100,12 @@ test('mapRows viet hoa method va mac dinh GET khi o rong', () => {
   assert.deepEqual(r.records.map((x) => x.method), ['POST', 'GET']);
 });
 
-test('mapRows bo dong co method la', () => {
+test('mapRows KHONG bo dong khi method khong hop le — van hien endpoint, mac dinh GET va chi canh bao', () => {
   const r = mapRows(grid([['A', 'FETCH', '/a/{*}'], ['B', 'GET', '/b/{*}']]), tpl());
-  assert.equal(r.records.length, 1);
-  assert.equal(r.records[0].endpoint, '/b/{*}');
-  assert.deepEqual(r.errors, [{ row: 2, reason: 'method "FETCH" không hợp lệ' }]);
+  assert.equal(r.records.length, 2);
+  assert.deepEqual(r.records.map((x) => x.endpoint), ['/a/{*}', '/b/{*}']);
+  assert.deepEqual(r.records.map((x) => x.method), ['GET', 'GET']);
+  assert.deepEqual(r.errors, [{ row: 2, reason: 'method "FETCH" không hợp lệ — đã mặc định GET' }]);
 });
 
 test('mapRows tu them dau gach cheo khi path thieu', () => {
@@ -115,8 +131,8 @@ test('mapRows giu ca hai khi cung path khac method', () => {
   assert.equal(r.skipped, 0);
 });
 
-test('mapRows loai trung theo cap method va path', () => {
-  const r = mapRows(grid([['A', 'GET', '/a/{*}'], ['A lan hai', 'get', '/a/{*}']]), tpl());
+test('mapRows loai trung theo cap method va path khi dedupe: true', () => {
+  const r = mapRows(grid([['A', 'GET', '/a/{*}'], ['A lan hai', 'get', '/a/{*}']]), tpl(), { dedupe: true });
   assert.equal(r.records.length, 1);
   assert.equal(r.skipped, 1);
 });
@@ -141,5 +157,8 @@ test('mapRows de trong name khi template khong khai dong name', () => {
     { id: 't2', type: 'name', selector: 'HTTP Method', target: 'method' },
     { id: 't3', type: 'name', selector: 'Đường dẫn', target: 'endpoint' },
   ]);
-  assert.deepEqual(r.records, [{ name: '', method: 'GET', endpoint: '/a/{*}', sheetName: 'Sheet 1' }]);
+  assert.deepEqual(r.records, [{
+    name: '', method: 'GET', endpoint: '/a/{*}', sheetName: 'Sheet 1',
+    raw: { 'Tên API': 'A', 'HTTP Method': 'GET', 'Đường dẫn': '/a/{*}' },
+  }]);
 });

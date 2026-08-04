@@ -74,9 +74,11 @@ function setupMockDOM() {
     'tab-input': new MockElement('tab-input'),
     'tab-auths': new MockElement('tab-auths'),
     'tab-output': new MockElement('tab-output'),
+    'tab-perm': new MockElement('tab-perm'),
     'panel-input': new MockElement('panel-input'),
     'panel-auths': new MockElement('panel-auths'),
-    'panel-output': new MockElement('panel-output')
+    'panel-output': new MockElement('panel-output'),
+    'panel-perm': new MockElement('panel-perm')
   };
 
   globalThis.document = {
@@ -107,10 +109,13 @@ test('initTabs khoi tao tab input active theo mac dinh', () => {
   assert.equal(elements['tab-output'].classList.contains('is-active'), false);
   assert.equal(elements['panel-output'].hidden, true);
 
+  assert.equal(elements['tab-perm'].getAttribute('aria-selected'), 'false');
+  assert.equal(elements['panel-perm'].hidden, true);
+
   assert.deepEqual(onChangeCalls, ['input']);
 });
 
-test('select auths mo panel auths va dong hai panel kia', () => {
+test('select auths mo panel auths va dong cac panel kia', () => {
   const elements = setupMockDOM();
   const { select } = initTabs();
 
@@ -119,7 +124,21 @@ test('select auths mo panel auths va dong hai panel kia', () => {
   assert.equal(elements['panel-auths'].hidden, false);
   assert.equal(elements['panel-input'].hidden, true);
   assert.equal(elements['panel-output'].hidden, true);
+  assert.equal(elements['panel-perm'].hidden, true);
   assert.equal(elements['tab-auths'].classList.contains('is-active'), true);
+});
+
+test('select perm mo panel CHECK PERMISSION va dong cac panel kia', () => {
+  const elements = setupMockDOM();
+  const { select } = initTabs();
+
+  select('perm');
+
+  assert.equal(elements['panel-perm'].hidden, false);
+  assert.equal(elements['panel-input'].hidden, true);
+  assert.equal(elements['panel-auths'].hidden, true);
+  assert.equal(elements['panel-output'].hidden, true);
+  assert.equal(elements['tab-perm'].classList.contains('is-active'), true);
 });
 
 test('select chuyen tab va goi onChange', () => {
@@ -166,11 +185,11 @@ test('dieu huong ban phim mui ten trai/phai, home/end', () => {
   elements['tab-auths'].keydown('ArrowLeft');
   assert.equal(elements['tab-input'].classList.contains('is-active'), true);
 
-  // Nhan End -> nhay ve output
+  // Nhan End -> nhay ve tab cuoi cung (perm)
   elements['tab-input'].keydown('End');
-  assert.equal(elements['tab-output'].classList.contains('is-active'), true);
+  assert.equal(elements['tab-perm'].classList.contains('is-active'), true);
 
   // Nhan Home -> nhay ve input
-  elements['tab-output'].keydown('Home');
+  elements['tab-perm'].keydown('Home');
   assert.equal(elements['tab-input'].classList.contains('is-active'), true);
 });

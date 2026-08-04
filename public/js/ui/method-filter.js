@@ -1,4 +1,4 @@
-import { state, persist, notify } from '../state.js';
+import { state, persist, notify, subscribe } from '../state.js';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -18,7 +18,7 @@ export function createMethodFilterGroup() {
     const filter = ensureFilter();
     const selected = state.selectedSheet ?? 'all';
     const enabled = (state.endpoints ?? []).filter(
-      (e) => e.enabled && (selected === 'all' || (e.sheetName ?? 'Sheet 1') === selected)
+      (e) => selected === 'all' || (e.sheetName ?? 'Sheet 1') === selected
     );
 
     for (const m of METHODS) {
@@ -43,5 +43,6 @@ export function createMethodFilterGroup() {
   }
 
   render();
+  subscribe(render);
   return { el: box, render };
 }

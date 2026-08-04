@@ -15,8 +15,13 @@ export function parseCsvGrid(text) {
 
 function cellToString(cell) {
   if (cell === null || cell === undefined) return '';
-  if (typeof cell === 'object' && 'text' in cell) return String(cell.text);
-  if (typeof cell === 'object' && 'result' in cell) return String(cell.result);
+  if (typeof cell === 'object') {
+    if (Array.isArray(cell.richText)) {
+      return cell.richText.map((r) => r.text ?? '').join('');
+    }
+    if ('text' in cell && cell.text !== undefined) return String(cell.text);
+    if ('result' in cell && cell.result !== undefined) return String(cell.result);
+  }
   return String(cell);
 }
 
@@ -34,9 +39,10 @@ export async function parseXlsxGrid(buffer, { targetSheets } = {}) {
 
   const sheets = worksheets.map((ws) => {
     const out = [];
-    ws.eachRow((row) => {
+    ws.eachRow({ includeEmpty: true }, (row) => {
       const cells = [];
-      for (let i = 1; i <= row.cellCount; i += 1) {
+      const colCount = Math.max(row.cellCount, ws.columnCount || 0);
+      for (let i = 1; i <= colCount; i += 1) {
         cells.push(cellToString(row.getCell(i).value).trim());
       }
       out.push(cells);

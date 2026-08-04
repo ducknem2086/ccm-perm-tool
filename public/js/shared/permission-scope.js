@@ -1,5 +1,7 @@
 import { filterMsisdns, filterEndpoints } from './run-filter.js';
 import { matchPermissionEndpoints, endpointColumnsOfSheet } from './permission-match.js';
+import { authIdentityErrors } from './auth-identity.js';
+import { parseCurlRequest } from './curl-parse.js';
 
 // CHECK PERM — mot duong duy nhat: DUNG danh sach endpoint ma nut RUN ALL dang
 // dem (theo tab sheet + bo loc method dang chon), khu trung METHOD:pathTemplate.
@@ -163,6 +165,48 @@ export function validatePermissionScope(state) {
     errors.push('Chưa chọn cột đích (UC2), hoặc cột đã biến mất');
   }
 
+  // UC3 de trong ca ba o la hop le — CHECK PERM khi do chi chay request nghiep
+  // vu nhu truoc thay doi nay. Chi kiem khi functionColumn da khai.
+  const uc3 = mapping.usecase3 ?? {};
+  if (uc3.functionColumn) {
+    const oracleRow = (state?.commonEndpointList ?? []).find((c) => c.kind === 'oracle');
+    const oracleCurl = String(oracleRow?.curlRaw ?? '').trim();
+    if (!oracleRow || (String(oracleRow.line ?? '').trim() === '' && oracleCurl === '')) {
+      errors.push('UC3 đã khai cột FUNCTION nhưng chưa khai dòng endpoint check permission ở ENDPOINTS CHUNG');
+    } else if (oracleCurl === '') {
+      // Thieu khuon thi request mang Origin/Referer/X-Current-Url cua chinh
+      // tool (localhost:9000) thay vi cua app that -> IAM sau WAF tra 401.
+      errors.push('UC3: dòng check permission chưa dán cURL mẫu — thiếu nó request sẽ mang Origin/Referer của tool và IAM trả 401');
+    } else if (!parseCurlRequest(oracleCurl)) {
+      errors.push('UC3: cURL mẫu check permission không đọc được URL');
+    }
+
+    if (!uc3.columnSheet || !allSheets.has(uc3.columnSheet)) {
+      errors.push('UC3: chưa chọn sheet endpoints tham chiếu');
+    }
+    const uc3Cols = endpointColumnsOfSheet(state?.endpoints, uc3.columnSheet);
+    if (!uc3Cols.includes(uc3.functionColumn)) {
+      errors.push('UC3: cột FUNCTION không có trong sheet đang chọn, hoặc cột đã biến mất');
+    }
+    if (uc3.actionColumn && !uc3Cols.includes(uc3.actionColumn)) {
+      errors.push('UC3: cột ACTION không có trong sheet đang chọn');
+    }
+
+    // Danh tinh muon tu chinh cURL cua auth — chi profile nam trong UC1 moi
+    // thuc su chay CHECK PERM (xem scopedEndpointsAndAuths), nen chi bao loi
+    // cho dung nhung profile do.
+    const uc1Names = uc1AuthNames(uc1);
+    const authsInScope = (state?.auths ?? []).filter((a) => uc1Names.has(normalizeName(a.name)));
+    for (const a of authsInScope) {
+      for (const msg of authIdentityErrors(a)) {
+        errors.push(`UC3: auth profile "${a.name}" — ${msg}`);
+      }
+      if (!String(a.role ?? '').trim()) {
+        errors.push(`UC3: auth profile "${a.name}" chưa khai role — cần để dựng body checkPermission`);
+      }
+    }
+  }
+
   const { endpoints, auths } = scopedEndpointsAndAuths(state);
   if (endpoints.length === 0) {
     errors.push('Không endpoint nào để chạy — kiểm tra sheet khai ở UC1 và bộ lọc method');
@@ -174,9 +218,9 @@ export function validatePermissionScope(state) {
   return errors;
 }
 
-// Endpoint mang them permName + permRowIndex tu dong UC2 keo ve no — server
-// doc lai hai khoa nay de cham diem O(1), khong sheet-gating (xem
-// evaluateUc2Permission trong http-client.js).
+// Endpoint mang them permName + permRowIndex tu dong UC2 keo ve no, va
+// oracleFunction/oracleAction tu UC3 — server doc lai de cham diem O(1)
+// (evaluateUc2Permission) va de dung request-builder.js dung buildOracleRequest.
 function scopedEndpointsAndAuths(state) {
   const mapping = savedMappingOf(state);
   const uc1 = mapping.usecase1 ?? [];
@@ -185,20 +229,25 @@ function scopedEndpointsAndAuths(state) {
 
   // permRun di kem tung endpoint (khong phai mot khoa rieng cua config) vi
   // server chi nhin thay request, khong nhin thay state — xem evaluatePermission.
-  const endpoints = matchPermissionEndpoints(state).map(({ endpoint, permName, permRowIndex }) => ({
-    ...endpoint, permName, permRowIndex, permRun: true,
+  const { list, collapsed } = matchPermissionEndpoints(state);
+  const endpoints = list.map(({ endpoint, permName, permRowIndex, oracleFunction, oracleAction }) => ({
+    ...endpoint, permName, permRowIndex, permRun: true, oracleFunction, oracleAction,
   }));
 
-  return { endpoints, auths };
+  return { endpoints, auths, collapsed };
 }
 
 // Dung xuc phai sinh cho POST /api/run: server khong biet gi ve "che do
 // permission", chi nhan mot config da thu hep san — validateConfig,
 // buildRequests, runner, worker-pool khong doi dong nao.
 export function buildPermissionRunConfig(state) {
-  const { endpoints, auths } = scopedEndpointsAndAuths(state);
+  const { endpoints, auths, collapsed } = scopedEndpointsAndAuths(state);
   // msisdnPatterns khong thuoc gate — doc thang ban dang dung.
   const msisdns = filterMsisdns(state?.msisdns, state?.runFilter).slice(0, 1);
+
+  // Dong khai bao endpoint checkPermission (METHOD /path), dinh kem config
+  // de server (request-builder.js) dung dung URL — danh tinh lay tu auth.
+  const oracleTemplate = (state?.commonEndpointList ?? []).find((c) => c.kind === 'oracle') ?? null;
 
   const config = {
     ...state,
@@ -209,15 +258,37 @@ export function buildPermissionRunConfig(state) {
     selectedSheet: 'all',
     commonEndpointsEnabled: false,
     runFilter: { methods: [], msisdnPatterns: [], authIds: auths.map((a) => a.id) },
+    oracleTemplate,
   };
 
-  const perAuth = endpoints.reduce((sum, ep) => sum + (ep.attachMsisdn !== false ? msisdns.length : 1), 0);
-  const total = auths.length * perAuth;
+  const perEndpoint = (ep) => (ep.attachMsisdn !== false ? msisdns.length : 1);
+  const perAuth = endpoints.reduce((sum, ep) => sum + perEndpoint(ep), 0);
+  // 'pairs' = so request nghiep vu, dung ten cu 'total' truoc day de khong doi
+  // hop dong voi cho goi buildRequests (server tu tinh lai y het).
+  const pairs = auths.length * perAuth;
+
+  // Oracle chi ban khi endpoint co function — khong "gap doi tron": endpoint
+  // trong cot FUNCTION khong sinh request checkPermission nao.
+  const perAuthWithFn = endpoints
+    .filter((ep) => String(ep.oracleFunction ?? '').trim() !== '')
+    .reduce((sum, ep) => sum + perEndpoint(ep), 0);
+  const oracleCalls = auths.length * perAuthWithFn;
 
   // Dem tu permRowIndex chu khong dem statusPermission === 'empty' trong ket qua:
   // 'empty' con phat sinh khi request loi mang (status === null), tron hai nguyen
   // nhan vao mot con so thi no het chi duoc cho nao can sua.
   const unmatched = endpoints.filter((e) => e.permRowIndex == null).length;
+  const noFunction = endpoints.filter((e) => !String(e.oracleFunction ?? '').trim()).length;
 
-  return { config, endpointCount: endpoints.length, authCount: auths.length, total, unmatched };
+  return {
+    config,
+    endpointCount: endpoints.length,
+    authCount: auths.length,
+    pairs,
+    oracleCalls,
+    total: pairs + oracleCalls,
+    unmatched,
+    noFunction,
+    collapsed,
+  };
 }

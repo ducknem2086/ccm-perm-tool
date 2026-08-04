@@ -27,9 +27,7 @@
       </div>
       <div class="topbar-right">
         <button id="btn-run" class="btn btn-primary" type="button">▶ RUN ALL (0)</button>
-        <button id="btn-check-perm" class="btn btn-primary" type="button">🔐 CHECK PERM </button>
-        <button id="btn-export-config" class="btn btn-secondary btn-sm" type="button">⤒ Export config</button>
-        <button id="btn-import-config" class="btn btn-secondary btn-sm" type="button">⤓ Import config</button>
+        <button id="btn-check-perm" class="btn btn-primary" type="button">🔐 CHECK PERM</button>
       </div>
     </header>
 
@@ -57,6 +55,10 @@
               <div id="tbl-body-common" class="param-table"></div>
               <textarea id="inp-body-raw" class="input mono ed-textarea" spellcheck="false" hidden
                 placeholder='{&#10;  "msisdn": "{{msisdn}}"&#10;}'></textarea>
+              <div class="el-actions">
+                <button id="btn-export-config" class="btn btn-secondary btn-sm" type="button">⤒ Export config</button>
+                <button id="btn-import-config" class="btn btn-secondary btn-sm" type="button">⤓ Import config</button>
+              </div>
             </section>
 
             <section class="card" id="card-msisdn">
@@ -120,9 +122,12 @@
 
                 <section class="card">
                   <h2 class="card-title">ENDPOINTS CHUNG</h2>
-                  <label class="check"><input id="chk-common-enabled" type="checkbox" checked /> Bật Endpoints chung</label>
-                  <textarea id="inp-endpoints-common" class="input mono ed-textarea" spellcheck="false"
-                    placeholder="Nhập danh sách endpoint chung (mỗi dòng 1 endpoint, có thể bắt đầu bằng METHOD).&#10;Ví dụ:&#10;/api/v1/health&#10;POST /api/v1/submit"></textarea>
+                  <label class="check"><input id="chk-common-enabled" type="checkbox" checked /> Bật Endpoints chung (chỉ áp dụng dòng "Nghiệp vụ")</label>
+                  <p class="hint">Dòng "Check permission" không vào pool RUN ALL — đây là khai báo endpoint <code>checkPermission</code> cho CHECK PERM (UC3). Phải dán cURL thật vào dòng đó: tool giữ nguyên URL và <strong>mọi header</strong> của nó (<code>Origin</code>, <code>Referer</code>, <code>X-Current-Url</code>, <code>Sec-Fetch-Site</code>… của app thật), chỉ thay <code>Cookie</code> và khối <code>user</code> bằng danh tính của auth profile đang chạy. Thiếu cURL mẫu thì request mang <code>Origin</code> của tool (<code>localhost:9000</code>) và IAM trả 401.</p>
+                  <div id="common-endpoints-list" class="ce-list"></div>
+                  <div class="el-actions">
+                    <button id="btn-common-endpoints-add" type="button" class="btn btn-secondary btn-sm">＋ Thêm dòng</button>
+                  </div>
                 </section>
 
                 <!-- Loi import endpoints do vao khoang trong cuoi cot trai (cot phai
@@ -163,6 +168,25 @@
                       <select id="sel-permissions-endpoint-col" class="input input-sm"></select>
                     </label>
                   </div>
+                  <div class="perm-section-head">
+                    <span class="label">UC3 — ORACLE CHECK PERMISSION (tuỳ chọn)</span>
+                  </div>
+                  <p class="hint">Cột FUNCTION cấp giá trị <code>permissionSpecification.function</code> cho request <code>checkPermission</code> — với file hiện tại đó thường là cột <code>API Mapping</code>. Cột ACTION để trống thì dùng nguyên <code>action</code> trong cURL mẫu. Để trống cả UC3 thì CHECK PERM chỉ chạy request nghiệp vụ như trước, không gọi oracle. Endpoint trống ô FUNCTION vẫn chạy request nghiệp vụ bình thường, chỉ để trống cột <code>Status Check Perm</code>.</p>
+                  <div class="perm-grid">
+                    <label class="field">
+                      <span class="label">Sheet ENDPOINTS tham chiếu</span>
+                      <select id="sel-perm-uc3-sheet" class="input input-sm"></select>
+                    </label>
+                    <label class="field">
+                      <span class="label">Cột FUNCTION</span>
+                      <select id="sel-perm-uc3-function" class="input input-sm"></select>
+                    </label>
+                    <label class="field">
+                      <span class="label">Cột ACTION (tuỳ chọn)</span>
+                      <select id="sel-perm-uc3-action" class="input input-sm"></select>
+                    </label>
+                  </div>
+
                   <div class="field perm-uc1">
                     <div class="perm-uc1-head">
                       <span class="label">UC1 — PHẠM VI CHẠY &amp; CỘT CHẤM QUYỀN</span>
@@ -234,8 +258,14 @@
           <div class="runbar-left">
             <span id="perm-progress" class="mono">0/0</span>
             <span id="perm-stats" class="mono muted"></span>
+            <p id="perm-warnings" class="warning" hidden></p>
           </div>
           <div class="runbar-right">
+            <button id="btn-perm-check" class="btn btn-secondary" type="button">🔎 Check</button>
+            <span id="perm-check-badge" class="muted mono" hidden>
+              khớp <span id="perm-check-count">0</span> bản ghi has permission
+              <button id="btn-perm-check-clear" class="btn btn-secondary btn-sm" type="button">Bỏ check ✕</button>
+            </span>
             <button id="btn-perm-cancel" class="btn btn-secondary" type="button" disabled>■ Dừng</button>
             <button id="btn-perm-export" class="btn btn-secondary" type="button" disabled>⬇ Export Excel</button>
           </div>
@@ -244,7 +274,7 @@
         <div id="perm-split" class="split-pane">
           <div class="split-side">
             <div id="perm-viewport" class="result-viewport">
-              <table id="perm-table" class="result-table"></table>
+              <table id="perm-table" class="result-table no-row-click"></table>
             </div>
           </div>
 
@@ -256,6 +286,8 @@
               <span class="label">HAS PERMISSIONS</span>
               <label><input id="chk-perm-granted" type="checkbox" checked /> YES</label>
               <label><input id="chk-perm-denied" type="checkbox" checked /> NO</label>
+              <input id="inp-perm-sheet-search" class="input input-sm" type="text"
+                placeholder="Lọc theo cột đầu tiên…" title="Lọc theo cột đầu tiên" spellcheck="false" />
               <span id="perm-sheet-count" class="muted mono"></span>
             </div>
             <div id="perm-sheet-viewport" class="result-viewport">

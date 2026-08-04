@@ -9,10 +9,13 @@ export function createEditableList(opts) {
     getItems, setItems, onChange,
     renderExtra = null,
     onImport = null,
+    onClear = null,
     extraActions = [],
     getValue = (item) => String(item ?? ''),
     setValue = (item, v) => v,
     makeItem = (v) => v,
+    // { placeholder, match(item, rawQuery) } — chi ENDPOINTS dung, MSISDN bo qua.
+    search = null,
   } = opts;
 
   const validate = VALIDATORS[kind];
@@ -21,9 +24,14 @@ export function createEditableList(opts) {
     .map((a, i) => `<button type="button" class="btn btn-secondary btn-sm" data-extra-action="${i}" title="${a.title ?? ''}">${a.label}</button>`)
     .join('');
 
+  const searchBox = search
+    ? `<input type="search" class="input input-sm el-search" data-search placeholder="${search.placeholder ?? 'Tìm kiếm...'}" />`
+    : '';
+
   host.innerHTML = `
     <h2 class="card-title">
       <span>${title} <span class="el-count" data-count>(0)</span></span>
+      ${searchBox}
     </h2>
     <div class="el-body" data-body></div>
     <div class="el-actions">
@@ -38,6 +46,9 @@ export function createEditableList(opts) {
   const body = host.querySelector('[data-body]');
   const count = host.querySelector('[data-count]');
   const fileInput = host.querySelector('[data-file]');
+  // Mock DOM cua vai test cu khong dung "data-search" nen co the tra ve null
+  // du search duoc truyen — giu the ky ket qua bang optional chaining ben duoi.
+  const searchInput = search ? host.querySelector('[data-search]') : null;
 
   function commit(items) {
     setItems(items);
@@ -45,13 +56,32 @@ export function createEditableList(opts) {
     render();
   }
 
+  // Khong loc thi thu tu render == thu tu mang, tra ve vi tri truc tiep la du.
+  // Co loc thi hang hien thi la tap con, phai tim theo dataset.index de khong
+  // focus nham hang khi cac hang khac dang bi an boi search.
   function focusRow(index, caretAtEnd = true) {
-    const input = body.querySelectorAll('.el-input')[index];
+    let input;
+    if (search) {
+      const row = [...body.children].find((r) => r.dataset && r.dataset.index === String(index));
+      input = row?.querySelector('.el-input');
+    } else {
+      input = body.querySelectorAll('.el-input')[index];
+    }
     if (!input) return;
     input.focus();
     if (caretAtEnd && input.setSelectionRange) {
       input.setSelectionRange(input.value.length, input.value.length);
     }
+  }
+
+  // Tap dong dang ve tren bang. Tach khoi render() de nut "theo dong dang loc"
+  // (endpoint-list.js) dung chung dung mot dinh nghia — them bo loc moi o day
+  // la ca hai cung doi, khong the lech.
+  function computeVisible() {
+    const items = getItems();
+    const rawQuery = search && searchInput ? searchInput.value : '';
+    const rows = items.map((item, index) => ({ item, index }));
+    return rawQuery.trim() !== '' ? rows.filter(({ item }) => search.match(item, rawQuery)) : rows;
   }
 
   function render() {
@@ -67,9 +97,20 @@ export function createEditableList(opts) {
       return;
     }
 
-    items.forEach((item, index) => {
+    const visible = computeVisible();
+
+    if (visible.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'el-empty';
+      empty.textContent = 'Không tìm thấy dòng nào khớp tìm kiếm.';
+      body.append(empty);
+      return;
+    }
+
+    visible.forEach(({ item, index }) => {
       const row = document.createElement('div');
       row.className = 'el-row';
+      if (search) row.dataset.index = String(index);
 
       renderExtra?.(item, index, row);
 
@@ -143,6 +184,10 @@ export function createEditableList(opts) {
   });
 
   host.querySelector('[data-clear]').addEventListener('click', () => {
+    if (onClear) {
+      onClear();
+      return;
+    }
     if (getItems().length === 0) return;
     if (!confirm(`Xóa toàn bộ ${getItems().length} dòng trong "${title}"?`)) return;
     commit([]);
@@ -189,7 +234,15 @@ export function createEditableList(opts) {
     }
   });
 
+  if (search && searchInput) {
+    searchInput.addEventListener('input', () => render());
+  }
+
   render();
-  return { render };
+  return {
+    render,
+    getVisibleItems: () => computeVisible().map((r) => r.item),
+    getSearchQuery: () => (search && searchInput ? searchInput.value : ''),
+  };
 }
 

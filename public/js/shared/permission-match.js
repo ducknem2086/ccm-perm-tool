@@ -39,24 +39,45 @@ export function joinValueOf(endpoint, endpointColumn) {
   return String(endpoint?.name ?? '');
 }
 
+// Doc gia tri mot cot raw. HAI tang, KHONG co tang 3 fallback ve e.name nhu
+// joinValueOf: doan function code bang ten endpoint la bia ra mot quyen khong
+// ton tai — oracle se hoi mot function khong co that va tra ve mot status vo
+// nghia ma khong ai biet. Thieu cot thi tra '' de duoc dem vao noFunction.
+export function rawValueOf(endpoint, column) {
+  const raw = endpoint?.raw ?? {};
+  const want = normalizeName(column);
+  if (want === '') return '';
+  const hit = Object.entries(raw).find(([k]) => normalizeName(k) === want);
+  return hit ? String(hit[1] ?? '') : '';
+}
+
 // Cung khoa METHOD:pathTemplate nhu dedupeEndpoints, nhung khi hai ban dung do
 // thi giu ban CO khoa ghep. dedupeEndpoints giu ban gap dau tien — ban do co the
 // la ban de trong o ten, con ban ghep duoc o sheet sau bi vut, ket qua phu thuoc
 // thu tu mang. Map giu thu tu chen nen ban gap dau tien van thang khi ca hai
 // cung ghep duoc (hoac cung khong).
-function dedupePreferJoinable(endpoints, endpointColumn) {
+//
+// Khi UC3 khai functionColumn, khoa mang them function code: hai dong cung
+// METHOD:path nhung khac function la HAI don vi phan quyen rieng (mot BE API
+// co the phuc vu nhieu nut/widget FE khac nhau), khong duoc nuot nhau. UC3 de
+// trong thi khoa y het truoc day — khong doi hanh vi.
+function dedupePreferJoinable(endpoints, endpointColumn, functionColumn) {
   const best = new Map();
+  let collapsed = 0;
   for (const e of endpoints ?? []) {
     const method = String(e.method ?? 'GET').toUpperCase();
     const path = String(e.pathTemplate ?? e.endpoint ?? '').trim();
-    const key = `${method}:${path}`;
+    const key = functionColumn
+      ? `${method}:${path}:${normalizeName(rawValueOf(e, functionColumn))}`
+      : `${method}:${path}`;
     const cur = best.get(key);
     if (!cur) { best.set(key, e); continue; }
+    collapsed += 1;
     const curHas = normalizeName(joinValueOf(cur, endpointColumn)) !== '';
     const newHas = normalizeName(joinValueOf(e, endpointColumn)) !== '';
     if (!curHas && newHas) best.set(key, e);
   }
-  return [...best.values()];
+  return { unique: [...best.values()], collapsed };
 }
 
 // Mot vong quet cua thuat toan include: bot tu DAU tu khoa, toi da 4 vong,
@@ -68,7 +89,7 @@ function dedupePreferJoinable(endpoints, endpointColumn) {
 // Vong 0 long hon exact nen thu tu dong trong file phan quyen co trong luong
 // hon: dong ten ngan nam tren co the om mat endpoint ma dong dai hon ben duoi
 // khop sat hon (xem 'taken' o matchPermissionEndpoints — dong den truoc giu cho).
-function hitsForRow(rowText, pool) {
+export function hitsForRow(rowText, pool) {
   const words = normalizeName(rowText).split(' ').filter(Boolean);
 
   for (let k = 0; k < 4 && k < words.length; k += 1) {
@@ -84,15 +105,17 @@ function hitsForRow(rowText, pool) {
 //      doi tab sheet hay bo loc method la ca hai nut cung doi. Tab "Tat ca (All)" = quet het. Khong
 //      doc checkbox 'enabled', khong doc uc1[].endpointSheet nua. commonEndpointsEnabled: false —
 //      ban ghi common go tay khong co raw nen khong dong UC2 nao ghep duoc, chay vao chi cham 'empty'.
-//   2. KHU TRUNG — METHOD:pathTemplate, uu tien ban CO khoa ghep. Bat buoc lam TRUOC buoc ghep:
-//      ghep truoc roi khu trung thi hai ban cung API co the dinh hai dong UC2 khac nhau, ban nao
-//      song sot la ngau nhien theo thu tu mang.
+//   2. KHU TRUNG — METHOD:pathTemplate(:function neu UC3 co khai), uu tien ban CO khoa ghep. Bat
+//      buoc lam TRUOC buoc ghep: ghep truoc roi khu trung thi hai ban cung API co the dinh hai dong
+//      UC2 khac nhau, ban nao song sot la ngau nhien theo thu tu mang.
 //   3. GHEP  — moi dong UC2 (dung thu tu file) keo ve tap endpoint qua hitsForRow; dong den truoc giu cho.
-//   4. TRA VE HET — endpoint khong dong nao voi toi van co mat, permRowIndex: null (cham 'empty').
+//   4. GAN ORACLE — moi endpoint mang them oracleFunction/oracleAction tu UC3 (co the rong).
+//   5. TRA VE HET — endpoint khong dong nao voi toi van co mat, permRowIndex: null (cham 'empty').
 export function matchPermissionEndpoints(state) {
   const saved = state?.savedConfig ?? {};
   const mapping = saved.permissionMapping ?? {};
   const uc2 = mapping.usecase2 ?? {};
+  const uc3 = mapping.usecase3 ?? {};
   const sheet = (state?.permissionFile?.sheets ?? []).find((s) => s.name === saved.permissionSheet);
   const headers = sheet?.headers ?? [];
   const rows = sheet?.rows ?? [];
@@ -101,11 +124,19 @@ export function matchPermissionEndpoints(state) {
   const filtered = filterEndpoints(
     state?.endpoints, state?.runFilter, state?.selectedSheet, '', false,
   );
-  const unique = dedupePreferJoinable(filtered, endpointColumn);
+  const { unique, collapsed } = dedupePreferJoinable(filtered, endpointColumn, uc3.functionColumn);
+
+  const withOracle = (e) => ({
+    oracleFunction: rawValueOf(e, uc3.functionColumn),
+    // Cot ACTION rong la hop le (file endpoints thuong khong co cot action FE) —
+    // buildOracleRequest doc '' la "giu nguyen action cua curl mau", khong phai
+    // "ghi de bang rong".
+    oracleAction: uc3.actionColumn ? rawValueOf(e, uc3.actionColumn) : '',
+  });
 
   const srcIdx = uc2.permissionColumn ? headers.indexOf(uc2.permissionColumn) : -1;
-  const bare = (e) => ({ endpoint: e, permName: null, permRowIndex: null });
-  if (srcIdx === -1 || !endpointColumn) return unique.map(bare);
+  const bare = (e) => ({ endpoint: e, permName: null, permRowIndex: null, ...withOracle(e) });
+  if (srcIdx === -1 || !endpointColumn) return { list: unique.map(bare), collapsed };
 
   const pool = unique
     .map((e) => ({ e, hay: normalizeName(joinValueOf(e, endpointColumn)) }))
@@ -120,5 +151,10 @@ export function matchPermissionEndpoints(state) {
     }
   });
 
-  return unique.map((e) => (taken.has(e) ? { endpoint: e, ...taken.get(e) } : bare(e)));
+  const list = unique.map((e) => (
+    taken.has(e)
+      ? { endpoint: e, ...taken.get(e), ...withOracle(e) }
+      : bare(e)
+  ));
+  return { list, collapsed };
 }

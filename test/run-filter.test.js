@@ -13,16 +13,16 @@ const auths = [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }];
 
 const ids = (list) => list.map((x) => x.id);
 
-test('filterEndpoints methods rong tra moi endpoint dang bat', () => {
-  assert.deepEqual(ids(filterEndpoints(eps, { methods: [] })), ['e1', 'e2', 'e4']);
+test('filterEndpoints methods rong tra MOI endpoint, ke ca ban ghi enabled false', () => {
+  assert.deepEqual(ids(filterEndpoints(eps, { methods: [] })), ['e1', 'e2', 'e3', 'e4']);
 });
 
-test('filterEndpoints loai endpoint bi tat ke ca khi method khop', () => {
-  assert.deepEqual(ids(filterEndpoints(eps, { methods: ['GET'] })), ['e1', 'e4']);
+test('filterEndpoints KHONG loai endpoint enabled false — checkbox khong thu hep pham vi chay', () => {
+  assert.deepEqual(ids(filterEndpoints(eps, { methods: ['GET'] })), ['e1', 'e3', 'e4']);
 });
 
 test('filterEndpoints khong phan biet hoa thuong', () => {
-  assert.deepEqual(ids(filterEndpoints(eps, { methods: ['get', 'post'] })), ['e1', 'e2', 'e4']);
+  assert.deepEqual(ids(filterEndpoints(eps, { methods: ['get', 'post'] })), ['e1', 'e2', 'e3', 'e4']);
 });
 
 test('filterEndpoints coi endpoint thieu method la GET', () => {
@@ -30,7 +30,7 @@ test('filterEndpoints coi endpoint thieu method la GET', () => {
 });
 
 test('filterEndpoints chiu duoc runFilter undefined', () => {
-  assert.deepEqual(ids(filterEndpoints(eps, undefined)), ['e1', 'e2', 'e4']);
+  assert.deepEqual(ids(filterEndpoints(eps, undefined)), ['e1', 'e2', 'e3', 'e4']);
 });
 
 test('filterEndpoints loc theo selectedSheet khi khac all', () => {

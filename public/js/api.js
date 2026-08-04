@@ -7,7 +7,9 @@ export async function startRun(config) {
   const res = await fetch('/api/run', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(config),
+    // Origin cua chinh tool — server dung lam Origin/Referer mac dinh cho
+    // request di ra, khong luu vao state de khoi dinh origin cu trong config.
+    body: JSON.stringify({ ...config, origin: location.origin }),
   });
   const json = await asJson(res);
   if (!res.ok) {
@@ -67,11 +69,11 @@ export async function importGrid(file) {
 }
 
 
-export async function exportExcel(runId, indexes, includeToken) {
+export async function exportExcel(runId, indexes, includeToken, layout = 'default') {
   const res = await fetch(`/api/export/${runId}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ indexes, includeToken }),
+    body: JSON.stringify({ indexes, includeToken, layout }),
   });
   if (!res.ok) throw new Error('Export thất bại');
 

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import ExcelJS from 'exceljs';
 import {
   maskToken, maskCookie, serializeHeaders, exportFilename, writeResultsToStream, EXPORT_COLUMNS, getExportColumns,
+  PERMISSION_EXPORT_COLUMNS,
 } from '../src/server/excel-export.js';
 
 const LONG_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abcdefMWQx';
@@ -261,6 +262,75 @@ test('writeResultsToStream thay duration bang statusPermission va to mau khi has
     assert.equal(ws.getRow(3).getCell(12).font?.color?.argb, 'FFF6465D');
     assert.equal(ws.getRow(4).getCell(12).value, 'empty');
     assert.equal(ws.getRow(4).getCell(12).font?.color?.argb, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('PERMISSION_EXPORT_COLUMNS co dung 8 header theo dung thu tu', () => {
+  assert.deepEqual(PERMISSION_EXPORT_COLUMNS.map((c) => c.header), [
+    'Status Code', 'Status Permission', 'Auth', 'Endpoint', 'Role', 'Endpoint Name', 'UC2 Name', 'Response Body',
+  ]);
+});
+
+test('layout permission dung dung 8 cot va to mau statusPermission', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccm-'));
+  const file = join(dir, 'out.xlsx');
+  try {
+    const records = [
+      record({
+        index: 1, statusPermission: 'true', sheetName: 'Sheet 1',
+        endpointName: 'Tra cuu thue bao', permissionMatchedName: 'Tra cuu TB',
+      }),
+      record({
+        index: 2, statusPermission: 'false', sheetName: 'Sheet 2',
+        endpointName: 'Doi SIM 4G', permissionMatchedName: 'Doi SIM',
+        response: { status: 403, statusText: 'Forbidden', headers: {}, body: null, bodyText: '{"error":"forbidden"}', sizeBytes: 20 },
+      }),
+    ];
+    await writeResultsToStream(createWriteStream(file), records, { layout: 'permission' });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(file);
+    const ws = wb.getWorksheet('Results');
+
+    assert.deepEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8].map((c) => ws.getRow(1).getCell(c).value),
+      ['Status Code', 'Status Permission', 'Auth', 'Endpoint', 'Role', 'Endpoint Name', 'UC2 Name', 'Response Body'],
+    );
+
+    assert.equal(ws.getRow(2).getCell(1).value, 200);
+    assert.equal(ws.getRow(2).getCell(2).value, 'true');
+    assert.equal(ws.getRow(2).getCell(2).font?.color?.argb, 'FF0ECB81');
+    assert.equal(ws.getRow(2).getCell(3).value, 'Default');
+    assert.equal(ws.getRow(2).getCell(4).value, '/query/abc/{*}');
+    assert.equal(ws.getRow(2).getCell(5).value, 'Sheet 1');
+    assert.equal(ws.getRow(2).getCell(6).value, 'Tra cuu thue bao');
+    assert.equal(ws.getRow(2).getCell(7).value, 'Tra cuu TB');
+
+    assert.equal(ws.getRow(3).getCell(1).value, 403);
+    assert.equal(ws.getRow(3).getCell(2).value, 'false');
+    assert.equal(ws.getRow(3).getCell(2).font?.color?.argb, 'FFF6465D');
+    assert.equal(ws.getRow(3).getCell(5).value, 'Sheet 2');
+    assert.equal(ws.getRow(3).getCell(6).value, 'Doi SIM 4G');
+    assert.equal(ws.getRow(3).getCell(7).value, 'Doi SIM');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('layout mac dinh khong doi so voi hanh vi hien tai', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ccm-'));
+  const file = join(dir, 'out.xlsx');
+  try {
+    await writeResultsToStream(createWriteStream(file), [record()], { includeToken: false });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(file);
+    const ws = wb.getWorksheet('Results');
+
+    assert.equal(ws.getRow(1).getCell(1).value, 'Index');
+    assert.equal(ws.getRow(1).getCell(12).value, 'Duration (ms)');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

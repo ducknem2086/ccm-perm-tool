@@ -2,14 +2,33 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateConfig, buildRequests } from '../src/server/request-builder.js';
 
+function b64url(obj) {
+  return Buffer.from(JSON.stringify(obj)).toString('base64url');
+}
+
+function makeJwt(payload) {
+  return `${b64url({ alg: 'RS256' })}.${b64url(payload)}.sig`;
+}
+
+function oracleAuth(over = {}) {
+  const token = makeJwt({
+    individual_id: 'ind-1', preferred_username: 'user@vnp.vn', exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  return {
+    id: 'a1', name: 'PROD', role: 'core_donvixuly',
+    curlRaw: `curl 'https://x.vn' -b 'access_token=${token}'`,
+    ...over,
+  };
+}
+
 function authOver(patch = {}) {
-  return { id: 'a1', name: 'Default', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '', ...patch };
+  return { id: 'a1', name: 'Default', curlRaw: '', role: '', ...patch };
 }
 
 function baseConfig(over = {}) {
   return {
     domain: 'https://abc.vn',
-    auths: [authOver({ token: 'TOKEN123' })],
+    auths: [authOver({ curlRaw: 'Authorization: Bearer TOKEN123' })],
     runFilter: { methods: [], msisdnPatterns: [], authIds: [] },
     dateRange: { from: '25/03/2026', to: '01/04/2026' },
     dateFormat: 'ddMMyyyy',
@@ -38,11 +57,19 @@ test('validateConfig bat domain sai', () => {
   assert.equal(errs[0].field, 'domain');
 });
 
-test('validateConfig bat khi khong co endpoint nao bat', () => {
+test('validateConfig bat khi danh sach endpoint rong', () => {
+  const cfg = baseConfig();
+  cfg.endpoints = [];
+  cfg.commonEndpoints = '';
+  const errs = validateConfig(cfg);
+  assert.ok(errs.some((e) => e.field === 'endpoints'));
+});
+
+test('validateConfig KHONG bat khi endpoint bi bo tick — checkbox khong thu hep pham vi chay', () => {
   const cfg = baseConfig();
   cfg.endpoints[0].enabled = false;
   const errs = validateConfig(cfg);
-  assert.ok(errs.some((e) => e.field === 'endpoints'));
+  assert.ok(!errs.some((e) => e.field === 'endpoints'));
 });
 
 test('validateConfig bat daterange sai', () => {
@@ -66,11 +93,11 @@ test('buildRequests sinh ma tran endpoint x msisdn', () => {
   assert.deepEqual(reqs.map((r) => r.index), [1, 2, 3, 4]);
 });
 
-test('buildRequests bo qua endpoint bi tat', () => {
+test('buildRequests van dung endpoint bi bo tick — checkbox khong thu hep pham vi chay', () => {
   const cfg = baseConfig();
   cfg.endpoints.push({ id: 'ep_2', enabled: false, method: 'GET', attachMsisdn: true,
     pathTemplate: '/query/other', queryParams: [], headers: [] });
-  assert.equal(buildRequests(cfg).length, 2);
+  assert.equal(buildRequests(cfg).length, 4);
 });
 
 test('buildRequests dung URL day du dung thu tu query', () => {
@@ -86,14 +113,24 @@ test('buildRequests bo dau gach cheo thua o cuoi domain', () => {
   assert.match(reqs[0].url, /^https:\/\/abc\.vn\/query\//);
 });
 
-test('buildRequests tu them Authorization tu token', () => {
+test('buildRequests tu them Authorization tu cURL cua auth profile', () => {
   const reqs = buildRequests(baseConfig());
   assert.equal(reqs[0].headers.Authorization, 'Bearer TOKEN123');
 });
 
-test('buildRequests khong de token de len Authorization do nguoi dung khai', () => {
+// Auth gio la mot cURL day du (khong con "mode fields" rieng), nen tham gia
+// merge headers CUNG vi tri voi cach cURL luon hoat dong truoc day — header
+// cua auth thang HEADERS chung neu trung ten. Endpoint van la cap cao nhat
+// (xem test rieng ben duoi).
+test('Authorization tu cURL cua auth thang Authorization khai o HEADERS chung', () => {
   const cfg = baseConfig({ globalHeaders: [{ key: 'Authorization', value: 'Basic abc', enabled: true }] });
-  assert.equal(buildRequests(cfg)[0].headers.Authorization, 'Basic abc');
+  assert.equal(buildRequests(cfg)[0].headers.Authorization, 'Bearer TOKEN123');
+});
+
+test('Authorization khai rieng o endpoint van thang cURL cua auth', () => {
+  const cfg = baseConfig();
+  cfg.endpoints[0].headers = [{ key: 'Authorization', value: 'Basic from-endpoint', enabled: true }];
+  assert.equal(buildRequests(cfg)[0].headers.Authorization, 'Basic from-endpoint');
 });
 
 test('buildRequests cho endpoint param de len global param', () => {
@@ -482,28 +519,28 @@ test('validateConfig cho qua POST kem body', () => {
   assert.deepEqual(validateConfig(cfg), []);
 });
 
-/* ---------- cookie tu dong gan vao header ---------- */
+/* ---------- cookie tu cURL cua auth ---------- */
 
-test('buildRequests tu them Cookie tu auth.cookie', () => {
-  const cfg = baseConfig({ auths: [authOver({ cookie: 'JSESSIONID=abc123; foo=bar' })] });
+test('buildRequests tu them Cookie tu cURL cua auth', () => {
+  const cfg = baseConfig({ auths: [authOver({ curlRaw: 'Cookie: JSESSIONID=abc123; foo=bar' })] });
   assert.equal(buildRequests(cfg)[0].headers.Cookie, 'JSESSIONID=abc123; foo=bar');
 });
 
-test('buildRequests khong them Cookie khi auth.cookie rong', () => {
+test('buildRequests khong them Cookie khi cURL cua auth khong khai', () => {
   const reqs = buildRequests(baseConfig());
   assert.equal(reqs[0].headers.Cookie, undefined);
 });
 
-test('buildRequests khong de auth.cookie len Cookie da khai o global headers', () => {
+test('Cookie tu cURL cua auth thang Cookie khai o HEADERS chung', () => {
   const cfg = baseConfig({
-    auths: [authOver({ cookie: 'JSESSIONID=abc123' })],
+    auths: [authOver({ curlRaw: 'Cookie: JSESSIONID=abc123' })],
     globalHeaders: [{ key: 'Cookie', value: 'session=from-global', enabled: true }],
   });
-  assert.equal(buildRequests(cfg)[0].headers.Cookie, 'session=from-global');
+  assert.equal(buildRequests(cfg)[0].headers.Cookie, 'JSESSIONID=abc123');
 });
 
-test('buildRequests khong de auth.cookie len Cookie da khai o endpoint headers', () => {
-  const cfg = baseConfig({ auths: [authOver({ cookie: 'JSESSIONID=abc123' })] });
+test('Cookie khai rieng o endpoint van thang Cookie tu cURL cua auth', () => {
+  const cfg = baseConfig({ auths: [authOver({ curlRaw: 'Cookie: JSESSIONID=abc123' })] });
   cfg.endpoints[0].headers = [{ key: 'cookie', value: 'session=from-endpoint', enabled: true }];
   assert.equal(buildRequests(cfg)[0].headers.cookie, 'session=from-endpoint');
 });
@@ -522,21 +559,21 @@ test('buildRequests tu them bo header trinh duyet', () => {
   assert.equal(h['sec-ch-ua-mobile'], '?0');
 });
 
-test('buildRequests tu them refresh_token tu auth.refreshToken', () => {
-  const h = buildRequests(baseConfig({ auths: [authOver({ refreshToken: 'eyJrefresh.payload.sig' })] }))[0].headers;
+test('buildRequests tu them refresh_token tu cURL cua auth', () => {
+  const h = buildRequests(baseConfig({ auths: [authOver({ curlRaw: 'refresh_token: eyJrefresh.payload.sig' })] }))[0].headers;
   assert.equal(h.refresh_token, 'eyJrefresh.payload.sig');
 });
 
-test('buildRequests khong them refresh_token khi o nhap de trong', () => {
+test('buildRequests khong them refresh_token khi cURL cua auth khong khai', () => {
   assert.equal(buildRequests(baseConfig())[0].headers.refresh_token, undefined);
 });
 
-test('buildRequests khong de auth.refreshToken len header da khai', () => {
+test('refresh_token tu cURL cua auth thang refresh_token khai o HEADERS chung', () => {
   const cfg = baseConfig({
-    auths: [authOver({ refreshToken: 'tu-o-nhap' })],
+    auths: [authOver({ curlRaw: 'refresh_token: tu-o-nhap' })],
     globalHeaders: [{ key: 'refresh_token', value: 'tu-bang-headers', enabled: true }],
   });
-  assert.equal(buildRequests(cfg)[0].headers.refresh_token, 'tu-bang-headers');
+  assert.equal(buildRequests(cfg)[0].headers.refresh_token, 'tu-o-nhap');
 });
 
 test('buildRequests dat X-Current-Url theo origin cua tool', () => {
@@ -572,10 +609,18 @@ test('URL trong lenh cURL dan vao khong bien thanh header', () => {
   assert.ok(!keys.includes('curl'));
 });
 
-test('Authorization trong cURL dan vao de len token o o nhap', () => {
+test('Authorization tu cURL cua auth thang Authorization cua cURL dan o HEADERS chung', () => {
   const cfg = baseConfig({
     globalHeaderMode: 'raw', globalHeaderRaw: CURL_PASTE,
-    auths: [authOver({ token: 'TOKEN-O-NHAP' })],
+    auths: [authOver({ curlRaw: 'Authorization: Bearer TU-AUTH-PROFILE' })],
+  });
+  assert.equal(buildRequests(cfg)[0].headers.Authorization, 'Bearer TU-AUTH-PROFILE');
+});
+
+test('cURL dan o HEADERS chung dung khi auth profile khong khai Authorization', () => {
+  const cfg = baseConfig({
+    globalHeaderMode: 'raw', globalHeaderRaw: CURL_PASTE,
+    auths: [authOver({ curlRaw: '' })],
   });
   assert.equal(buildRequests(cfg)[0].headers.Authorization, 'Bearer tu-curl');
 });
@@ -655,8 +700,8 @@ test('header rieng cua endpoint cung de len header mac dinh', () => {
 /* ---------- nhieu auth profile ---------- */
 
 const TWO_AUTHS = [
-  { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: 'C1', refreshToken: '', curlRaw: '' },
-  { id: 'a2', name: 'UAT', mode: 'fields', token: 'T2', cookie: 'C2', refreshToken: '', curlRaw: '' },
+  { id: 'a1', name: 'PROD', curlRaw: 'Authorization: Bearer T1\nCookie: C1', role: '' },
+  { id: 'a2', name: 'UAT', curlRaw: 'Authorization: Bearer T2\nCookie: C2', role: '' },
 ];
 
 test('buildRequests nhan them so profile', () => {
@@ -684,10 +729,10 @@ test('buildRequests gan authId va authName vao request', () => {
   assert.equal(reqs[3].authName, 'UAT');
 });
 
-test('buildRequests mode curl dua header trong chuoi curl vao request', () => {
+test('buildRequests dua het header trong chuoi cURL cua auth vao request', () => {
   const cfg = baseConfig({
     auths: [{
-      id: 'a1', name: 'CURL', mode: 'curl', token: '', cookie: '', refreshToken: '',
+      id: 'a1', name: 'CURL',
       curlRaw: "curl 'https://api-abc.vn/x' -H 'Authorization: Bearer FROMCURL' -H 'X-Tenant: vnpt'",
     }],
   });
@@ -698,10 +743,7 @@ test('buildRequests mode curl dua header trong chuoi curl vao request', () => {
 
 test('header rieng cua endpoint thang header cua profile', () => {
   const cfg = baseConfig({
-    auths: [{
-      id: 'a1', name: 'C', mode: 'curl', token: '', cookie: '', refreshToken: '',
-      curlRaw: "curl 'https://x' -H 'X-Tenant: from-profile'",
-    }],
+    auths: [{ id: 'a1', name: 'C', curlRaw: "curl 'https://x' -H 'X-Tenant: from-profile'" }],
   });
   cfg.endpoints[0].headers = [{ key: 'X-Tenant', value: 'from-endpoint', enabled: true }];
   const reqs = buildRequests(cfg);
@@ -710,10 +752,7 @@ test('header rieng cua endpoint thang header cua profile', () => {
 
 test('header cua profile thang HEADERS chung', () => {
   const cfg = baseConfig({
-    auths: [{
-      id: 'a1', name: 'C', mode: 'curl', token: '', cookie: '', refreshToken: '',
-      curlRaw: "curl 'https://x' -H 'X-Tenant: from-profile'",
-    }],
+    auths: [{ id: 'a1', name: 'C', curlRaw: "curl 'https://x' -H 'X-Tenant: from-profile'" }],
     globalHeaders: [{ key: 'X-Tenant', value: 'from-global', enabled: true }],
   });
   const reqs = buildRequests(cfg);
@@ -766,22 +805,22 @@ test('validateConfig bat khi khong co auth profile nao', () => {
 
 test('validateConfig bat auth profile thieu ten', () => {
   const errs = validateConfig(baseConfig({
-    auths: [{ id: 'a1', name: '', mode: 'fields', token: 'T', cookie: '', refreshToken: '', curlRaw: '' }],
+    auths: [{ id: 'a1', name: '', curlRaw: '' }],
   }));
   assert.ok(errs.some((e) => e.field === 'auth:a1'));
 });
 
 test('validateConfig coi ten chi co khoang trang la rong', () => {
   const errs = validateConfig(baseConfig({
-    auths: [{ id: 'a1', name: '   ', mode: 'fields', token: 'T', cookie: '', refreshToken: '', curlRaw: '' }],
+    auths: [{ id: 'a1', name: '   ', curlRaw: '' }],
   }));
   assert.ok(errs.some((e) => e.field === 'auth:a1'));
 });
 
 test('validateConfig bat ten auth trung nhau', () => {
   const errs = validateConfig(baseConfig({ auths: [
-    { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: '', refreshToken: '', curlRaw: '' },
-    { id: 'a2', name: 'PROD', mode: 'fields', token: 'T2', cookie: '', refreshToken: '', curlRaw: '' },
+    { id: 'a1', name: 'PROD', curlRaw: 'Authorization: Bearer T1' },
+    { id: 'a2', name: 'PROD', curlRaw: 'Authorization: Bearer T2' },
   ] }));
   const dup = errs.filter((e) => e.message.includes('trùng'));
   assert.equal(dup.length, 2);
@@ -790,8 +829,8 @@ test('validateConfig bat ten auth trung nhau', () => {
 test('validateConfig khong coi PROD va prod la trung', () => {
   const errs = validateConfig(baseConfig({
     auths: [
-      { id: 'a1', name: 'PROD', mode: 'fields', token: 'T1', cookie: '', refreshToken: '', curlRaw: '' },
-      { id: 'a2', name: 'prod', mode: 'fields', token: 'T2', cookie: '', refreshToken: '', curlRaw: '' },
+      { id: 'a1', name: 'PROD', curlRaw: 'Authorization: Bearer T1' },
+      { id: 'a2', name: 'prod', curlRaw: 'Authorization: Bearer T2' },
     ],
     runFilter: { methods: [], msisdnPatterns: [], authIds: ['a1', 'a2'] },
   }));
@@ -893,6 +932,168 @@ test('buildRequests bo qua commonEndpoints khi commonEndpointsEnabled la false',
   const reqs = buildRequests(cfg);
   assert.equal(reqs.length, 1);
   assert.equal(reqs[0].url, 'https://abc.vn/q1?fromDate=25032026&toDate=01042026');
+});
+
+/* ---------- request oracle (checkPermission) — danh tinh tu cURL cua auth ---------- */
+
+function oracleConfig(over = {}) {
+  return baseConfig({
+    auths: [oracleAuth()],
+    endpoints: [{
+      id: 'ep_1', enabled: true, method: 'GET', attachMsisdn: true,
+      pathTemplate: '/query/abc-information/{*}', queryParams: [], headers: [],
+      oracleFunction: '/ccm-troubleTicket-feedbackTicket',
+    }],
+    oracleTemplate: { line: 'POST /iam/engage/checkPermission' },
+    ...over,
+  });
+}
+
+test('buildOracleRequest dung body tu danh tinh cookie + role, khong co Authorization', () => {
+  const reqs = buildRequests(oracleConfig());
+  const { oracle } = reqs[0];
+
+  assert.equal(oracle.error, undefined);
+  assert.equal(oracle.method, 'POST');
+  assert.equal(oracle.url, 'https://abc.vn/iam/engage/checkPermission');
+  assert.equal(oracle.headers.Authorization, undefined);
+  assert.match(oracle.headers.Cookie, /^access_token=/);
+
+  const body = JSON.parse(oracle.body);
+  assert.equal(body.permissionSpecification.function, '/ccm-troubleTicket-feedbackTicket');
+  assert.equal(body.permissionSpecification.action, 'Read');
+  assert.equal(body.user.role, 'core_donvixuly');
+  assert.equal(body.user.id, 'ind-1');
+  assert.equal(body.user.accountId, 'user@vnp.vn');
+});
+
+test('buildOracleRequest ACTION rong mac dinh Read', () => {
+  const cfg = oracleConfig();
+  const reqs = buildRequests(cfg);
+  assert.equal(JSON.parse(reqs[0].oracle.body).permissionSpecification.action, 'Read');
+});
+
+test('buildOracleRequest ACTION co khai thi dung dung ACTION', () => {
+  const cfg = oracleConfig();
+  cfg.endpoints[0].oracleAction = 'Write';
+  const reqs = buildRequests(cfg);
+  assert.equal(JSON.parse(reqs[0].oracle.body).permissionSpecification.action, 'Write');
+});
+
+test('buildOracleRequest bao ORACLE_ROLE_MISSING khi auth chua khai role', () => {
+  const cfg = oracleConfig({ auths: [oracleAuth({ role: '' })] });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].oracle.error, 'ORACLE_ROLE_MISSING');
+});
+
+test('buildOracleRequest bao ORACLE_IDENTITY_MISSING khi cookie khong co access_token', () => {
+  const cfg = oracleConfig({ auths: [oracleAuth({ curlRaw: "curl 'https://x.vn' -H 'X-Tenant: vnpt'" })] });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].oracle.error, 'ORACLE_IDENTITY_MISSING');
+});
+
+test('endpoint khong khai oracleFunction thi khong sinh request oracle nao', () => {
+  const cfg = oracleConfig();
+  delete cfg.endpoints[0].oracleFunction;
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].oracle, null);
+});
+
+test('khong co oracleTemplate thi khong sinh request oracle du endpoint co function', () => {
+  const cfg = oracleConfig({ oracleTemplate: null });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].oracle, null);
+});
+
+test('oracleTemplate.line rong bao ORACLE_LINE_INVALID', () => {
+  const cfg = oracleConfig({ oracleTemplate: { line: '' } });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].oracle.error, 'ORACLE_LINE_INVALID');
+});
+
+test('request nghiep vu van chay binh thuong ngay ca khi oracle loi', () => {
+  const cfg = oracleConfig({ auths: [oracleAuth({ role: '' })] });
+  const reqs = buildRequests(cfg);
+  assert.equal(reqs[0].oracle.error, 'ORACLE_ROLE_MISSING');
+  assert.match(reqs[0].url, /^https:\/\/abc\.vn\/query\/abc-information\//);
+});
+
+/* ---------- cURL mau la KHUON: giu nguyen hinh dang request that ---------- */
+
+// Tu dung request tu dau lam Origin/Referer/X-Current-Url roi ve origin cua
+// chinh tool va Sec-Fetch-Site thanh 'cross-site' -> IAM sau WAF tra 401.
+const ORACLE_CURL = `curl 'https://api-dev-oda.vnpt.vn/iam/engage/checkPermission' \\
+  -H 'Accept-Language: en-US,en;q=0.9,vi;q=0.8' \\
+  -H 'Connection: keep-alive' \\
+  -H 'Origin: https://dev-oda.vnpt.vn' \\
+  -H 'Referer: https://dev-oda.vnpt.vn/' \\
+  -H 'Sec-Fetch-Site: same-site' \\
+  -H 'X-Current-Url: https://dev-oda.vnpt.vn/#/ccos/coordination-management' \\
+  -b 'access_token=CUA-NGUOI-DAN-KHUON; BIGipServerpool_x=1' \\
+  --data-raw '{"@type":"CheckPermission","permissionSpecification":{"@type":"PermissionSpecification","function":"/cu","action":"Write"},"user":{"@type":"PartyRef","role":"role-cu","id":"id-cu","accountId":"acc-cu","extra":"giu-lai"}}'`;
+
+const tplCfg = (over = {}) => oracleConfig({
+  origin: 'http://localhost:9000',
+  oracleTemplate: { line: 'POST /iam/engage/checkPermission', curlRaw: ORACLE_CURL },
+  ...over,
+});
+
+test('cURL mau giu nguyen Origin/Referer/X-Current-Url/Sec-Fetch-Site cua app that', () => {
+  const h = buildRequests(tplCfg())[0].oracle.headers;
+  assert.equal(h.Origin, 'https://dev-oda.vnpt.vn');
+  assert.equal(h.Referer, 'https://dev-oda.vnpt.vn/');
+  assert.equal(h['X-Current-Url'], 'https://dev-oda.vnpt.vn/#/ccos/coordination-management');
+  assert.equal(h['Sec-Fetch-Site'], 'same-site');
+  assert.equal(h['Accept-Language'], 'en-US,en;q=0.9,vi;q=0.8');
+  assert.equal(h.Connection, 'keep-alive');
+});
+
+test('cURL mau dung URL tuyet doi cua chinh no, khong ghep lai tu domain', () => {
+  const o = buildRequests(tplCfg())[0].oracle;
+  assert.equal(o.url, 'https://api-dev-oda.vnpt.vn/iam/engage/checkPermission');
+  assert.equal(o.method, 'POST');
+});
+
+test('Cookie cua khuon bi thay bang danh tinh auth, khong giu cua nguoi dan', () => {
+  const h = buildRequests(tplCfg())[0].oracle.headers;
+  assert.ok(!h.Cookie.includes('CUA-NGUOI-DAN-KHUON'));
+  assert.ok(h.Cookie.includes('access_token='));
+});
+
+test('khoi user cua khuon bi doi sang danh tinh auth, field la duoc giu', () => {
+  const body = JSON.parse(buildRequests(tplCfg())[0].oracle.body);
+  assert.equal(body.user.role, 'core_donvixuly');
+  assert.equal(body.user.id, 'ind-1');
+  assert.equal(body.user.accountId, 'user@vnp.vn');
+  assert.equal(body.user.extra, 'giu-lai', 'field la trong khoi user phai giu');
+  assert.equal(body.user['@type'], 'PartyRef');
+});
+
+test('cot ACTION rong thi giu nguyen action cua cURL mau', () => {
+  const body = JSON.parse(buildRequests(tplCfg())[0].oracle.body);
+  assert.equal(body.permissionSpecification.action, 'Write');
+});
+
+test('cot ACTION co khai thi de len action cua cURL mau', () => {
+  const cfg = tplCfg();
+  cfg.endpoints[0].oracleAction = 'Read';
+  const body = JSON.parse(buildRequests(cfg)[0].oracle.body);
+  assert.equal(body.permissionSpecification.action, 'Read');
+});
+
+test('khuon co Authorization thi van bi bo — cURL checkPermission that khong gui header nay', () => {
+  const cfg = tplCfg({
+    oracleTemplate: {
+      line: 'POST /iam/engage/checkPermission',
+      curlRaw: ORACLE_CURL.replace("-H 'Connection: keep-alive'", "-H 'Authorization: Bearer CUA-NGUOI-DAN'"),
+    },
+  });
+  assert.equal(buildRequests(cfg)[0].oracle.headers.Authorization, undefined);
+});
+
+test('cURL mau hong bao ORACLE_TEMPLATE_INVALID', () => {
+  const cfg = tplCfg({ oracleTemplate: { line: 'POST /x', curlRaw: 'khong phai curl' } });
+  assert.equal(buildRequests(cfg)[0].oracle.error, 'ORACLE_TEMPLATE_INVALID');
 });
 
 

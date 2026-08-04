@@ -4,12 +4,14 @@ import {
 } from './state.js';
 import { startRun, openStream, cancelRun, exportExcel } from './api.js';
 import { countRequests } from './shared/request-count.js';
-import { filterEndpoints, selectedAuths } from './shared/run-filter.js';
+import { filterEndpoints, selectedAuths, businessCommonText } from './shared/run-filter.js';
 import { toCurl, curlFilename } from './shared/curl.js';
+import { downloadBlob } from './shared/download.js';
 import {
   buildPermissionRunConfig, validatePermissionScope, savedPermissionPayload,
 } from './shared/permission-scope.js';
-import { roleColumns } from './shared/permission-sheet-filter.js';
+import { roleColumns, visibleIdentifierValues } from './shared/permission-sheet-filter.js';
+import { initCommonEndpoints } from './ui/common-endpoints.js';
 import { initTabs } from './ui/tabs.js';
 import { initConnectionPanel } from './ui/connection-panel.js';
 import { initDateRange } from './ui/date-range.js';
@@ -42,16 +44,6 @@ window.ccmToast = (message, kind = '') => {
   setTimeout(() => el.remove(), 6000);
 };
 
-function downloadBlob(filename, content, type) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
 
 /* ---------- khoi tao ---------- */
 load();
@@ -75,7 +67,7 @@ initMsisdnDrawer();
 const authsPanel = initAuthsPanel();
 initPermissionsPanel();
 const runFilterBar = initRunFilterBar();
-const endpointsCommon = document.getElementById('inp-endpoints-common');
+initCommonEndpoints();
 const chkCommonEnabled = document.getElementById('chk-common-enabled');
 
 if (chkCommonEnabled) {
@@ -87,24 +79,12 @@ if (chkCommonEnabled) {
   });
 }
 
-if (endpointsCommon) {
-  endpointsCommon.value = state.commonEndpoints ?? '';
-  endpointsCommon.addEventListener('input', () => {
-    state.commonEndpoints = endpointsCommon.value;
-    persist();
-    notify();
-  });
-}
-
 // Sua token/them-bot auth o tab AUTHS lam indicator tren topbar va so lieu
 // filter bar cu di — ve lai ca ba moi lan state doi tu bat ky dau.
 subscribe(() => {
   connectionPanel.refresh();
   authsPanel.render();
   runFilterBar.render();
-  if (endpointsCommon && endpointsCommon.value !== (state.commonEndpoints ?? '')) {
-    endpointsCommon.value = state.commonEndpoints ?? '';
-  }
   if (chkCommonEnabled && chkCommonEnabled.checked !== (state.commonEndpointsEnabled !== false)) {
     chkCommonEnabled.checked = state.commonEndpointsEnabled !== false;
   }
@@ -217,22 +197,35 @@ function refreshRunButton() {
   btnRun.disabled = n === 0 || running;
 }
 
+const permWarningsEl = document.getElementById('perm-warnings');
+
 function refreshCheckPermButton() {
   if (!state.permissionFile?.filename) {
     btnCheckPerm.textContent = '🔐 CHECK PERM (cần file phân quyền)';
     btnCheckPerm.disabled = true;
     btnCheckPerm.title = 'Nạp file phân quyền và khai mapping UC1/UC2 ở tab INPUT trước';
+    permWarningsEl.hidden = true;
     return;
   }
 
-  const { total, unmatched, endpointCount } = buildPermissionRunConfig(state);
-  // Endpoint khong ghep duoc dong phan quyen nao van chay nhung cham 'empty' —
-  // con so nay noi truoc, khong de nguoi dung tu dem trong bang ket qua.
-  btnCheckPerm.title = unmatched > 0
-    ? `⚠ ${unmatched}/${endpointCount} endpoint không khớp dòng phân quyền nào — vẫn chạy nhưng chấm 'empty'`
-    : '';
-  btnCheckPerm.textContent = `🔐 CHECK PERM (${total})`;
-  btnCheckPerm.disabled = total === 0 || permRunning;
+  const {
+    pairs, total, unmatched, noFunction, collapsed, endpointCount,
+  } = buildPermissionRunConfig(state);
+
+  // Ba canh bao gom lai — nguoi dung doc truoc khi bam, khong phai tu dem
+  // trong bang ket qua sau khi da chay xong. Hien truc tiep trong panel (khong
+  // phai title/tooltip) de khong phai hover moi thay.
+  const warns = [];
+  if (unmatched > 0) warns.push(`${unmatched}/${endpointCount} endpoint không khớp dòng phân quyền`);
+  if (noFunction > 0) warns.push(`${noFunction} endpoint trống cột FUNCTION — không gọi được oracle`);
+  if (collapsed > 0) warns.push(`${collapsed} bản trùng đã gộp`);
+  btnCheckPerm.title = '';
+  permWarningsEl.textContent = warns.length > 0 ? `⚠ ${warns.join(' · ')}` : '';
+  permWarningsEl.hidden = warns.length === 0;
+
+  // total la so request THAT se ban di (pairs + oracleCalls), khong phai so cap.
+  btnCheckPerm.textContent = `🔐 CHECK PERM (${pairs} cặp · ${total} request)`;
+  btnCheckPerm.disabled = pairs === 0 || permRunning;
 }
 
 subscribe(refreshRunButton);
@@ -250,6 +243,15 @@ const permStatsEl = document.getElementById('perm-stats');
 const permBadge = document.getElementById('tab-perm-badge');
 const btnPermCancel = document.getElementById('btn-perm-cancel');
 const btnPermExport = document.getElementById('btn-perm-export');
+const btnPermCheck = document.getElementById('btn-perm-check');
+const btnPermCheckClear = document.getElementById('btn-perm-check-clear');
+const permCheckBadge = document.getElementById('perm-check-badge');
+const permCheckCountEl = document.getElementById('perm-check-count');
+
+function hidePermCheckBadge() {
+  permFilters.clearCheckNames();
+  permCheckBadge.hidden = true;
+}
 
 function renderResults() {
   filters.refreshOptions(results);
@@ -273,7 +275,10 @@ const seenIndexes = new Set();
 
 btnRun.addEventListener('click', async () => {
   try {
-    const enabledEndpoints = filterEndpoints(state.endpoints, state.runFilter, state.selectedSheet, state.commonEndpoints, state.commonEndpointsEnabled);
+    const enabledEndpoints = filterEndpoints(
+      state.endpoints, state.runFilter, state.selectedSheet,
+      businessCommonText(state.commonEndpointList), state.commonEndpointsEnabled,
+    );
     const { skipped } = dedupeEndpoints(enabledEndpoints);
     if (skipped > 0) {
       window.ccmToast?.(`Đã loại bỏ ${skipped} endpoint trùng lặp trước khi chạy`, 'ok');
@@ -353,6 +358,7 @@ btnCheckPerm.addEventListener('click', async () => {
     permStream?.close();
     permSeenIndexes.clear();
     resetPermResults();
+    hidePermCheckBadge();
     renderPermResults();
     permProgressEl.textContent = '0/0';
     permStatsEl.textContent = '';
@@ -401,6 +407,29 @@ btnPermCancel.addEventListener('click', async () => {
   if (!runId) return;
   await cancelRun(runId);
   btnPermCancel.disabled = true;
+});
+
+// Nut Check — xem nhanh log theo TOAN BO bang HAS PERMISSIONS dang hien (theo
+// checkbox YES/NO), khong phai go tay tung ten mot vao o loc UC2 Name. Snapshot
+// tai thoi diem bam — doi checkbox sau do phai bam lai Check moi cap nhat.
+btnPermCheck.addEventListener('click', () => {
+  const sheet = savedSheet();
+  const names = visibleIdentifierValues(
+    sheet?.headers ?? [], sheet?.rows ?? [],
+    savedMapping().usecase1, savedMapping().usecase2,
+    permSheetFilterBar.getFilter(),
+  );
+  if (names.length === 0) {
+    window.ccmToast('Không có bản ghi has permission nào đang hiển thị để check', 'error');
+    return;
+  }
+  permFilters.applyCheckNames(names);
+  permCheckCountEl.textContent = String(names.length);
+  permCheckBadge.hidden = false;
+});
+
+btnPermCheckClear.addEventListener('click', () => {
+  hidePermCheckBadge();
 });
 
 /* ---------- export excel ---------- */

@@ -96,3 +96,62 @@ test('startRun ton trong gioi han workerCount nhan 5', async () => {
     assert.ok(peak <= 5, `peak=${peak} vuot qua 1 worker x 5 request`);
   } finally { await mock.close(); }
 });
+
+test('startRun danh sach rong thi hoan tat ngay', async () => {
+  const run = createRun([], { workerCount: 2 });
+  await startRun(run);
+  assert.equal(run.status, 'done');
+  assert.equal(run.results.length, 0);
+});
+
+test('startRun clamp workerCount 0 ve 1', async () => {
+  let inFlight = 0;
+  let peak = 0;
+  const mock = await startMockServer((_, res) => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    setTimeout(() => { inFlight -= 1; res.end('{}'); }, 30);
+  });
+  try {
+    const reqs = Array.from({ length: 10 }, (_, i) => mkReq(i + 1, `${mock.base}/x`));
+    const run = createRun(reqs, { workerCount: 0, timeoutMs: 5000 });
+    await startRun(run);
+    assert.equal(run.results.length, 10);
+    assert.ok(peak <= 5, `peak=${peak} vuot qua 1 slot x 5 request (workerCount 0 phai clamp ve 1)`);
+  } finally { await mock.close(); }
+});
+
+test('startRun lam tron xuong workerCount khong nguyen', async () => {
+  let inFlight = 0;
+  let peak = 0;
+  const mock = await startMockServer((_, res) => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    setTimeout(() => { inFlight -= 1; res.end('{}'); }, 30);
+  });
+  try {
+    const reqs = Array.from({ length: 20 }, (_, i) => mkReq(i + 1, `${mock.base}/x`));
+    const run = createRun(reqs, { workerCount: 2.7, timeoutMs: 5000 });
+    await startRun(run);
+    assert.equal(run.results.length, 20);
+    assert.ok(peak <= 10, `peak=${peak} vuot qua 2 slot x 5 request (2.7 phai lam tron xuong 2)`);
+  } finally { await mock.close(); }
+});
+
+test('startRun clamp workerCount qua lon ve toi da 16 slot, khong treo', async () => {
+  const mock = await startMockServer((_, res) => res.end('{}'));
+  try {
+    const run = createRun([mkReq(1, `${mock.base}/x`)], { workerCount: 999, timeoutMs: 5000 });
+    await startRun(run);
+    assert.equal(run.status, 'done');
+    assert.equal(run.results.length, 1);
+  } finally { await mock.close(); }
+});
+
+test('startRun van tra ve record khi request loi mang', async () => {
+  const run = createRun([mkReq(1, 'http://127.0.0.1:1/khong-ton-tai')], { workerCount: 1, timeoutMs: 2000 });
+  await startRun(run);
+  assert.equal(run.results.length, 1);
+  assert.ok(run.results[0].errorCode, 'phai co errorCode');
+  assert.equal(run.results[0].response.status, null);
+});

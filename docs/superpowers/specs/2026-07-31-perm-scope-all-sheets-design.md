@@ -1,211 +1,206 @@
-# Design Spec: CHECK PERM quét mọi sheet endpoints, khử trùng theo cột đích
+# Design Spec: CHECK PERM hai mode — "Toàn bộ (tab All)" và "Theo mapping UC1"
+
+> Bản này thay thế hoàn toàn nội dung trước của cùng file (bỏ `dedupeColumn`, coi `endpointSheet`
+> trống là "mọi sheet"). Hướng đó sai: phạm vi toàn bộ không phải một giá trị của trường mapping mà
+> là một **mode** đứng tách khỏi phần mapping theo fields. Toàn bộ logic mapping fields giữ nguyên
+> như trước bản này.
 
 ## 1. Bối cảnh
 
-Spec `2026-07-31-uc2-include-matching-design.md` dựng thuật toán match "include": mỗi dòng trong file
-phân quyền kéo về một tập endpoint. Nhưng tập endpoint được quét (`pool`) vẫn bị cắt theo sheet khai
-trong UC1:
+Spec `2026-07-31-uc2-include-matching-design.md` dựng đường CHECK PERM chạy theo mapping UC1: pool
+endpoint bị cắt theo `endpointSheet` của từng dòng UC1, rồi mỗi dòng UC2 kéo về một tập endpoint và
+khử trùng theo `usecase2.dedupeColumn`. Endpoint không được dòng UC2 nào kéo về thì bị loại trước khi
+gửi request.
 
-```javascript
-// public/js/shared/permission-match.js:47-49
-const filtered = filterEndpoints(
-  state?.endpoints, { methods: state?.runFilter?.methods ?? [] }, 'all', '', false,
-).filter((e) => sheets.has(e.sheetName ?? 'Sheet 1'));
-```
+Thực tế chạy thiếu khá nhiều endpoint: bảng phân quyền phủ **toàn bộ** endpoint, trong khi pool lại
+chỉ gồm các sheet có tên trong UC1, và endpoint không khớp tên bị loại im lặng.
 
-Sheet nào không xuất hiện ở cột `endpointSheet` của UC1 thì mọi endpoint của nó biến mất khỏi mọi
-vòng match — dù bảng phân quyền vốn phủ **toàn bộ** endpoint, không phân biệt sheet. Thực tế chạy
-thấy thiếu khá nhiều endpoint vì lý do này.
-
-Ràng buộc đó cũng đã hết cơ sở: từ spec include-matching, việc chấm `status_permission` đọc cột quyền
-của **dòng UC2** (`evaluateUc2Permission` trong `src/server/http-client.js`), không còn sheet-gating.
-`endpointSheet` chỉ còn tác dụng thu hẹp `pool`, tức chỉ còn là bộ lọc.
-
-**Mục tiêu:** mặc định quét mọi endpoint đã import; giữ `endpointSheet` lại làm bộ lọc tùy chọn để
-lùi về hành vi cũ khi cần. Nhân tiện bỏ cột khử trùng riêng, dùng chính cột đích làm khóa.
-
-**RUN ALL và tab OUTPUT giữ nguyên hoàn toàn.**
+**Mục tiêu:** thêm một đường chạy thứ hai, song song và tách hẳn khỏi đường mapping.
 
 ## 2. Quyết định đã chốt
 
 | Câu hỏi | Chốt |
 |---|---|
-| `endpointSheet` trong UC1 | Giữ, thành **bộ lọc tùy chọn**: trống = mọi sheet, điền = thu hẹp |
-| Khóa khử trùng | Chính cột đích — bỏ hẳn `usecase2.dedupeColumn` |
-| Endpoint có ô cột đích rỗng / sheet thiếu cột đó | Loại **im lặng**, không toast, không dòng "skip" |
-| Endpoints chung (`Common`) | Vẫn ngoài phạm vi, giữ `commonEndpointsEnabled: false` |
-| Nguồn sheet cho `uc2.columnSheet` | Mọi sheet đã import, không còn ép ∈ sheet UC1 |
+| Hình thức | Một **mode** hai lựa chọn, không phải giá trị mới của trường mapping nào |
+| Vị trí | Radio ở đầu khối UC1, panel PHÂN QUYỀN |
+| Mặc định | `all` — "Toàn bộ (tab All)" |
+| Mode `all` ghép endpoint ↔ dòng phân quyền | Không lọc: chạy hết. Ghép được thì chấm, không ghép được thì `empty` |
+| Khử trùng ở mode `all` | **Không khử trùng gì cả.** Pool lấy đúng như RUN ALL: `state.endpoints` thô qua `filterEndpoints`. Một API cấp cho N sheet role là N bản ghi phải chấm riêng — khử theo `METHOD:pathTemplate` nuốt mất N−1 bản. Hệ quả: số request có thể lớn hơn số dòng hiện trên tab All (bảng đó vẫn khử trùng để hiển thị) |
+| Endpoints chung | Vẫn ngoài phạm vi ở cả hai mode |
+| Đường mapping cũ | Không sửa một dòng logic nào |
 
-## 3. Thay đổi `public/js/shared/permission-match.js`
-
-### 3.1 Pool quét mọi sheet, lọc theo UC1 chỉ khi được khai
-
-```javascript
-const sheets = uc1Sheets(uc1);   // uc1Sheets da .filter(Boolean) — dong trong khong vao Set
-
-const filtered = filterEndpoints(
-  state?.endpoints, { methods: state?.runFilter?.methods ?? [] }, 'all', '', false,
-);
-const scoped = sheets.size === 0
-  ? filtered
-  : filtered.filter((e) => sheets.has(e.sheetName ?? 'Sheet 1'));
-```
-
-`uc1Sheets` (`permission-scope.js:41-43`) đã bỏ giá trị rỗng, nên "mọi dòng UC1 để trống Sheet" tự
-cho ra `Set` rỗng — không cần cờ riêng.
-
-Hành vi hỗn hợp: một dòng UC1 khai `Sheet 2`, các dòng còn lại trống → `sheets = {'Sheet 2'}` →
-thu hẹp về đúng `Sheet 2`. Có chủ đích: khai một sheet là tín hiệu muốn giới hạn; muốn quét hết thì
-để trống hết. Không cộng dồn kiểu "trống nghĩa là thêm mọi sheet" — luật đó khiến một dòng trống lẫn
-vào làm bộ lọc mất tác dụng mà không ai thấy.
-
-Tham số cuối `false` của `filterEndpoints` giữ nguyên: endpoints chung không vào pool.
-
-### 3.2 Khử trùng theo cột đích
+## 3. Data model — `public/js/state.js`
 
 ```javascript
-const endpointColumn = uc2.endpointColumn;
-if (srcIdx === -1 || !endpointColumn) return [];   // bo dieu kien !dedupeColumn
-
-const pool = scoped
-  .map((e) => ({ e, hay: normalizeName(e.raw?.[endpointColumn]) }))
-  .filter((it) => it.hay !== '');
+permissionMapping: {
+  mode: 'all',            // 'all' | 'mapping'
+  usecase1: [],
+  usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '', dedupeColumn: '' }
+}
 ```
 
-`taken` đổi khóa từ `it.key` sang `it.hay`. Mọi chỗ đọc `h.key` thành `h.hay`. Phần còn lại của thuật
-toán — 4 vòng bớt từ đầu, vòng 0 dùng `Map` exact, `break` khi vòng có kết quả, dòng UC2 đến trước
-giữ chỗ — **không đổi một dòng**.
+`load()`/`applyConfig()` đã spread `permissionMapping` từ base nên config cũ (không có `mode`) tự nhận
+`'all'`. Không cần code migration.
 
-Đánh đổi cần biết: hai endpoint khác method nhưng cùng giá trị cột đích (`GET /x` và `POST /x` cùng
-tên chức năng) giờ gộp còn một dòng kết quả. Trước đây tách được nếu cột khử trùng là mã API. Chấp
-nhận: một cột ít hơn để cấu hình, và cột đích là thứ quyết định việc match nên dùng nó làm danh tính
-là nhất quán.
-
-Endpoint có ô cột đích rỗng — kể cả vì sheet đó không có cột tên như vậy — bị loại tại `.filter` này.
-Không đếm, không cảnh báo.
-
-### 3.3 `endpointColumns` — bỏ scope UC1
-
-Hàm `endpointColumns(endpoints, uc1)` hiện union header của riêng sheet UC1. Với pool là mọi sheet,
-tham số `uc1` hết ý nghĩa. Đổi chữ ký:
+`permission-scope.js` đọc mode qua một hàm chứ không đọc thẳng khoá, để giá trị lạ cũng rơi về `all`:
 
 ```javascript
-export function endpointColumns(endpoints)   // union raw-header cua MOI endpoint, giu thu tu gap dau
+export const PERM_MODE_ALL = 'all';
+export const PERM_MODE_MAPPING = 'mapping';
+export function permMode(state) {
+  return state?.permissionMapping?.mode === PERM_MODE_MAPPING ? PERM_MODE_MAPPING : PERM_MODE_ALL;
+}
 ```
 
-`endpointColumnsOfSheet(endpoints, sheetName)` giữ nguyên — vẫn là nguồn option cho hai select cột
-sau khi chọn sheet tham chiếu.
+## 4. Thuật toán mode `all` — `permission-match.js`
 
-## 4. Thay đổi data model — `public/js/state.js:49`
+Hàm mới `annotateAllEndpoints(state)`, đứng cạnh `matchUc2ToEndpoints` (hàm cũ **không đổi**):
 
 ```javascript
-usecase2: { permissionColumn: '', columnSheet: '', endpointColumn: '' }
+// Pool y het RUN ALL: state.endpoints tho, chi qua enabled + method filter.
+const all = filterEndpoints(state.endpoints, { methods: runFilter.methods }, 'all', '', false);
+// khong loc theo uc1Sheets, khong khu trung theo usecase2.dedupeColumn,
+// va khong khu trung METHOD:pathTemplate
+const pool = all.map((e) => ({ e, hay: norm(e.raw?.[endpointColumn]) })).filter((it) => it.hay !== '');
+
+// Duyet dong UC2 theo dung thu tu file; dong den truoc giu cho.
+rows.forEach((row, rowIndex) => {
+  for (const h of hitsForRow(row[srcIdx], pool, exact)) {
+    if (!taken.has(h.e)) taken.set(h.e, { permName: String(row[srcIdx] ?? ''), permRowIndex: rowIndex });
+  }
+});
+
+return all.map((e) => taken.has(e) ? { endpoint: e, ...taken.get(e) } : { endpoint: e, permName: null, permRowIndex: null });
 ```
 
-Bỏ `dedupeColumn`. Không viết code migration: config cũ trong `localStorage` còn khóa này sẽ được
-spread vào nhưng không nơi nào đọc, vô hại — cùng lựa chọn đã áp cho `targetSheet` ở spec
-`2026-07-30-uc2-permission-scope-by-uc1-design.md` §2.
+Khác biệt so với `matchUc2ToEndpoints` nằm đúng ba chỗ: pool là `state.endpoints` thô (không cắt theo
+sheet, không khử trùng), khoá `taken` là **bản thân endpoint** thay vì giá trị cột khử trùng, và
+endpoint không khớp vẫn được trả về với `permRowIndex: null` thay vì bị loại.
 
-## 5. Thay đổi `public/js/shared/permission-scope.js`
+`allTabEndpoints` **không** tham gia đường chạy — nó chỉ dựng bảng hiển thị tab All. Dùng nó làm pool
+là nguyên nhân mode `all` miss bản ghi: một API cấp cho 5 sheet role chỉ còn 1 request, 4 role kia
+không bao giờ được chấm.
 
-`validatePermissionScope`:
+Vòng quét 4 bước (bớt từ đầu, dừng ở vòng đầu tiên có kết quả) tách thành `hitsForRow` dùng chung cho
+cả hai hàm — một nguồn sự thật, đổi luật khớp thì cả hai mode đổi cùng nhau.
 
-| Luật hiện có | Đổi |
-|---|---|
-| `UC1: sheet "Y" không còn endpoint nào` | Chỉ kiểm khi `m.endpointSheet` khác rỗng. Trống là hợp lệ. |
-| `scopedRaw.some((e) => !e.raw)` → `Endpoints import từ bản cũ` | Quét **toàn bộ** `state.endpoints`, bỏ `.filter(uc1Sheets…)` |
-| `Chưa chọn sheet endpoints tham chiếu (UC2)` | Điều kiện đổi từ `uc1Sheets(uc1).has(columnSheet)` sang `columnSheet` ∈ sheet của `state.endpoints` |
-| `Chưa chọn cột đích (UC2), hoặc cột đã biến mất` | Nguồn cột đổi sang `endpointColumns(state.endpoints)` (một tham số) |
-| `Chưa chọn cột khử trùng (UC2)` | **Xóa** |
-| `Không dòng UC2 nào kéo về được endpoint` | Giữ nguyên |
-| Các luật còn lại (file phân quyền, cột Name UC2, UC1 rỗng, cột quyền, auth profile) | Giữ nguyên |
+Chưa chọn `permissionColumn` hoặc `endpointColumn` thì mọi endpoint trả về với `permRowIndex: null` —
+run vẫn chạy, kết quả toàn `empty`. Đúng tinh thần "chạy hết".
 
-Thông báo `Chưa khai mapping UC1 nào — không biết kiểm sheet nào` sửa lời cho khớp vai trò mới của
-UC1: `Chưa khai mapping UC1 nào — không biết cột quyền nào ứng với auth nào`.
+`endpointColumns(endpoints, uc1, allSheets = false)` nhận thêm tham số thứ ba: mode `all` truyền
+`true` để union header của mọi endpoint thay vì chỉ sheet UC1.
 
-`scopedEndpointsAndAuths` và `buildPermissionRunConfig` không đổi: chúng gọi `matchUc2ToEndpoints`
-và `uc1AuthNames`, cả hai vẫn giữ chữ ký cũ.
+## 5. Dựng config chạy — `permission-scope.js`
 
-## 6. Thay đổi UI
+`scopedEndpointsAndAuths` rẽ nhánh theo mode; `auths` (union UC1) và `msisdns` (1 số) giữ nguyên ở cả
+hai mode:
 
-### 6.1 `public/index.html`
+```javascript
+if (permMode(state) === PERM_MODE_ALL) {
+  const endpoints = annotateAllEndpoints(state).map(({ endpoint, permName, permRowIndex }) => ({
+    ...endpoint, permName, permRowIndex, permMode: PERM_MODE_ALL,
+  }));
+  return { endpoints, auths };
+}
+// nhanh mapping cu, khong doi
+```
 
-Xóa dòng 155:
+`permMode` gắn lên **từng endpoint** chứ không phải một khoá của config, vì server chỉ nhìn thấy
+request đã dựng — `buildRequests` không đọc `permissionMapping`.
+
+## 6. Chấm điểm — `src/server/`
+
+`request-builder.js` `buildOne` thêm một khoá passthrough:
+
+```javascript
+permMode: endpoint.permMode ?? null,
+```
+
+`http-client.js` `evaluatePermission` thêm một nhánh, đặt **sau** nhánh `permRowIndex != null` và
+**trước** toàn bộ code cũ:
+
+```javascript
+if (req.permMode === 'all') {
+  return 'empty';
+}
+```
+
+Không có nhánh này, endpoint mode `all` không ghép được dòng nào sẽ rơi xuống đường RUN ALL — đường
+đó lọc theo `endpointSheet === req.sheetName` và match tên kiểu 1-1, cho ra kết quả không liên quan
+gì tới mode đang chạy.
+
+Đường RUN ALL (`permMode` null) và đường mapping (`permRowIndex` khác null) không đổi một dòng.
+
+## 7. UI
+
+`public/index.html` — trong `.perm-uc1`, ngay trên `.perm-uc1-head`:
 
 ```html
-<select id="sel-permissions-dedupe-col" class="input input-sm"></select>
+<div class="perm-mode-row">
+  <span class="label">Phạm vi CHECK PERM</span>
+  <label class="check"><input id="rad-perm-mode-all" type="radio" name="perm-mode" value="all" checked /> Toàn bộ (tab All)</label>
+  <label class="check"><input id="rad-perm-mode-mapping" type="radio" name="perm-mode" value="mapping" /> Theo mapping UC1</label>
+</div>
 ```
 
-cùng `<label>` bọc nó. Lưới cột trong khối UC2 giảm một ô — kiểm lại `grid-template-columns` của khối
-này trong `public/css/app.css` và giảm số cột tương ứng, đúng cách đã làm ở spec
-`2026-07-30-uc2-permission-scope-by-uc1-design.md` §4.1.
+`public/css/app.css` thêm `.perm-mode-row` (flex, wrap).
 
-### 6.2 `public/js/ui/permissions-panel.js`
+`public/js/ui/permissions-panel.js`:
 
-- Bỏ `selDedupeCol` (dòng 37), listener `change` ghi `usecase2.dedupeColumn` (dòng 129), và nhánh
-  `renderColumnSelect(selDedupeCol, …)` (dòng 191).
-- `render()` dòng 175-181: danh sách sheet hợp lệ cho `selEndpointSheet` đổi từ `uc1SheetList` sang
-  `getUniqueSheets(state.endpoints)`. Giá trị đang chọn không còn trong danh sách → rơi về phần tử
-  đầu, đúng như logic hiện tại.
-- Dropdown `endpointSheet` của mỗi dòng UC1 (dòng 224-226) thêm option đầu:
-  `<option value="">(mọi sheet)</option>`. Dòng UC1 mới tạo (dòng 103) mặc định `endpointSheet: ''`
-  thay vì `getUniqueSheets(state.endpoints)[0] ?? 'Sheet 1'`.
-- Nhãn cột Sheet trong bảng UC1 đổi thành `Sheet (trống = mọi sheet)` để người dùng hiểu ô trống là
-  lựa chọn có nghĩa, không phải chưa điền.
-- Import `endpointColumnsOfSheet` giữ nguyên. Panel không gọi `endpointColumns`; chỗ duy nhất gọi hàm
-  đó là `permission-scope.js:99`, đã nói ở §5.
+- Hai listener `change` ghi `state.permissionMapping.mode`, `render()` đồng bộ ngược `checked`.
+- Mode `all`: cột Sheet của mỗi dòng UC1 `disabled` nhưng **giữ nguyên giá trị** (kèm `title` giải
+  thích) — đổi về mode mapping không mất cấu hình. Select cột khử trùng cũng `disabled`.
+- Mode `all`: dropdown sheet tham chiếu (UC2) liệt kê mọi sheet đã import; mode mapping vẫn chỉ liệt
+  kê sheet khai trong UC1.
 
-## 7. Phạm vi không đụng tới
+## 8. Validate — `validatePermissionScope`
 
-- `src/server/http-client.js` — `evaluateUc2Permission` chấm theo `permRowIndex` + cột quyền của dòng
-  UC1 khớp `authName`, chưa bao giờ đọc `endpointSheet`. Nhánh RUN ALL (`evaluatePermission`, lọc
-  `m.endpointSheet === req.sheetName` ở dòng 92) giữ nguyên tuyệt đối.
-- `src/server/request-builder.js`, `runner.js`, `worker-pool.js`, `request-worker.js`, `routes.js`.
-- `public/js/ui/permission-table.js` (8 cột), `permission-filter-logic.js`,
-  `src/server/excel-export.js` — không cột nào đổi nguồn dữ liệu.
+Mode `mapping` giữ nguyên toàn bộ luật cũ. Mode `all` khác bốn chỗ:
+
+| Luật | Mode `all` |
+|---|---|
+| `UC1: sheet "Y" không còn endpoint nào` | Bỏ — cột Sheet không tham gia |
+| `Chưa chọn cột khử trùng (UC2)` | Bỏ — không khử trùng |
+| Sheet tham chiếu (UC2) | Nhận mọi sheet đã import, không ép ∈ sheet UC1 |
+| Không còn endpoint sau lọc | Đổi thông báo thành `Không endpoint nào để chạy — kiểm tra bộ lọc method và cột enabled` |
+| Kiểm `raw` (import bản cũ) | Quét toàn bộ `state.endpoints`, không giới hạn sheet UC1 |
+
+Luật còn lại (file phân quyền, cột Name UC2, UC1 rỗng, cột quyền UC1, auth profile, cột đích UC2)
+áp cho cả hai mode. Riêng thông báo khi UC1 rỗng đổi lời ở mode `all` thành
+`Chưa khai mapping UC1 nào — không biết cột quyền nào ứng với auth nào`, vì ở mode này UC1 chỉ còn
+nhiệm vụ cấp cặp cột quyền ↔ auth.
+
+## 9. Phạm vi không đụng tới
+
+- `matchUc2ToEndpoints` và toàn bộ đường mapping: pool cắt theo `uc1Sheets`, khử trùng theo
+  `dedupeColumn`, loại endpoint không khớp.
 - RUN ALL, tab OUTPUT, `result-table.js`, `filters.js`, `filter-logic.js`, `run-filter.js`.
-- Định dạng file phân quyền, `/api/import/grid`.
+- `permission-table.js` (8 cột), `permission-filter-logic.js`, `excel-export.js` — mode `all` chỉ làm
+  cột `Status Perm` xuất hiện nhiều giá trị `empty` hơn, không đổi nguồn dữ liệu cột nào.
+- Định dạng file phân quyền, `/api/import/grid`, `runner.js`, `worker-pool.js`, `routes.js`.
 
-## 8. Test
+## 10. Test
 
-Chạy bằng `node --test`. Không dùng Playwright.
+Chạy bằng `node --test`.
 
-**`test/permission-match.test.js` (sửa)**
-- Mọi dòng UC1 để `endpointSheet: ''` → endpoint thuộc sheet chưa từng khai trong UC1 vẫn vào pool và
-  được dòng UC2 kéo về.
-- Ít nhất một dòng UC1 khai sheet → pool thu hẹp đúng union sheet đó; endpoint sheet khác bị loại
-  (chứng minh đường backup còn sống).
-- Hỗn hợp: một dòng khai `Sheet 2`, một dòng trống → chỉ `Sheet 2` được quét.
-- Khử trùng theo cột đích: hai endpoint ở hai sheet khác nhau cùng giá trị cột đích → còn đúng một.
-- Hai endpoint khác method cùng giá trị cột đích → còn một (ghi nhận đánh đổi ở §3.2).
-- Endpoint có ô cột đích rỗng, hoặc `raw` không chứa cột đích → bị loại, không ném lỗi.
-- Cấu hình thiếu `endpointColumn` → trả mảng rỗng. Không còn test nào dựa vào `dedupeColumn`.
-- Các test cũ về 4 vòng, bớt từ đầu, dừng ở vòng đầu có kết quả, dòng UC2 đến trước giữ chỗ: **phải
-  xanh nguyên trạng** — bằng chứng thuật toán không đổi.
-- `endpointColumns`: test hiện có ở dòng 37 (`union header cua endpoint thuoc sheet UC1`) viết lại
-  thành union header của **mọi** endpoint, gọi với một tham số.
+**`test/permission-scope.test.js`** — fixture hiện có ghim `mode: 'mapping'` (mặc định app là `all`,
+không ghim thì mọi test cũ đổi nghĩa). Thêm nhóm test mode `all`: chạy cả endpoint thuộc sheet ngoài
+UC1; endpoint không ghép được vẫn có mặt với `permRowIndex: null`; endpoint ghép được mang đúng
+`permName`/`permRowIndex`; mọi endpoint mang `permMode: 'all'` còn mode mapping thì không; không khử
+trùng theo `dedupeColumn`; **không khử trùng theo `METHOD:pathTemplate` — một API ở 4 sheet role sinh
+đủ 4 bản ghi**; bỏ tick một bản ghi chỉ loại đúng bản đó; vẫn tôn trọng `enabled` + method filter;
+bốn nhánh validate ở §8; `permMode()` mặc định `all`.
 
-**`test/permission-scope.test.js` (sửa)**
-- `endpointSheet: ''` không sinh lỗi `sheet không còn endpoint nào`; `endpointSheet: 'Sheet lạ'` vẫn sinh.
-- Lỗi `Endpoints import từ bản cũ` bắt được endpoint thiếu `raw` ở sheet **ngoài** UC1.
-- `columnSheet` là sheet đã import nhưng không có trong UC1 → hợp lệ, không sinh lỗi.
-- Không còn lỗi nào về cột khử trùng.
-- `buildPermissionRunConfig` vẫn gắn `permName` + `permRowIndex` lên endpoint clone và không mutate
-  `state.endpoints`.
+**`test/http-client.test.js`** — `permMode: 'all'` + `permRowIndex: null` → `'empty'` kể cả khi
+`endpointName`/`sheetName` đủ để khớp nhánh RUN ALL (chứng minh nhánh mới chặn trước); `permMode:
+'all'` + có `permRowIndex` → vẫn chấm theo luật UC2; RUN ALL (`permMode` null) giữ nguyên kết quả cũ.
 
-**`test/permissions-panel.test.js` (sửa)**
-- Bỏ `MockElement` cho `sel-permissions-dedupe-col` và khóa tương ứng trong `installMockDocument`.
-  `initPermissionsPanel()` sau khi sửa không được đọc phần tử này nữa — mock DOM thiếu nó sẽ ném lỗi
-  ngay nếu code còn sót, đó chính là bằng chứng UI đã dọn sạch.
-- `selEndpointSheet` liệt kê mọi sheet đã import, không chỉ sheet UC1.
-- Dropdown sheet của dòng UC1 có option `''` và dòng mới tạo mặc định `endpointSheet: ''`.
+**`test/permissions-panel.test.js`** — radio ghi vào state; `render()` đồng bộ radio theo mode; mode
+`all` làm cột Sheet `disabled` nhưng giữ giá trị; mode `all` liệt kê mọi sheet đã import ở dropdown
+sheet tham chiếu.
 
-**`test/state.test.js` (sửa)**
-- `defaultConfig().permissionMapping.usecase2` còn đúng ba khóa
-  `{ permissionColumn, columnSheet, endpointColumn }`.
+**`test/state.test.js`** — `defaultConfig().permissionMapping.mode === 'all'`.
 
-**`test/layout.test.js` (sửa)**
-- Không còn `#sel-permissions-dedupe-col`.
+**`test/layout.test.js`** — có `#rad-perm-mode-all` (checked mặc định) và `#rad-perm-mode-mapping`.
 
-Ghi chú: `test/layout.test.js:31` (`cot rong co card CONNECTION/BODY CHUNG gop lam mot…`) đang đỏ sẵn
-từ trước, không thuộc phạm vi spec này.
+Ghi chú: `test/layout.test.js:31` và `:72` đang đỏ sẵn từ trước, không thuộc phạm vi spec này.

@@ -43,6 +43,20 @@ export function resolveColumns(headers, template) {
   return { columns, errors };
 }
 
+// Giu lai toan bo cot goc cua file endpoints duoi dang { header: value }, bo o
+// rong va header rong — UC2 can chon cot bat ky lam cot dich/cot khu trung
+// (permission-match.js), khong chi ba truong name/method/endpoint.
+function rawOf(cells, headers) {
+  const out = {};
+  headers.forEach((h, i) => {
+    const header = String(h ?? '').trim();
+    const value = String(cells[i] ?? '').trim();
+    if (header === '' || value === '') return;
+    out[header] = value;
+  });
+  return out;
+}
+
 function mapSingleSheetRows(sheet, template) {
   const { headers = [], rows = [] } = sheet ?? {};
   const { columns, errors: columnErrors } = resolveColumns(headers, template);
@@ -60,10 +74,15 @@ function mapSingleSheetRows(sheet, template) {
 
     if (cells.every((c) => String(c ?? '').trim() === '')) return;
 
-    const method = at('method') === '' ? 'GET' : at('method').toUpperCase();
+    // Cot method sai/la (vi du dinh vao nham cot trang thai kieu Co/Khong) TRUOC
+    // DAY lam mat nguyen dong khoi bang endpoint — sai muc dich: dong van co
+    // duong dan hop le, chi mac method la khong doan duoc. Gio giu dong lai,
+    // mac dinh GET, chi canh bao — hien het la yeu cau, khong phai tuy chon.
+    const rawMethod = at('method');
+    let method = rawMethod === '' ? 'GET' : rawMethod.toUpperCase();
     if (!METHODS.includes(method)) {
-      errors.push({ row: rowNumber, reason: `method "${at('method')}" không hợp lệ` });
-      return;
+      errors.push({ row: rowNumber, reason: `method "${rawMethod}" không hợp lệ — đã mặc định GET` });
+      method = 'GET';
     }
 
     const raw = at('endpoint');
@@ -73,7 +92,7 @@ function mapSingleSheetRows(sheet, template) {
     }
     const endpoint = raw.startsWith('/') ? raw : `/${raw}`;
 
-    records.push({ name: at('name'), method, endpoint });
+    records.push({ name: at('name'), method, endpoint, raw: rawOf(cells, headers) });
   });
 
   return { records, errors };
@@ -98,7 +117,7 @@ export function mapRows(gridResult, template, options = {}) {
     allErrors.push(...errors);
   }
 
-  if (options.dedupe !== false) {
+  if (options.dedupe === true) {
     const { unique, skipped } = dedupeEndpoints(allRecords);
     allRecords = unique;
     totalSkipped += skipped;

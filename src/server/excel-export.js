@@ -79,6 +79,19 @@ export function getExportColumns(hasPermission) {
   return cols;
 }
 
+// Bo cot rieng cho export tu tab CHECK PERMISSION — khong co Headers/Query nen
+// khong che token, va khong doi cho voi Duration nhu bo cot mac dinh.
+export const PERMISSION_EXPORT_COLUMNS = [
+  { header: 'Status Code', key: 'status', width: 12 },
+  { header: 'Status Permission', key: 'statusPermission', width: 18 },
+  { header: 'Auth', key: 'auth', width: 18 },
+  { header: 'Endpoint', key: 'path', width: 45 },
+  { header: 'Role', key: 'role', width: 20 },
+  { header: 'Endpoint Name', key: 'epName', width: 35 },
+  { header: 'UC2 Name', key: 'permName', width: 35 },
+  { header: 'Response Body', key: 'bodyText', width: 80, style: MULTILINE },
+];
+
 function toRow(rec, includeToken, hasPermission = false) {
   const row = {
     index: rec.index,
@@ -96,6 +109,9 @@ function toRow(rec, includeToken, hasPermission = false) {
     responseHeaders: serializeHeaders(rec.response.headers, true),
     errorMessage: rec.errorMessage ?? '',
     startedAt: rec.startedAt,
+    role: rec.sheetName ?? '',
+    epName: rec.endpointName ?? '',
+    permName: rec.permissionMatchedName ?? '',
   };
   if (hasPermission) {
     row.statusPermission = rec.statusPermission ?? 'empty';
@@ -105,12 +121,16 @@ function toRow(rec, includeToken, hasPermission = false) {
   return row;
 }
 
-export async function writeResultsToStream(stream, records, { includeToken = false, hasPermission = false } = {}) {
+export async function writeResultsToStream(stream, records, {
+  includeToken = false, hasPermission = false, layout = 'default',
+} = {}) {
+  const isPermLayout = layout === 'permission';
+
   const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ stream, useStyles: true });
   const ws = wb.addWorksheet('Results', {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
-  const cols = getExportColumns(hasPermission);
+  const cols = isPermLayout ? PERMISSION_EXPORT_COLUMNS : getExportColumns(hasPermission);
   ws.columns = cols;
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
 
@@ -120,12 +140,12 @@ export async function writeResultsToStream(stream, records, { includeToken = fal
   header.commit();
 
   for (const rec of records) {
-    const row = ws.addRow(toRow(rec, includeToken, hasPermission));
+    const row = ws.addRow(toRow(rec, includeToken, isPermLayout || hasPermission));
     const status = rec.response.status;
     const isOk = status !== null && status < 400;
     row.getCell('status').font = { color: { argb: isOk ? COLOR_UP : COLOR_DOWN }, bold: true };
-    if (!isOk) row.getCell('errorCode').font = { color: { argb: COLOR_DOWN } };
-    if (hasPermission) {
+    if (!isPermLayout && !isOk) row.getCell('errorCode').font = { color: { argb: COLOR_DOWN } };
+    if (isPermLayout || hasPermission) {
       const permCell = row.getCell('statusPermission');
       const val = String(rec.statusPermission ?? '');
       if (val === 'true') {

@@ -44,11 +44,21 @@ export function parseCommonEndpoints(text) {
     });
 }
 
+// ENDPOINTS CHUNG luu dang mang co phan loai (state.commonEndpointList) — muc
+// 'oracle' la khai bao endpoint checkPermission, KHONG vao pool RUN ALL. Noi
+// lai chuoi cua rieng muc 'business' de filterEndpoints/parseCommonEndpoints
+// khong phai doi chu ky, khong phai biet gi ve khai niem 'oracle'.
+export const businessCommonText = (list) => (list ?? [])
+  .filter((c) => c.kind !== 'oracle')
+  .map((c) => c.line)
+  .join('\n');
+
 export function filterEndpoints(endpoints, runFilter, selectedSheet, commonEndpointsText, commonEndpointsEnabled) {
   const wanted = new Set((runFilter?.methods ?? []).map((m) => String(m).toUpperCase()));
+  // KHONG gate theo e.enabled: moi ban ghi cua sheet dang chon deu chay. Chi
+  // method va sheet thu hep pham vi.
   const filteredTab = (endpoints ?? []).filter(
     (e) => {
-      if (!e.enabled) return false;
       if (wanted.size > 0 && !wanted.has(String(e.method || 'GET').toUpperCase())) return false;
       if (selectedSheet && selectedSheet !== 'all' && (e.sheetName ?? 'Sheet 1') !== selectedSheet) return false;
       return true;

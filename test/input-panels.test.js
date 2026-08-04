@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { state, defaultConfig, applyConfig } from '../public/js/state.js';
-import { initConnectionPanel, tryLoadToken } from '../public/js/ui/connection-panel.js';
+import { initConnectionPanel } from '../public/js/ui/connection-panel.js';
 import { initDateRange } from '../public/js/ui/date-range.js';
-import { initEndpointList, getUniqueSheets } from '../public/js/ui/endpoint-list.js';
+import {
+  initEndpointList, getUniqueSheets, sheetNamesFromGrid, mergeSheetNames, combineKnownSheetNames,
+} from '../public/js/ui/endpoint-list.js';
 import { initParamTables } from '../public/js/ui/param-table.js';
 
 class MockElement {
@@ -238,8 +240,6 @@ class MockElement {
 function setupMockDOM() {
   const elements = {
     'inp-domain': new MockElement('input', 'inp-domain'),
-    'token-indicator': new MockElement('span', 'token-indicator'),
-    'btn-reload-token': new MockElement('button', 'btn-reload-token'),
     'tab-auths-badge': new MockElement('span', 'tab-auths-badge'),
 
     'inp-daterange': new MockElement('input', 'inp-daterange'),
@@ -323,68 +323,6 @@ test('Connection Panel - domain binding va validate', () => {
   elements['inp-domain'].value = 'invalid-domain';
   elements['inp-domain'].dispatchEvent({ type: 'input' });
   assert.equal(elements['inp-domain'].classList.contains('is-invalid'), true);
-});
-
-test('indicator dem so profile co token', () => {
-  const { elements } = setupMockDOM();
-  Object.assign(state, defaultConfig());
-  state.auths = [
-    { id: 'a1', name: 'A', mode: 'fields', token: 'T', cookie: '', refreshToken: '', curlRaw: '' },
-    { id: 'a2', name: 'B', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' },
-    { id: 'a3', name: 'C', mode: 'curl', token: '', cookie: '', refreshToken: '', curlRaw: "curl -H 'Authorization: Bearer z'" },
-  ];
-
-  initConnectionPanel();
-
-  assert.equal(elements['token-indicator'].textContent, '● 2/3 auth có token');
-  assert.equal(elements['token-indicator'].classList.contains('is-off'), false);
-});
-
-test('indicator bao is-off khi khong profile nao co token', () => {
-  const { elements } = setupMockDOM();
-  Object.assign(state, defaultConfig());
-  state.auths = [{ id: 'a1', name: 'A', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' }];
-
-  initConnectionPanel();
-
-  assert.equal(elements['token-indicator'].textContent, '○ 0/1 auth có token');
-  assert.equal(elements['token-indicator'].classList.contains('is-off'), true);
-});
-
-test('Reload Token ghi vao profile dau tien khi chua chon filter', () => {
-  const { elements } = setupMockDOM();
-  Object.assign(state, defaultConfig());
-  state.auths = [{ id: 'a1', name: 'PROD', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' }];
-
-  initConnectionPanel();
-
-  elements['btn-reload-token'].dispatchEvent({ type: 'click' });
-  assert.equal(globalThis.window.ccmToastCalls.length, 1);
-  assert.equal(globalThis.window.ccmToastCalls[0].type, 'error');
-
-  globalThis.document.cookie = 'access_token=cookie-token-123';
-  elements['btn-reload-token'].dispatchEvent({ type: 'click' });
-  assert.equal(state.auths[0].token, 'cookie-token-123');
-  assert.equal(globalThis.window.ccmToastCalls.length, 2);
-  assert.equal(globalThis.window.ccmToastCalls[1].type, 'ok');
-  assert.ok(globalThis.window.ccmToastCalls[1].msg.includes('PROD'));
-});
-
-test('Reload Token ghi vao profile dang duoc chon trong runFilter', () => {
-  const { elements } = setupMockDOM();
-  Object.assign(state, defaultConfig());
-  state.auths = [
-    { id: 'a1', name: 'PROD', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' },
-    { id: 'a2', name: 'UAT', mode: 'fields', token: '', cookie: '', refreshToken: '', curlRaw: '' },
-  ];
-  state.runFilter = { methods: [], msisdnPatterns: [], authIds: ['a2'] };
-
-  initConnectionPanel();
-
-  globalThis.document.cookie = 'access_token=cookie-token-123';
-  elements['btn-reload-token'].dispatchEvent({ type: 'click' });
-  assert.equal(state.auths[1].token, 'cookie-token-123');
-  assert.equal(state.auths[0].token, '');
 });
 
 test('Date Range Panel - formatting, picker sync, validation', () => {
@@ -579,6 +517,34 @@ test('getUniqueSheets tra ve danh sach ten sheet khong trung nhau', () => {
     {},
   ];
   assert.deepEqual(getUniqueSheets(endpoints), ['Sheet1', 'Sheet2']);
+});
+
+test('sheetNamesFromGrid tra ve TAT CA ten sheet trong grid, ke ca sheet 0 dong hop le', () => {
+  const grid = {
+    sheets: [
+      { name: 'Sheet1', headers: ['name', 'method', 'endpoint'], rows: [['Api1', 'GET', '/a']] },
+      { name: 'Sheet2_KhongKhopCot', headers: ['Ten', 'Duong dan'], rows: [['Api2', '/b']] },
+    ],
+  };
+  assert.deepEqual(sheetNamesFromGrid(grid), ['Sheet1', 'Sheet2_KhongKhopCot']);
+});
+
+test('sheetNamesFromGrid tra ve Sheet 1 khi grid khong co mang sheets', () => {
+  assert.deepEqual(sheetNamesFromGrid({}), ['Sheet 1']);
+});
+
+test('mergeSheetNames noi them va khu trung khi append, thay het khi replace', () => {
+  assert.deepEqual(mergeSheetNames(['A', 'B'], ['B', 'C'], { replace: false }), ['A', 'B', 'C']);
+  assert.deepEqual(mergeSheetNames(['A', 'B'], ['C'], { replace: true }), ['C']);
+});
+
+test('combineKnownSheetNames giu sheet da biet du sheet do 0 endpoint duoc mapping', () => {
+  const knownNames = ['Sheet1', 'Sheet2_KhongKhopCot'];
+  const endpoints = [{ sheetName: 'Sheet1' }];
+  assert.deepEqual(
+    combineKnownSheetNames(knownNames, endpoints),
+    ['Sheet1', 'Sheet2_KhongKhopCot'],
+  );
 });
 
 test('Endpoint list - loc theo selectedSheet khi dropdown hoac tab doi', () => {

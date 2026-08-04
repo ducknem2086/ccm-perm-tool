@@ -4,10 +4,10 @@ import { mapRows } from '../shared/endpoint-mapping.js';
 import { importGrid } from '../api.js';
 import { matchesEndpointSearch } from '../shared/endpoint-search.js';
 import { createMethodFilterGroup } from './method-filter.js';
-import { dedupeEndpoints } from '../shared/endpoint-dedupe.js';
+import { allTabEndpoints } from '../shared/endpoint-dedupe.js';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-const MAX_SHOWN_ERRORS = 10;
+const MAX_SHOWN_ERRORS = 5;
 let seq = 0;
 const nextId = () => `ep_${Date.now().toString(36)}_${(seq += 1)}`;
 
@@ -26,9 +26,31 @@ export function getUniqueSheets(endpoints) {
   return Array.from(set);
 }
 
+// getUniqueSheets chi thay sheet co it nhat mot dong map thanh cong. Sheet bi
+// lech cot theo template dang chon (mapSingleSheetRows tra 0 record) bien mat
+// khoi tab/dropdown du van co trong file — day la nguyen nhan "khong hien du
+// sheet" nguoi dung bao. Ba ham duoi day giu lai TEN sheet tho tu grid da doc,
+// doc lap voi ket qua mapping, de tab luon hien het sheet trong file goc.
+export function sheetNamesFromGrid(grid) {
+  const sheets = Array.isArray(grid?.sheets) && grid.sheets.length > 0
+    ? grid.sheets
+    : [{ name: 'Sheet 1' }];
+  return Array.from(new Set(sheets.map((s) => s?.name ?? 'Sheet 1')));
+}
+
+export function mergeSheetNames(existing, incoming, { replace = false } = {}) {
+  const base = replace ? [] : (Array.isArray(existing) ? existing : []);
+  return Array.from(new Set([...base, ...incoming]));
+}
+
+export function combineKnownSheetNames(knownNames, endpoints) {
+  const known = Array.isArray(knownNames) ? knownNames : [];
+  return Array.from(new Set([...known, ...getUniqueSheets(endpoints)]));
+}
+
 export function filterBySheet(endpoints, selectedSheet) {
   if (!selectedSheet || selectedSheet === 'all') {
-    return dedupeEndpoints(endpoints).unique;
+    return allTabEndpoints(endpoints);
   }
   return endpoints.filter((e) => (e?.sheetName ?? 'Sheet 1') === selectedSheet);
 }
@@ -43,12 +65,13 @@ function makeEndpoint(path, sheetName = 'Sheet 1') {
   };
 }
 
-function fromRecord(rec) {
+export function fromRecord(rec) {
   return {
     ...makeEndpoint(rec.endpoint, rec.sheetName),
     name: rec.name,
     method: rec.method,
     sheetName: rec.sheetName ?? 'Sheet 1',
+    raw: rec.raw ?? {},
   };
 }
 
@@ -145,6 +168,38 @@ export function toggleAllCommonQuery() {
   setAllCommonQueryInCurrentTab(!allCommonQueryInCurrentTab());
 }
 
+// Khoa dong nhat voi dedupeEndpoints (endpoint-dedupe.js:8-10) — cung mot dinh
+// nghia "trung endpoint" voi cho khu trung tab All.
+export function endpointKey(ep) {
+  const method = String(ep?.method ?? 'GET').toUpperCase();
+  const path = String(ep?.pathTemplate ?? '').trim();
+  return `${method}:${path}`;
+}
+
+export function allFieldOnVisible(visible, field) {
+  const list = visible ?? [];
+  return list.length > 0 && list.every((e) => e?.[field] !== false);
+}
+
+// Pham vi ghi = pool cua tab hien tai; dieu kien = khoa nam trong tap dang
+// hien. Tab All: pool la toan bo state.endpoints nen ban trung bi khu di khi
+// hien thi van doi theo — RUN ALL doc thang state.endpoints, bo sot ban trung
+// la sinh request lech cau hinh ma khong co gi bao. Tab mot sheet: pool bo hep
+// lai dung sheet do nen khong ro sang sheet khac du trung METHOD:path.
+export function setFieldForVisible(visible, field, val) {
+  const keys = new Set((visible ?? []).map(endpointKey));
+  if (keys.size === 0) return;
+
+  const sheet = state.selectedSheet ?? 'all';
+  state.endpoints = state.endpoints.map((e) => {
+    const inScope = sheet === 'all' || (e?.sheetName ?? 'Sheet 1') === sheet;
+    if (!inScope || !keys.has(endpointKey(e))) return e;
+    return { ...e, [field]: val };
+  });
+  persist();
+  notify();
+}
+
 export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   // Du lieu cu trong localStorage co the la mang chuoi, thieu name hoac thieu attachMsisdn.
   state.endpoints = (state.endpoints ?? []).map((e) => (
@@ -157,7 +212,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   sheetSelect.className = 'el-sheet-select';
 
   function refreshSheetSelect() {
-    const sheets = getUniqueSheets(state.endpoints);
+    const sheets = combineKnownSheetNames(state.endpointSheetNames, state.endpoints);
     sheetSelect.replaceChildren();
 
     const optAll = document.createElement('option');
@@ -185,7 +240,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
 
   function refreshSheetTabs() {
     sheetTabsContainer.replaceChildren();
-    const sheets = getUniqueSheets(state.endpoints);
+    const sheets = combineKnownSheetNames(state.endpointSheetNames, state.endpoints);
     if (sheets.length <= 1) {
       sheetTabsContainer.hidden = true;
       return;
@@ -220,7 +275,10 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   }
 
   function showErrors(errors) {
-    host.querySelector('.el-errors')?.remove();
+    // Vung loi nam ngoai card ENDPOINTS (xem #endpoint-import-errors trong
+    // index.html). Fallback ve host de panel van bao loi neu markup do thieu.
+    const errHost = document.getElementById('endpoint-import-errors') ?? host;
+    errHost.querySelector('.el-errors')?.remove();
     if (errors.length === 0) return;
 
     const box = document.createElement('div');
@@ -244,7 +302,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       more.textContent = `… và ${errors.length - MAX_SHOWN_ERRORS} dòng lỗi nữa`;
       box.append(more);
     }
-    host.append(box);
+    errHost.append(box);
   }
 
   async function handleImport(file) {
@@ -264,6 +322,7 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
       const current = state.endpoints;
       const incoming = records.map(fromRecord);
       let next;
+      let replace = true;
       if (current.length === 0) {
         next = incoming;
       } else {
@@ -272,9 +331,13 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
           + 'OK = Nối thêm vào cuối\nCancel = Thay thế toàn bộ'
         );
         next = append ? [...current, ...incoming] : incoming;
+        replace = !append;
       }
 
       state.endpoints = next;
+      state.endpointSheetNames = mergeSheetNames(
+        state.endpointSheetNames, sheetNamesFromGrid(grid), { replace },
+      );
       persist();
       notify();
 
@@ -316,6 +379,26 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     onClick: toggleAllCommonQuery,
   });
 
+  const msisdnFilteredActionIndex = extraActions.length;
+  extraActions.push({
+    label: '☐ MSISDN (lọc): chưa lọc',
+    title: 'Bật/tắt MSISDN cho các dòng đang hiện trên bảng',
+    onClick: () => {
+      const visible = list.getVisibleItems();
+      setFieldForVisible(visible, 'attachMsisdn', !allFieldOnVisible(visible, 'attachMsisdn'));
+    },
+  });
+
+  const commonQueryFilteredActionIndex = extraActions.length;
+  extraActions.push({
+    label: '☐ Query (lọc): chưa lọc',
+    title: 'Bật/tắt Query chung cho các dòng đang hiện trên bảng',
+    onClick: () => {
+      const visible = list.getVisibleItems();
+      setFieldForVisible(visible, 'attachCommonQuery', !allFieldOnVisible(visible, 'attachCommonQuery'));
+    },
+  });
+
   const list = createEditableList({
     host,
     title: 'ENDPOINTS',
@@ -337,6 +420,14 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
     setValue: (ep, v) => ({ ...ep, pathTemplate: v }),
     makeItem: (path) => makeEndpoint(path, (state.selectedSheet && state.selectedSheet !== 'all') ? state.selectedSheet : 'Sheet 1'),
     onImport: handleImport,
+    onClear: () => {
+      if (state.endpoints.length === 0) return;
+      if (!confirm(`Xóa toàn bộ ${state.endpoints.length} endpoint trên tất cả các tab?`)) return;
+      state.endpoints = [];
+      state.endpointSheetNames = [];
+      persist();
+      notify();
+    },
     search: {
       placeholder: 'Tìm theo tên hoặc endpoint...',
       match: matchesEndpointSearch,
@@ -456,6 +547,34 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
   const checkAllBtn = host.querySelector(`[data-extra-action="${checkAllActionIndex}"]`);
   const msisdnAllBtn = host.querySelector(`[data-extra-action="${msisdnAllActionIndex}"]`);
   const commonQueryAllBtn = host.querySelector(`[data-extra-action="${commonQueryAllActionIndex}"]`);
+  const msisdnFilteredBtn = host.querySelector(`[data-extra-action="${msisdnFilteredActionIndex}"]`);
+  const commonQueryFilteredBtn = host.querySelector(`[data-extra-action="${commonQueryFilteredActionIndex}"]`);
+
+  function refreshFilteredBtn(btn, field, name) {
+    if (!btn) return;
+    const filtering = (searchInput?.value ?? '').trim() !== '';
+    const visible = filtering ? list.getVisibleItems() : [];
+
+    btn.disabled = !filtering || visible.length === 0;
+    if (!filtering) {
+      btn.textContent = `☐ ${name} (lọc): chưa lọc`;
+      btn.title = 'Gõ vào ô tìm kiếm để bật nút này';
+      return;
+    }
+    if (visible.length === 0) {
+      btn.textContent = `☐ ${name} (lọc 0): —`;
+      btn.title = 'Không có dòng nào khớp tìm kiếm';
+      return;
+    }
+
+    const on = allFieldOnVisible(visible, field);
+    btn.textContent = on
+      ? `☑ ${name} (lọc ${visible.length}): Tất cả Có`
+      : `☐ ${name} (lọc ${visible.length}): Tất cả Không`;
+    btn.title = on
+      ? `Tắt ${name} cho ${visible.length} dòng đang hiện`
+      : `Bật ${name} cho ${visible.length} dòng đang hiện`;
+  }
 
   function refreshCheckAllBtn() {
     const isSingleTab = state.selectedSheet && state.selectedSheet !== 'all';
@@ -483,7 +602,14 @@ export function initEndpointList({ onOpenTemplate, onOpenConfig } = {}) {
         ? (isSingleTab ? `Tắt Query chung cho tất cả endpoint trong ${state.selectedSheet}` : 'Tắt Query chung cho tất cả endpoint')
         : (isSingleTab ? `Bật Query chung cho tất cả endpoint trong ${state.selectedSheet}` : 'Bật Query chung cho tất cả endpoint');
     }
+
+    refreshFilteredBtn(msisdnFilteredBtn, 'attachMsisdn', 'MSISDN');
+    refreshFilteredBtn(commonQueryFilteredBtn, 'attachCommonQuery', 'Query');
   }
+
+  // Go tim kiem khong doi state nen subscribe() khong bat duoc — nut moi phai
+  // tu nghe o search de nhan/mo va nhan so dong cap nhat ngay.
+  searchInput?.addEventListener('input', refreshCheckAllBtn);
 
   refreshSheetSelect();
   refreshSheetTabs();

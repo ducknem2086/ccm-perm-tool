@@ -22,7 +22,24 @@ Tab **INPUT**:
 4. **Endpoints** — path bắt đầu bằng `/`, dùng `:msisdn` hoặc `{{msisdn}}` ở chỗ cần thay số điện thoại
 5. Bấm **RUN ALL** — số trên nút là số request sẽ chạy (`endpoint đang lọc × số MSISDN đang lọc × số auth profile đang chọn`)
 
-Tab **AUTHS**: mỗi profile là một bộ credential (Bearer token, Cookie, Refresh token). Nhập theo ba ô riêng, hoặc dán nguyên lệnh `Copy as cURL` — khi dán cURL thì **mọi** header trong lệnh đó được gửi kèm, không chỉ ba credential. Bấm `⧉` để nhân bản một profile, `✕` để xóa (luôn phải giữ lại ít nhất một profile).
+Tab **AUTHS**: mỗi profile là một lệnh `Copy as cURL` của request đã đăng nhập — nguồn danh tính duy nhất, dùng cho cả request nghiệp vụ lẫn CHECK PERM. **Mọi** header trong lệnh đó được gửi kèm cho request nghiệp vụ; CHECK PERM chỉ mượn lại phần cookie lõi auth (`access_token`, `id_token`, `client_id`, `claims_*`, `REDIRECT_AFTER_LOGIN`), không mượn `Authorization` — đúng như FE thật gọi `checkPermission`. Ô **Role** khai riêng vì không cookie nào chứa nó — FE tự gửi role đang chọn trên màn hình.
+
+Nút trên mỗi profile: `✓ Verify` kiểm cURL đã đủ điều kiện auth chưa (xem dưới); `⌫` xoá cURL và role đã nhập nhưng **giữ lại profile** (id và tên còn nguyên nên bộ lọc auth và mapping UC1 không đứt) — dùng khi credential cũ còn sót đang đè lên HEADERS CHUNG; `⧉` nhân bản; `✕` xoá hẳn profile (luôn phải giữ lại ít nhất một).
+
+Bấm **`✓ Verify`** trước khi chạy để khỏi đoán vì sao 401. Nó chấm từng điều kiện và ghi rõ điều kiện đó ảnh hưởng đường nào:
+
+| Check | Ảnh hưởng | Hỏng thì |
+|---|---|---|
+| Đọc được header (kèm kiểu copy nhận dạng được) | cả hai | dán hỏng, không header nào tới đích |
+| Có `Authorization` | NGHIỆP VỤ | request đi không Bearer → 401 |
+| Cookie có `access_token` | CHECK PERM | không dựng được danh tính |
+| Token còn hạn | cả hai | 401 |
+| `claims_*` khớp token · Bearer khớp cookie (cùng user, cùng `sid`) | cả hai | cookie ghép từ hai lần login |
+| Đã khai role | CHECK PERM | không dựng được body `checkPermission` |
+
+Verdict ở đầu bảng: **ĐẠT** / **ĐẠT MỘT PHẦN** (còn cảnh báo) / **CHƯA ĐẠT** kèm số lỗi chặn. Sửa ô cURL hoặc bấm `⌫` thì kết quả cũ tự biến mất — không để verdict lạc hậu.
+
+Profile đã `⌫` vẫn chạy được RUN ALL nếu HEADERS CHUNG tự mang credential — nhưng CHECK PERM sẽ báo "Chưa dán cURL", vì danh tính của `checkPermission` bắt buộc đọc từ cURL của chính profile.
 
 Trước khi bấm RUN ALL, thanh **FILTER** thu hẹp tập request theo ba trục: method, msisdn (gõ vào để chọn từ gợi ý, hoặc gõ một đoạn số để khớp mọi số chứa đoạn đó), và auth profile. Không chọn gì ở một trục nghĩa là lấy tất cả trục đó. Dòng cạnh nút cho biết `N endpoint × M msisdn × K auth`.
 
@@ -40,8 +57,6 @@ Tab **OUTPUT**: kết quả về từng dòng theo thời gian thực, lọc the
 
 Request được gửi **từ Node**, không phải từ trình duyệt — nên không dính CORS, nhưng máy chạy tool phải reach được domain đích.
 
-Nút `⟳ Reload Token` chỉ đọc được `access_token` ở **cùng origin với tool**, và ghi vào profile đang được chọn ở filter (không chọn gì thì ghi vào profile đầu danh sách). Ở `localhost:9000` trình duyệt chặn đọc cookie của domain khác — đây là giới hạn của trình duyệt, không phải lỗi. Khi đó dán token thủ công vào tab AUTHS.
-
 Khi export Excel, radio `Token/Cookie trong file` quyết định file có mang theo credential đầy đủ của mọi profile hay chỉ mang bản đã che. Mặc định là **Che**.
 
 ## Domain phải là host API
@@ -50,17 +65,20 @@ Domain phải trỏ đúng **API**, không phải host trang web. Domain trang w
 
 ## Credential phải dán tay
 
-Ba giá trị này hết hạn theo phiên đăng nhập nên nằm ở tab AUTHS, mỗi profile một bộ:
+Hết hạn theo phiên đăng nhập nên nằm ở tab AUTHS, mỗi profile một lệnh cURL. Lấy đúng: F12 ▸
+**Network** ▸ chọn request **gọi API nghiệp vụ** (không phải `checkPermission`, không phải request
+điều hướng trang, không phải request tải JS/CSS) ▸ chuột phải ▸ Copy.
 
-| Ô | Thành header | Ghi chú |
-|---|---|---|
-| Bearer token | `Authorization: Bearer <token>` | Luôn cần |
-| Cookie | `Cookie: <giá trị>` | Thường chỉ là cookie hạ tầng (load balancer, redirect hint) — **không** chứa `access_token`/`id_token`, vì hai cái đó đã nằm trong Bearer token |
-| Refresh token | `refresh_token: <giá trị>` | Hiếm khi cần, để trống trừ khi API cụ thể đòi header này |
+Kiểu copy nào cũng được — tool đọc được cả bốn: **cURL (bash)**, **cURL (cmd)** (mặc định trên
+Windows), **PowerShell**, và **fetch**.
 
-Lấy đúng: F12 ▸ **Network** ▸ chọn request **gọi API** (không phải request điều hướng trang, không phải request tải JS/CSS) ▸ chuột phải ▸ Copy ▸ **Copy as fetch**. Cách này chính xác hơn Copy as cURL vì DevTools chỉ liệt kê đúng header thật sự đi kèm request đó — Copy as cURL đôi khi lẫn header từ ngữ cảnh trang, không phải request thật.
+Phải là cURL của request **nghiệp vụ**, không phải của `checkPermission`: hai đường xác thực bằng hai
+thứ khác nhau — request nghiệp vụ đi bằng `Authorization: Bearer`, `checkPermission` đi bằng cookie
+`access_token`. Lệnh cURL nghiệp vụ mang **cả hai**; lệnh `checkPermission` không có `Authorization`
+nên dán nhầm là mọi request nghiệp vụ ăn 401. Dán nhầm thì dòng cảnh báo dưới ô cURL báo ngay.
 
-Không tự đọc được vì trình duyệt chặn đọc cookie/storage của domain khác — giới hạn của trình duyệt, không phải lỗi tool.
+Không tự đọc được vì trình duyệt chặn đọc cookie/storage của domain khác — giới hạn của trình duyệt,
+không phải lỗi tool.
 
 ## Header mặc định
 
