@@ -162,3 +162,107 @@ test('mapRows de trong name khi template khong khai dong name', () => {
     raw: { 'Tên API': 'A', 'HTTP Method': 'GET', 'Đường dẫn': '/a/{*}' },
   }]);
 });
+
+// --- nhom alias: nhieu rule cung target ---
+
+function aliasTpl() {
+  return [
+    { id: 't1', type: 'name', selector: 'Name', target: 'name' },
+    { id: 't2', type: 'name', selector: 'Name *', target: 'name' },
+    { id: 't3', type: 'name', selector: 'Method', target: 'method' },
+    { id: 't4', type: 'name', selector: 'API Mapping', target: 'endpoint' },
+  ];
+}
+
+test('resolveColumns alias: sheet co cot Name thi dung alias dau', () => {
+  const headers = ['Name', 'Method', 'API Mapping'];
+  const r = resolveColumns(headers, aliasTpl());
+  assert.equal(r.columns.name, 0);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
+});
+
+test('resolveColumns alias: sheet co cot Name * thi roi xuong alias sau', () => {
+  const headers = ['Name *', 'Method', 'API Mapping'];
+  const r = resolveColumns(headers, aliasTpl());
+  assert.equal(r.columns.name, 0);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
+});
+
+test('resolveColumns alias: sheet co ca hai cot thi thang theo thu tu template', () => {
+  const headers = ['Name', 'Name *', 'Method', 'API Mapping'];
+  const r = resolveColumns(headers, aliasTpl());
+  assert.equal(r.columns.name, 0); // "Name" (rule dau) thang, khong phai "Name *"
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
+});
+
+test('resolveColumns alias: ca nhom name mat het thi canh bao, khong loi chan', () => {
+  const headers = ['Method', 'API Mapping'];
+  const r = resolveColumns(headers, aliasTpl());
+  assert.equal(r.columns.name, undefined);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.warnings.length, 1);
+  assert.match(r.warnings[0], /name/);
+});
+
+test('resolveColumns alias: ca nhom endpoint mat het thi loi chan, liet ke du alias', () => {
+  const headers = ['Name', 'Method'];
+  const r = resolveColumns(headers, [
+    { id: 't1', type: 'name', selector: 'Name', target: 'name' },
+    { id: 't2', type: 'name', selector: 'API Mapping', target: 'endpoint' },
+    { id: 't3', type: 'name', selector: 'Path', target: 'endpoint' },
+  ]);
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /API Mapping/);
+  assert.match(r.errors[0], /Path/);
+});
+
+test('resolveColumns alias: index ngoai khoang roi xuong alias sau khop ten', () => {
+  const headers = ['Name', 'Method', 'API Mapping'];
+  const r = resolveColumns(headers, [
+    { id: 't1', type: 'index', selector: '9', target: 'name' },
+    { id: 't2', type: 'name', selector: 'Name', target: 'name' },
+    { id: 't3', type: 'name', selector: 'Method', target: 'method' },
+    { id: 't4', type: 'name', selector: 'API Mapping', target: 'endpoint' },
+  ]);
+  assert.equal(r.columns.name, 0);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
+});
+
+test('resolveColumns sheetName them tien to vao message, thieu thi khong', () => {
+  const headers = ['Method', 'API Mapping'];
+  const withName = resolveColumns(headers, aliasTpl(), 'Widget');
+  assert.match(withName.warnings[0], /Sheet "Widget"/);
+
+  const withoutName = resolveColumns(headers, aliasTpl());
+  assert.doesNotMatch(withoutName.warnings[0], /Sheet "/);
+});
+
+test('mapRows: 2 sheet lech nhan cot name van nap dung ca hai', () => {
+  const gridResult = {
+    sheets: [
+      { name: 'A', headers: ['Name', 'Method', 'API Mapping'], rows: [['Tạo phiếu', 'POST', '/a']] },
+      { name: 'B', headers: ['Name *', 'Method', 'API Mapping'], rows: [['Sửa phiếu', 'PUT', '/b']] },
+    ],
+  };
+  const r = mapRows(gridResult, aliasTpl());
+  assert.equal(r.records.length, 2);
+  assert.equal(r.records[0].name, 'Tạo phiếu');
+  assert.equal(r.records[1].name, 'Sửa phiếu');
+});
+
+test('mapRows: sheet thieu ca hai alias name van nap, name rong, co canh bao', () => {
+  const gridResult = {
+    sheets: [
+      { name: 'C', headers: ['Method', 'API Mapping'], rows: [['GET', '/c']] },
+    ],
+  };
+  const r = mapRows(gridResult, aliasTpl());
+  assert.equal(r.records.length, 1);
+  assert.equal(r.records[0].name, '');
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0].reason, /name/);
+});

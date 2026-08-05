@@ -5,42 +5,68 @@ export const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
 const norm = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-export function resolveColumns(headers, template) {
+// Nhieu rule cung target = alias cua cung mot du lieu, chi khac nhan cot giua
+// cac sheet (vd "Name" / "Name *"). Thu tu template la do uu tien: alias dau
+// tien dinh vi duoc cot thi thang, dung nhom. Mot alias khong khop KHONG loi —
+// chi ca nhom khong alias nao khop moi bao (chan cho endpoint, canh bao cho
+// cac truong con lai) — xem 2026-08-05-endpoint-mapping-alias-groups-design.md.
+export function resolveColumns(headers, template, sheetName) {
   const list = Array.isArray(headers) ? headers : [];
   const columns = {};
   const errors = [];
-  const seen = new Set();
+  const warnings = [];
+  const prefix = sheetName ? `Sheet "${sheetName}" — ` : '';
 
+  const groups = new Map();
   for (const rule of template ?? []) {
     const selector = String(rule?.selector ?? '').trim();
     if (selector === '') continue;
     if (!TARGETS.includes(rule?.target)) continue;
+    if (!groups.has(rule.target)) groups.set(rule.target, []);
+    groups.get(rule.target).push(rule);
+  }
 
-    seen.add(rule.target);
+  for (const [target, rules] of groups) {
+    let matched = false;
+    const tried = [];
 
-    if (rule.type === 'index') {
-      const n = Number(selector);
-      if (!Number.isInteger(n) || n < 1 || n > list.length) {
-        errors.push(`Cột số ${selector} không tồn tại — file chỉ có ${list.length} cột.`);
+    for (const rule of rules) {
+      const selector = String(rule.selector).trim();
+
+      if (rule.type === 'index') {
+        const n = Number(selector);
+        if (Number.isInteger(n) && n >= 1 && n <= list.length) {
+          columns[target] = n - 1;
+          matched = true;
+          break;
+        }
+        tried.push(`cột số ${selector}`);
         continue;
       }
-      columns[rule.target] = n - 1;
-      continue;
+
+      const at = list.findIndex((h) => norm(h) === norm(selector));
+      if (at !== -1) {
+        columns[target] = at;
+        matched = true;
+        break;
+      }
+      tried.push(`"${selector}"`);
     }
 
-    const at = list.findIndex((h) => norm(h) === norm(selector));
-    if (at === -1) {
-      errors.push(`Không tìm thấy cột "${selector}". Header trong file: ${list.join(' | ')}`);
-      continue;
+    if (matched) continue;
+
+    if (target === 'endpoint') {
+      errors.push(`${prefix}không tìm thấy cột nào cho trường endpoint. Đã thử: ${tried.join(', ')}. Header trong file: ${list.join(' | ')}`);
+    } else {
+      warnings.push(`${prefix}không tìm thấy cột nào cho trường ${target}. Đã thử: ${tried.join(', ')}. Trường này để trống.`);
     }
-    columns[rule.target] = at;
   }
 
-  if (!seen.has('endpoint')) {
-    errors.push('Template thiếu dòng cho trường endpoint — không dựng được request nào.');
+  if (!groups.has('endpoint')) {
+    errors.push(`${prefix}Template thiếu dòng cho trường endpoint — không dựng được request nào.`);
   }
 
-  return { columns, errors };
+  return { columns, errors, warnings };
 }
 
 // Giu lai toan bo cot goc cua file endpoints duoi dang { header: value }, bo o
@@ -57,16 +83,16 @@ function rawOf(cells, headers) {
   return out;
 }
 
-function mapSingleSheetRows(sheet, template) {
+function mapSingleSheetRows(sheet, template, sheetName) {
   const { headers = [], rows = [] } = sheet ?? {};
-  const { columns, errors: columnErrors } = resolveColumns(headers, template);
+  const { columns, errors: columnErrors, warnings } = resolveColumns(headers, template, sheetName);
 
   if (columnErrors.length > 0) {
     return { records: [], errors: columnErrors.map((reason) => ({ row: 1, reason })) };
   }
 
   const records = [];
-  const errors = [];
+  const errors = warnings.map((reason) => ({ row: 1, reason }));
 
   rows.forEach((cells, i) => {
     const rowNumber = i + 2;               // +1 vi 0-based, +1 vi dong header
@@ -109,7 +135,7 @@ export function mapRows(gridResult, template, options = {}) {
 
   for (const sheet of sheets) {
     const sheetName = sheet.name ?? 'Sheet 1';
-    const { records, errors } = mapSingleSheetRows(sheet, template);
+    const { records, errors } = mapSingleSheetRows(sheet, template, sheetName);
     for (const r of records) {
       r.sheetName = sheetName;
     }
